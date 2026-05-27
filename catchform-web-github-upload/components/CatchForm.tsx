@@ -147,9 +147,9 @@ function mdToHtml(text: string): string {
     const fmt = (s: string) => {
         const e = esc(s)
         return e
-            .replace(/\*\*__([^]*?)__\*\*/g, '<strong><span style="text-decoration:underline">$1</span></strong>')
-            .replace(/__\*\*([^]*?)\*\*__/g, '<strong><span style="text-decoration:underline">$1</span></strong>')
-            .replace(/\*\*([^]*?)\*\*/g, "<strong>$1</strong>")
+            .replace(/\*\*__([^]*?)__\*\*/g, '<strong style="font-weight:600"><span style="text-decoration:underline">$1</span></strong>')
+            .replace(/__\*\*([^]*?)\*\*__/g, '<strong style="font-weight:600"><span style="text-decoration:underline">$1</span></strong>')
+            .replace(/\*\*([^]*?)\*\*/g, '<strong style="font-weight:600">$1</strong>')
             .replace(/__([^]*?)__/g, '<span style="text-decoration:underline">$1</span>')
             .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color:var(--link-color,#3182F6);text-decoration:underline" target="_blank" rel="noopener">$1</a>')
     }

@@ -77,6 +77,10 @@ docs/catchform-google-sheets-apps-script.js
 
 Apps Script에 붙여넣고 새 배포한 Web App URL을 관리자 화면의 `응답 연동` 메뉴에 넣으면 됩니다.
 
+## SniperFactory `/apply` 연동
+
+SniperFactory 사이트에서 같은 폼 디자인을 쓰는 방법은 `docs/SNIPERFACTORY_APPLY_HANDOFF.md`에 정리되어 있습니다.
+
 ## 2차 이전 때 할 일
 
 - Apps Script 제거

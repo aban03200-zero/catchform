@@ -585,9 +585,9 @@ function mdToHtml(text:string):string{
   const fmt=(s:string)=>{
     const e=esc(s)
     return e
-      .replace(/\*\*__([^]*?)__\*\*/g,'<strong><span style="text-decoration:underline">$1</span></strong>')
-      .replace(/__\*\*([^]*?)\*\*__/g,'<strong><span style="text-decoration:underline">$1</span></strong>')
-      .replace(/\*\*([^]*?)\*\*/g,"<strong>$1</strong>")
+      .replace(/\*\*__([^]*?)__\*\*/g,'<strong style="font-weight:600"><span style="text-decoration:underline">$1</span></strong>')
+      .replace(/__\*\*([^]*?)\*\*__/g,'<strong style="font-weight:600"><span style="text-decoration:underline">$1</span></strong>')
+      .replace(/\*\*([^]*?)\*\*/g,'<strong style="font-weight:600">$1</strong>')
       .replace(/__([^]*?)__/g,'<span style="text-decoration:underline">$1</span>')
       .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" style="color:var(--link-color,#3182F6);text-decoration:underline" target="_blank">$1</a>')
   }
@@ -612,7 +612,7 @@ function mdToHtml(text:string):string{
 }
 function htmlToMd(html:string):string{
   return html
-    .replace(/<strong>([\s\S]*?)<\/strong>/gi,"**$1**")
+    .replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi,"**$1**")
     .replace(/<b>([\s\S]*?)<\/b>/gi,"**$1**")
     .replace(/<span[^>]*text-decoration:underline[^>]*>([\s\S]*?)<\/span>/gi,"__$1__")
     .replace(/<u>([\s\S]*?)<\/u>/gi,"__$1__")
@@ -1371,8 +1371,21 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(!loadedId){
       setSaveSlug(next);setSlugDraft(next);showToast("처음 저장할 때 이 슬러그가 적용돼요.");return
     }
+    const{data:dup,error:dupErr}=await supa.from("form_configs").select("id,name,slug").eq("slug",next).limit(1)
+    if(dupErr){showToast("슬러그 중복 확인 실패: "+(dupErr.message||"오류"),false);return}
+    const owner=(dup||[]).find((row:any)=>row.id!==loadedId)
+    if(owner){
+      showToast(`"${next}"는 이미 "${owner.name||"다른 폼"}"에서 사용 중이에요. 다른 슬러그를 입력해주세요.`,false)
+      return
+    }
     const{error}=await supa.from("form_configs").update({slug:next,updated_at:new Date().toISOString()}).eq("id",loadedId)
-    if(error){showToast("슬러그 변경 실패: "+(error.message||"오류"),false);return}
+    if(error){
+      const msg=error.message||"오류"
+      showToast(msg.includes("duplicate key")||msg.includes("form_configs_slug_key")
+        ? `"${next}"는 이미 사용 중인 슬러그예요. 다른 슬러그를 입력해주세요.`
+        : "슬러그 변경 실패: "+msg,false)
+      return
+    }
     setSavedSlug(next);setSlugDraft(next);showToast("슬러그가 변경됐어요.")
     loadList();loadDashboard(supa)
   }
@@ -3864,7 +3877,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const countryName=(code:string)=>{
       const m:any={KR:"대한민국",US:"미국",JP:"일본",CN:"중국",VN:"베트남",TH:"태국",ID:"인도네시아",PH:"필리핀",SG:"싱가포르",GB:"영국",DE:"독일",FR:"프랑스",AU:"호주",CA:"캐나다"}
       const c=String(code||"").toUpperCase()
-      return m[c]||c||"위치 미확인"
+      return m[c]||c||"미확인"
     }
     const sourceBySession:any={}
     const sessionSummaries=sessions.map((evs:any[])=>{
@@ -4122,7 +4135,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 </div>}
               </div>
               <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-                {infoTitle("위치","form_response_events metadata의 country 값을 세션 단위로 집계합니다. URL의 country 파라미터가 있으면 우선 사용하고, 없으면 브라우저 언어/시간대에서 추정한 국가값을 사용합니다.")}
+                {infoTitle("위치","form_response_events metadata의 country 값을 세션 단위로 집계합니다. 브라우저나 배포 환경에서 국가값을 받을 수 없었던 세션은 미확인으로 표시됩니다. 정확한 국가 분석이 필요하면 서버/엣지의 IP 국가 정보 연동이 필요합니다.")}
                 {periodTip("location")}
                 {locationEntries.length===0?emptyState("위치 데이터가 아직 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:10}}>
                   {locationEntries.slice(0,8).map((item:any,i:number)=>{const max=Math.max(1,locationEntries[0]?.[1]||1);const pct=sessionCount?Math.round((item[1]/sessionCount)*1000)/10:0;const color=i===0?A.blue:A.border2;return <div key={item[0]} onMouseMove={e=>movePeriodTip("location",e,{title:item[0],color,lines:[`카운트 : ${item[1]}`,`전체 세션 대비 : ${pct}%`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"110px 1fr 48px",gap:10,alignItems:"center",cursor:"default"}}>
@@ -4135,16 +4148,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </div>
             <div style={{display:"grid",gridTemplateColumns:"minmax(340px,1fr) minmax(340px,1fr)",gap:16,marginBottom:16}}>
               <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-                {infoTitle("공유","폼 완료 모달의 공유 버튼과 공유 링크 클릭을 share 이벤트로 저장합니다. 채널별 전체 공유 횟수와 한 세션에서 중복 클릭을 줄인 유니크 공유 세션 수를 함께 보여줍니다.")}
+                {infoTitle("공유","폼의 공유 버튼 클릭을 share 이벤트로 저장합니다. 파란 막대는 전체 공유 클릭 수, 회색 막대는 같은 사용자가 여러 번 누른 것을 1명으로 묶은 중복 제외 사용자 수입니다.")}
                 {periodTip("share")}
                 {shareEntries.length===0?emptyState("공유 이벤트가 아직 없습니다. 링크/공유 버튼 클릭 데이터가 쌓이면 표시됩니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:12}}>
-                  {shareEntries.slice(0,8).map((s:any)=>{const max=Math.max(1,shareEntries[0]?.total||1);return <div key={s.channel} onMouseMove={e=>movePeriodTip("share",e,{title:s.channel,color:A.blue,lines:[`공유 횟수 : ${s.total}`,`유니크 공유 세션 : ${s.unique}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"90px 1fr 80px",gap:12,alignItems:"center",cursor:"default"}}>
+                  {shareEntries.slice(0,8).map((s:any)=>{const max=Math.max(1,shareEntries[0]?.total||1);return <div key={s.channel} onMouseMove={e=>movePeriodTip("share",e,{title:s.channel,color:A.blue,lines:[`전체 공유 클릭 : ${s.total}`,`중복 제외 사용자 : ${s.unique}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"90px 1fr 88px",gap:12,alignItems:"center",cursor:"default"}}>
                     <div style={{fontSize:13,color:A.t1,fontWeight:700}}>{s.channel}</div>
                     <div style={{display:"flex",flexDirection:"column" as const,gap:5}}>
                       <div style={{height:10,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${(s.total/max)*100}%`,background:A.blue,transform:periodHover?.scope==="share"&&periodHover.title===s.channel?"scaleY(1.35)":"scaleY(1)",transformOrigin:"center",transition:"transform .16s ease"}}/></div>
                       <div style={{height:10,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${(s.unique/max)*100}%`,background:A.border2}}/></div>
                     </div>
-                    <div style={{fontSize:12.5,color:A.t2,textAlign:"right" as const,fontWeight:700}}>공유 {s.total}<br/>유니크 {s.unique}</div>
+                    <div style={{fontSize:11.5,color:A.t2,textAlign:"right" as const,fontWeight:600,lineHeight:1.35}}>공유 {s.total}<br/>중복 제외 {s.unique}</div>
                   </div>})}
                 </div>}
               </div>

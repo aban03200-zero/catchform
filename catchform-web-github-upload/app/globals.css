@@ -32,6 +32,11 @@ a {
   color: inherit;
 }
 
+b,
+strong {
+  font-weight: 600;
+}
+
 .home-shell {
   min-height: 100vh;
   display: grid;
