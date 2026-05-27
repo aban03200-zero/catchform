@@ -193,19 +193,25 @@ export function CatchForm(props: {
     supabaseUrl?: string
     supabaseAnonKey?: string
     slug?: string
+    formId?: string
     configJson?: string
 }) {
-    const { supabaseUrl = "", supabaseAnonKey = "", slug: propSlug = "", configJson = "" } = props
+    const { supabaseUrl = "", supabaseAnonKey = "", slug: propSlug = "", formId: propFormId = "", configJson = "" } = props
     const supa = React.useMemo(() => getSB(supabaseUrl, supabaseAnonKey), [supabaseUrl, supabaseAnonKey])
 
     const [cfg, setCfg] = React.useState<Cfg | null>(null)
     const [loadErr, setLoadErr] = React.useState("")
     const [loading, setLoading] = React.useState(true)
-    const [loadedFormId, setLoadedFormId] = React.useState("")
+    const [loadedFormId, setLoadedFormId] = React.useState(propFormId)
 
     React.useEffect(() => {
         if (configJson) {
-            try { setCfg(JSON.parse(configJson)); setLoading(false); return } catch {}
+            try {
+                setCfg(JSON.parse(configJson))
+                setLoadedFormId(propFormId || "")
+                setLoading(false)
+                return
+            } catch {}
         }
         let slug = propSlug
         try {
@@ -215,14 +221,35 @@ export function CatchForm(props: {
         } catch {}
         if (!slug) { setLoadErr("폼 슬러그가 지정되지 않았어요."); setLoading(false); return }
         if (!supa) { setLoadErr("Supabase 연결 정보가 없어요."); setLoading(false); return }
+        const cacheKey = `catchform_config_${slug}`
+        let hasCachedConfig = false
+        try {
+            const cached = sessionStorage.getItem(cacheKey)
+            if (cached) {
+                const parsed = JSON.parse(cached)
+                if (parsed?.config && Date.now() - Number(parsed.ts || 0) < 5 * 60 * 1000) {
+                    hasCachedConfig = true
+                    setLoadedFormId(parsed.id || "")
+                    setCfg(parsed.config as Cfg)
+                    setLoading(false)
+                }
+            }
+        } catch {}
         ;(async () => {
-            const { data, error } = await supa.from("form_configs").select("id,config").eq("slug", slug).single()
-            if (error || !data) { setLoadErr("폼을 불러오지 못했어요."); setLoading(false); return }
+            const { data, error } = await supa.from("form_configs").select("id,config").eq("slug", slug).maybeSingle()
+            if (error || !data) {
+                if (!hasCachedConfig) {
+                    setLoadErr("폼을 불러오지 못했어요.")
+                    setLoading(false)
+                }
+                return
+            }
             setLoadedFormId(data.id || "")
             setCfg(data.config as Cfg)
+            try { sessionStorage.setItem(cacheKey, JSON.stringify({ id: data.id || "", config: data.config, ts: Date.now() })) } catch {}
             setLoading(false)
         })()
-    }, [supa, propSlug, configJson])
+    }, [supa, propSlug, propFormId, configJson])
 
     if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200, fontFamily: FONT, fontSize: 14, color: "#9EA8C0" }}>불러오는 중...</div>
     if (loadErr) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200, fontFamily: FONT, fontSize: 14, color: "#FF4747" }}>{loadErr}</div>
@@ -432,8 +459,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         trackEvent("share", { metadata: { channel: "Twitter", href: url } })
     }
 
-    const shareButtonStyle: React.CSSProperties = { width: 40, height: 40, borderRadius: 12, border: `1px solid ${FC.fieldBorder}`, background: FC.fieldBg, color: FC.t1, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontWeight: 900, fontSize: 13 }
-    const shareMenuButtonStyle: React.CSSProperties = { width: "100%", height: 38, border: "none", background: "transparent", color: FC.t1, display: "flex", alignItems: "center", gap: 10, padding: "0 10px", borderRadius: 10, cursor: "pointer", fontFamily: FONT, fontSize: 13, fontWeight: 700, textAlign: "left" as const }
+    const shareButtonStyle: React.CSSProperties = { width: 40, height: 40, borderRadius: 12, border: `1px solid ${FC.fieldBorder}`, background: FC.fieldBg, color: FC.t1, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontWeight:600, fontSize: 13 }
+    const shareMenuButtonStyle: React.CSSProperties = { width: "100%", height: 38, border: "none", background: "transparent", color: FC.t1, display: "flex", alignItems: "center", gap: 10, padding: "0 10px", borderRadius: 10, cursor: "pointer", fontFamily: FONT, fontSize: 13, fontWeight:600, textAlign: "left" as const }
     const ShareIcon = ({type}:{type:"kakao"|"instagram"|"threads"|"x"|"link"}) => {
         if(type==="kakao")return <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 3C5.3 3 2.3 5.3 2.3 8.1c0 1.8 1.2 3.3 3 4.2l-.5 2.1 2.3-1.4c.6.1 1.2.2 1.9.2 3.7 0 6.7-2.3 6.7-5.1S12.7 3 9 3z" stroke="currentColor" strokeWidth="1.55" strokeLinejoin="round"/></svg>
         if(type==="instagram")return <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="3" y="3" width="12" height="12" rx="4" stroke="currentColor" strokeWidth="1.6"/><circle cx="9" cy="9" r="2.6" stroke="currentColor" strokeWidth="1.6"/><circle cx="12.7" cy="5.4" r=".8" fill="currentColor"/></svg>
@@ -916,7 +943,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         const f = field as FormField
         if ((f.type as any) === "section_desc") {
             return <div key={f.id} style={{ padding: "14px 16px", borderRadius: fr, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`, marginBottom: qg }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: FC.t1, marginBottom: (f as any).desc ? 6 : 0 }}>{f.label}</div>
+                <div style={{ fontSize: 14, fontWeight:600, color: FC.t1, marginBottom: (f as any).desc ? 6 : 0 }}>{f.label}</div>
                 {(f as any).desc && <div style={{ fontSize: 12.5, color: FC.t3, lineHeight: 1.7, whiteSpace: "pre-line" }}>{(f as any).desc}</div>}
             </div>
         }
@@ -1000,7 +1027,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                             <button onClick={prevM} style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: FC.t2 }}>
                                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M10 4l-4 4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
                             </button>
-                            <span style={{ fontSize: 14, fontWeight: 700, color: FC.t1, fontFamily: FONT }}>{dy}년 {MONTHS[dm]}</span>
+                            <span style={{ fontSize: 14, fontWeight:600, color: FC.t1, fontFamily: FONT }}>{dy}년 {MONTHS[dm]}</span>
                             <button onClick={nextM} style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: FC.t2 }}>
                                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
                             </button>
@@ -1015,14 +1042,14 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                                 const isSel = val === dateStr
                                 const isToday = today.getFullYear() === dy && today.getMonth() === dm && today.getDate() === d
                                 const dow = (firstDay + d - 1) % 7
-                                return <button key={d} onClick={() => selectDate(d)} style={{ aspectRatio: "1", borderRadius: 8, border: isToday && !isSel ? `1.5px solid ${accentBg}` : "none", background: isSel ? accentBg : "transparent", color: isSel ? "#fff" : dow === 0 ? "#FF5C5C" : dow === 6 ? accentBg : FC.t1, fontFamily: FONT, fontSize: 12.5, fontWeight: isSel ? 700 : 400, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                return <button key={d} onClick={() => selectDate(d)} style={{ aspectRatio: "1", borderRadius: 8, border: isToday && !isSel ? `1.5px solid ${accentBg}` : "none", background: isSel ? accentBg : "transparent", color: isSel ? "#fff" : dow === 0 ? "#FF5C5C" : dow === 6 ? accentBg : FC.t1, fontFamily: FONT, fontSize: 12.5, fontWeight: isSel ? 600 : 400, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                     {d}
                                 </button>
                             })}
                         </div>
                         <div style={{ marginTop: 10, borderTop: `1px solid ${FC.fieldBorder}`, paddingTop: 10, display: "flex", justifyContent: "center", gap: 8 }}>
                             <button onClick={() => { const t = today; setVal(f.id, `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`); setDpOpen(p => ({ ...p, [f.id]: false })) }}
-                                style={{ padding: "5px 20px", borderRadius: 8, border: `1px solid ${accentBg}44`, background: accentBg + "0f", color: accentBg, fontFamily: FONT, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>오늘</button>
+                                style={{ padding: "5px 20px", borderRadius: 8, border: `1px solid ${accentBg}44`, background: accentBg + "0f", color: accentBg, fontFamily: FONT, fontSize: 12.5, fontWeight:600, cursor: "pointer" }}>오늘</button>
                             {val && <button onClick={() => { setVal(f.id, ""); setDpOpen(p => ({ ...p, [f.id]: false })) }}
                                 style={{ padding: "5px 14px", borderRadius: 8, border: `1px solid ${FC.fieldBorder}`, background: "transparent", color: FC.t3, fontFamily: FONT, fontSize: 12.5, cursor: "pointer" }}>초기화</button>}
                         </div>
@@ -1041,7 +1068,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 const inpT: React.CSSProperties = { width: "100%", height: fh, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`, borderRadius: fr, color: FC.t1, fontFamily: FONT, fontSize: 14, padding: "0 28px 0 12px", outline: "none", cursor: "text", boxSizing: "border-box", transition: "border .15s" }
                 return <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <div style={{ display: "flex", borderRadius: fr, border: `1px solid ${FC.fieldBorder}`, overflow: "hidden", flexShrink: 0 }}>
-                        {["오전", "오후"].map(v => <button key={v} onClick={() => setVal(f.id + "_ampm", v)} style={{ height: fh, padding: "0 12px", border: "none", background: ampm === v ? accentBg : FC.fieldBg, color: ampm === v ? "#fff" : FC.t2, fontFamily: FONT, fontSize: 13, fontWeight: ampm === v ? 700 : 400, cursor: "pointer" }}>{v}</button>)}
+                        {["오전", "오후"].map(v => <button key={v} onClick={() => setVal(f.id + "_ampm", v)} style={{ height: fh, padding: "0 12px", border: "none", background: ampm === v ? accentBg : FC.fieldBg, color: ampm === v ? "#fff" : FC.t2, fontFamily: FONT, fontSize: 13, fontWeight: ampm === v ? 600 : 400, cursor: "pointer" }}>{v}</button>)}
                     </div>
                     <div style={boxS}>
                         <input value={hh} onChange={e => { const v = e.target.value.replace(/\D/g, ""); if (v === "" || Number(v) <= 12) setVal(f.id + "_h", v) }} onBlur={e => { if (hh && Number(hh) >= 1) setVal(f.id + "_h", String(Number(hh)).padStart(2, "0")) }} placeholder="시" maxLength={2} style={inpT} inputMode="numeric" />
@@ -1050,7 +1077,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                             <option value="">시</option>{hours.map(h => <option key={h} value={h}>{h}</option>)}
                         </select>
                     </div>
-                    <span style={{ color: FC.t3, fontWeight: 700, fontSize: 16, flexShrink: 0 }}>:</span>
+                    <span style={{ color: FC.t3, fontWeight:600, fontSize: 16, flexShrink: 0 }}>:</span>
                     <div style={boxS}>
                         <input value={mm} onChange={e => { const v = e.target.value.replace(/\D/g, ""); if (v === "" || Number(v) <= 59) setVal(f.id + "_m", v) }} onBlur={e => { if (mm !== "") setVal(f.id + "_m", String(Number(mm)).padStart(2, "0")) }} placeholder="분" maxLength={2} style={inpT} inputMode="numeric" />
                         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: FC.t3 }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -1102,7 +1129,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                                     if (opt.nextPage === 9999) setTimeout(() => { setShareCopied(false); setShowModal(true) }, 300)
                                     else setTimeout(() => setPage(opt.nextPage!), 300)
                                 }
-                            }} style={{ padding: "10px 8px", borderRadius: fr, border: `1px solid ${s ? accentBg : FC.fieldBorder}`, background: s ? accentBg + "14" : "transparent", color: s ? accentBg : FC.t2, fontFamily: FONT, fontSize: 13, cursor: "pointer", fontWeight: s ? 700 : 400, textAlign: "center", whiteSpace: "pre-wrap", wordBreak: "keep-all" }}>
+                            }} style={{ padding: "10px 8px", borderRadius: fr, border: `1px solid ${s ? accentBg : FC.fieldBorder}`, background: s ? accentBg + "14" : "transparent", color: s ? accentBg : FC.t2, fontFamily: FONT, fontSize: 13, cursor: "pointer", fontWeight: s ? 600 : 400, textAlign: "center", whiteSpace: "pre-wrap", wordBreak: "keep-all" }}>
                                 {opt.label}
                             </button>
                         })}
@@ -1211,7 +1238,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         <div style={{ width: "100%", minHeight: "100vh", background: FC.bg, color: FC.t1, "--link-color": accentBg } as React.CSSProperties}>
             <style>{`@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css'); body,html{background:${FC.bg}!important;margin:0;}`}</style>
             <button onClick={() => setShareMenuOpen(v => !v)} title="폼 공유하기"
-                style={{ position: "fixed", right: 20, bottom: 20, zIndex: 900, height: 44, padding: "0 15px", borderRadius: 999, border: `1px solid ${accentBg}33`, background: accentBg, color: cfg.cta.color || "#fff", boxShadow: "0 10px 28px rgba(0,0,0,0.18)", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontFamily: FONT, fontSize: 13.5, fontWeight: 800 }}>
+                style={{ position: "fixed", right: 20, bottom: 20, zIndex: 900, height: 44, padding: "0 15px", borderRadius: 999, border: `1px solid ${accentBg}33`, background: accentBg, color: cfg.cta.color || "#fff", boxShadow: "0 10px 28px rgba(0,0,0,0.18)", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontFamily: FONT, fontSize: 13.5, fontWeight:600 }}>
                 <svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M8 10V2.8M5.3 5.5 8 2.8l2.7 2.7M3 7.5v4.8c0 .7.5 1.2 1.2 1.2h7.6c.7 0 1.2-.5 1.2-1.2V7.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 공유
             </button>
@@ -1226,7 +1253,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             {/* Auth modal */}
             {cfg.auth?.enabled && showAuthModal && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 }}>
                 <div style={{ background: FC.bg || "#fff", borderRadius: 16, padding: "32px 28px", width: "min(360px,90%)", boxShadow: "0 8px 40px rgba(0,0,0,0.3)" }}>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: FC.t1, marginBottom: 6, fontFamily: FONT }}>로그인이 필요해요</div>
+                    <div style={{ fontSize: 18, fontWeight:600, color: FC.t1, marginBottom: 6, fontFamily: FONT }}>로그인이 필요해요</div>
                     <div style={{ fontSize: 13, color: FC.t3, marginBottom: 24, fontFamily: FONT }}>{cfg.auth.errText || "이 폼은 로그인 후 작성할 수 있어요."}</div>
                     <div style={{ marginBottom: 12 }}>
                         <input value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="이메일" type="email"
@@ -1239,7 +1266,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     </div>
                     {authErr && <div style={{ fontSize: 12, color: FC.red, marginBottom: 12, fontFamily: FONT }}>{authErr}</div>}
                     <button onClick={handleAuthLogin} disabled={authLoading}
-                        style={{ width: "100%", height: 48, borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight: 700, cursor: authLoading ? "not-allowed" : "pointer", opacity: authLoading ? 0.7 : 1 }}>
+                        style={{ width: "100%", height: 48, borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: authLoading ? "not-allowed" : "pointer", opacity: authLoading ? 0.7 : 1 }}>
                         {authLoading ? "로그인 중..." : "로그인"}
                     </button>
                     {cfg.auth.loginUrl && <div style={{ marginTop: 12, textAlign: "center" as const }}>
@@ -1284,7 +1311,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <div style={{ width: 4, height: 18, borderRadius: 2, background: accentBg, flexShrink: 0 }} />
-                    <span style={{ fontSize: 15, fontWeight: 700, color: FC.t1, letterSpacing: "-0.2px" }}>{getPageLabel(page)}</span>
+                    <span style={{ fontSize: 15, fontWeight:600, color: FC.t1, letterSpacing: "-0.2px" }}>{getPageLabel(page)}</span>
                 </div>
             </div>}
 
@@ -1300,10 +1327,10 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 const visible = needsAccordion && !open ? cs.body : cs.body
                 return <div key={idx} style={{ marginBottom: qg }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                        <div style={{ fontSize: 14, fontWeight: 900, color: FC.t1, display: "flex", alignItems: "center", gap: 3 }}>
-                            {cs.title}{cs.required && <span style={{ color: accentBg, fontSize: 14, fontWeight: 900 }}>*</span>}
+                        <div style={{ fontSize: 14, fontWeight:600, color: FC.t1, display: "flex", alignItems: "center", gap: 3 }}>
+                            {cs.title}{cs.required && <span style={{ color: accentBg, fontSize: 14, fontWeight:600 }}>*</span>}
                         </div>
-                        {cs.policyUrl && <a href={cs.policyUrl} target="_blank" rel="noopener" style={{ fontSize: 12, fontWeight: 700, color: accentBg, textDecoration: "none", padding: "2px 9px", borderRadius: 5, border: `1px solid ${accentBg}44`, flexShrink: 0 }}>보기</a>}
+                        {cs.policyUrl && <a href={cs.policyUrl} target="_blank" rel="noopener" style={{ fontSize: 12, fontWeight:600, color: accentBg, textDecoration: "none", padding: "2px 9px", borderRadius: 5, border: `1px solid ${accentBg}44`, flexShrink: 0 }}>보기</a>}
                     </div>
                     <div style={{ borderTop: `1px solid ${FC.fieldBorder}`, paddingTop: 10, marginBottom: 10 }}>
                         <div style={{ fontSize: 12, color: FC.t2, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: mdToHtml(visible) }} />
@@ -1314,7 +1341,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer" }} onClick={() => setConsentOk(p => { const n = [...p]; n[idx] = !n[idx]; return n })}>
                         <div style={{ width: 16, height: 16, borderRadius: 4, border: `1px solid ${consentOk[idx] ? accentBg + "cc" : FC.fieldBorder}`, background: consentOk[idx] ? accentBg + "d9" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .15s" }}>
-                            {consentOk[idx] && <span style={{ color: "#fff", fontSize: 11, fontWeight: 900 }}>✓</span>}
+                            {consentOk[idx] && <span style={{ color: "#fff", fontSize: 11, fontWeight:600 }}>✓</span>}
                         </div>
                         <span style={{ fontSize: 13, color: FC.t2 }}>{cs.checkLabel}</span>
                     </div>
@@ -1331,13 +1358,13 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     ? <button
                         disabled={!isPageComplete}
                         onClick={() => setPage(p => p + 1)}
-                        style={{ flex: 2, height: cfg.cta.height, borderRadius: fr, border: "none", background: isPageComplete ? accentBg : accentBg + "55", color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight: 800, cursor: isPageComplete ? "pointer" : "not-allowed" }}>
+                        style={{ flex: 2, height: cfg.cta.height, borderRadius: fr, border: "none", background: isPageComplete ? accentBg : accentBg + "55", color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: isPageComplete ? "pointer" : "not-allowed" }}>
                         다음
                       </button>
                     : <button
                         disabled={submitting || !isPageComplete}
                         onClick={handleSubmit}
-                        style={{ flex: 2, height: cfg.cta.height, borderRadius: fr, border: "none", background: isPageComplete ? accentBg : accentBg + "55", color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight: 800, cursor: (submitting || !isPageComplete) ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1 }}>
+                        style={{ flex: 2, height: cfg.cta.height, borderRadius: fr, border: "none", background: isPageComplete ? accentBg : accentBg + "55", color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: (submitting || !isPageComplete) ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1 }}>
                         {submitting ? (cfg.cta.loadLabel || "제출 중...") : cfg.cta.label}
                       </button>}
             </div>
@@ -1348,12 +1375,12 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#FFF1F1", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </div>
-                    <div style={{ fontSize: 17, fontWeight: 700, color: FC.t1, marginBottom: 10, letterSpacing: "-0.3px", fontFamily: FONT }}>중복 신청 안내</div>
+                    <div style={{ fontSize: 17, fontWeight:600, color: FC.t1, marginBottom: 10, letterSpacing: "-0.3px", fontFamily: FONT }}>중복 신청 안내</div>
                     <div style={{ fontSize: 13.5, color: FC.t2, lineHeight: 1.6, marginBottom: 24, fontFamily: FONT, whiteSpace: "pre-line" as const }}>
                         {dupErr || "이미 신청 내역이 있어요."}
                     </div>
                     <button onClick={() => window.open("https://insideout.or.kr/program", "_blank")}
-                        style={{ width: "100%", height: 48, borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight: 700, cursor: "pointer", marginBottom: 10 }}>
+                        style={{ width: "100%", height: 48, borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: "pointer", marginBottom: 10 }}>
                         프로그램 더 보러가기
                     </button>
                     <button onClick={() => setShowDupModal(false)}
@@ -1368,7 +1395,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     <div style={{ width: 48, height: 48, borderRadius: "50%", background: accentBg + "22", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke={accentBg} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </div>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: FC.t1, marginBottom: 8, letterSpacing: "-0.3px" }}>{cfg.modal.title}</div>
+                    <div style={{ fontSize: 18, fontWeight:600, color: FC.t1, marginBottom: 8, letterSpacing: "-0.3px" }}>{cfg.modal.title}</div>
                     {cfg.modal.body && <div style={{ fontSize: 13.5, color: FC.t2, lineHeight: 1.6, marginBottom: 16 }}>{cfg.modal.body}</div>}
                     <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 18 }}>
                         <button onClick={shareKakao} title="카카오톡 공유" style={shareButtonStyle}>
@@ -1387,9 +1414,9 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                             <ShareIcon type="link" />
                         </button>
                     </div>
-                    {shareCopied && <div style={{fontSize:12,color:accentBg,fontWeight:700,marginTop:-10,marginBottom:12}}>URL이 복사됐어요.</div>}
+                    {shareCopied && <div style={{fontSize:12,color:accentBg,fontWeight:600,marginTop:-10,marginBottom:12}}>URL이 복사됐어요.</div>}
                     <button onClick={() => { if (cfg.modal.btnUrl) { if (cfg.modal.btnReplace) window.location.replace(cfg.modal.btnUrl); else window.location.href = cfg.modal.btnUrl } else setShowModal(false) }}
-                        style={{ width: "100%", height: 44, borderRadius: 8, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                        style={{ width: "100%", height: 44, borderRadius: 8, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: "pointer" }}>
                         {cfg.modal.btnLabel || "확인"}
                     </button>
                 </div>

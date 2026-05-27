@@ -177,7 +177,7 @@ function FlickMark({size=32}:{size?:number}){
 function FlickWordmark({size=20,dark=false}:{size?:number;dark?:boolean}){
   const col=dark?"#F3F4F6":"#191919"
   return <div style={{display:"flex",alignItems:"baseline",gap:0}}>
-    <span style={{fontSize:size,fontWeight:800,color:col,letterSpacing:"-0.5px",lineHeight:1}}>Catch</span>
+    <span style={{fontSize:size,fontWeight:600,color:col,letterSpacing:"-0.5px",lineHeight:1}}>Catch</span>
     <span style={{fontSize:size,fontWeight:500,color:col,letterSpacing:"-0.5px",lineHeight:1,marginLeft:4}}>Form</span>
   </div>
 }
@@ -492,7 +492,7 @@ function CIn({value,onChange,A}:{value:string;onChange:(v:string)=>void;A:AT}) {
 }
 function FG({children,title,A,last=false}:{children:React.ReactNode;title?:string;A:AT;last?:boolean}) {
   return <div style={{marginBottom:last?0:20,paddingBottom:last?0:20,borderBottom:last?"none":`1px solid ${A.border}`}}>
-    {title&&<div style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,marginBottom:12,fontFamily:FONT}}>{title}</div>}
+    {title&&<div style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,marginBottom:12,fontFamily:FONT}}>{title}</div>}
     {children}
   </div>
 }
@@ -726,7 +726,7 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
   const btnS:React.CSSProperties={width:28,height:26,borderRadius:4,border:`1px solid ${A.border}`,background:"transparent",cursor:"pointer",color:A.t1,fontFamily:FONT2,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}
   return <div>
     <div style={{display:"flex",gap:4,marginBottom:5,alignItems:"center"}}>
-      <button onMouseDown={e=>{e.preventDefault();applyFormat("bold")}} title="굵게" style={{...btnS,fontWeight:700}}>B</button>
+      <button onMouseDown={e=>{e.preventDefault();applyFormat("bold")}} title="굵게" style={{...btnS,fontWeight:600}}>B</button>
       <button onMouseDown={e=>{e.preventDefault();applyFormat("underline")}} title="밑줄" style={{...btnS,textDecoration:"underline"}}>U</button>
       <button onMouseDown={e=>{e.preventDefault();
         // Save current selection before input opens and steals focus
@@ -830,13 +830,13 @@ function ProgramPicker({progs,cats,brand,value,onChange,A}:{progs:Prog[];cats:Ca
     {open&&<div style={{marginTop:4,background:A.card,border:`1.5px solid ${A.border}`,borderRadius:A.r2,overflow:"hidden",boxShadow:A.shadow}}>
       {/* Category grid */}
       {!selCat&&<div style={{padding:12}}>
-        <div style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,marginBottom:10}}>유형 선택</div>
+        <div style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,marginBottom:10}}>유형 선택</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           {catIds.map(cat=><button key={cat} onClick={()=>setSelCat(cat)}
             style={{padding:"12px 10px",borderRadius:A.r,border:`1.5px solid ${A.border}`,background:A.card2,cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,transition:"all .12s"}}
             onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=catColor;(e.currentTarget as HTMLElement).style.background=catColor+"12"}}
             onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=A.border;(e.currentTarget as HTMLElement).style.background=A.card2}}>
-            <div style={{fontSize:12.5,fontWeight:700,color:A.t1,marginBottom:3}}>{catName(cat)}</div>
+            <div style={{fontSize:12.5,fontWeight:600,color:A.t1,marginBottom:3}}>{catName(cat)}</div>
             <div style={{fontSize:11,color:A.t3}}>{filtered.filter(p=>p.category===cat).length}개 과정</div>
           </button>)}
         </div>
@@ -862,7 +862,7 @@ function ProgramPicker({progs,cats,brand,value,onChange,A}:{progs:Prog[];cats:Ca
               onMouseEnter={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background=A.card2}}
               onMouseLeave={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background="transparent"}}>
               <span style={{fontSize:13,color:A.t1,fontFamily:FONT}}>{p.title}</span>
-              {sel&&<span style={{fontSize:13,color:catColor,fontWeight:700}}>✓</span>}
+              {sel&&<span style={{fontSize:13,color:catColor,fontWeight:600}}>✓</span>}
             </div>
           )})}
         </div>
@@ -926,6 +926,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [saveName,setSaveName]=React.useState("")
   const [ctxMenu,setCtxMenu]=React.useState<{x:number;y:number;item:any;source?:string}|null>(null)
   const [customTemplates,setCustomTemplates]=React.useState<{id:string;name:string;config:any;brand:string}[]>([])
+  const fullFormCache=React.useRef<Record<string,{updatedAt?:string;data:any}>>({})
   const [tmplModal,setTmplModal]=React.useState<{item:any}|null>(null)
   const [tmplName,setTmplName]=React.useState("")
   const [editingTemplateId,setEditingTemplateId]=React.useState<string|null>(null)
@@ -1029,7 +1030,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     return <div style={{position:"absolute" as const,inset:0,zIndex:120000,background:adminDark?"rgba(15,17,23,0.62)":"rgba(247,248,250,0.72)",backdropFilter:"blur(3px)",display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"auto"}}>
       <div style={{minWidth:230,padding:"22px 24px",borderRadius:A.r2,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow,display:"flex",flexDirection:"column" as const,alignItems:"center",gap:12}}>
         <div style={{width:34,height:34,borderRadius:"50%",border:`3px solid ${A.border}`,borderTopColor:A.blue,animation:"actionSpin .8s linear infinite"}}/>
-        <div style={{fontSize:14,fontWeight:800,color:A.t1}}>{actionLoading}</div>
+        <div style={{fontSize:14,fontWeight:600,color:A.t1}}>{actionLoading}</div>
         <div style={{fontSize:12.5,color:A.t3}}>잠시만 기다려주세요.</div>
       </div>
     </div>
@@ -1055,8 +1056,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   async function getFullFormRow(item:any){
     if(item?.config&&!item.__summary&&(item.config.form||item.config.kdtFields))return {config:item.config,slug:item.slug,name:item.name,brand:item.brand||item.config?.brand}
     if(!supa||!item?.id)throw new Error("폼 정보를 불러올 수 없어요.")
+    const cached=fullFormCache.current[item.id]
+    if(cached&&(!item.updated_at||cached.updatedAt===item.updated_at))return cached.data
     const{data,error}=await supa.from("form_configs").select("config,slug,name,brand").eq("id",item.id).single()
     if(error)throw error
+    fullFormCache.current[item.id]={updatedAt:item.updated_at,data}
     return data
   }
 
@@ -1334,11 +1338,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(!supa)return
     setActionLoading("폼을 불러오는 중이에요.")
     try{
-      const{data,error}=await supa.from("form_configs").select("config,slug").eq("id",id).single()
-      if(error){showToast("불러오기 실패",false);return}
-      setCfg(mergeCfg(data.config))
+      const full=await getFullFormRow({id,name})
+      setCfg(mergeCfg(full.config))
       setLoadedId(id);setLoadedName(name)
-      if(data.slug)setSavedSlug(data.slug)
+      if(full.slug)setSavedSlug(full.slug)
       showToast(`"${name}" 불러옴`)
     } finally{setActionLoading("")}
   }
@@ -1839,12 +1842,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const fit=imageFit(img)
     return <div style={{display:"flex",alignItems:"center",gap:6,marginTop:8}}>
       <button onClick={onCrop}
-        style={{height:32,padding:"0 11px",borderRadius:A.r,border:`1px solid ${fit==="cover"?A.blue+"55":A.border}`,background:fit==="cover"?A.blue2:A.card2,color:fit==="cover"?A.blue:A.t2,fontFamily:FONT,fontSize:12,fontWeight:800,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+        style={{height:32,padding:"0 11px",borderRadius:A.r,border:`1px solid ${fit==="cover"?A.blue+"55":A.border}`,background:fit==="cover"?A.blue2:A.card2,color:fit==="cover"?A.blue:A.t2,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 2v10h10M2 4h10v10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
         {fit==="cover"?"자르기 편집":"자르기 설정"}
       </button>
       {fit==="cover"&&<button onClick={onReset}
-        style={{height:32,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+        style={{height:32,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:"pointer"}}>
         전체보기
       </button>}
       <span style={{fontSize:11.5,color:A.t3,marginLeft:2}}>{fit==="cover"?"잘림 영역 적용 중":"이미지 전체 표시"}</span>
@@ -1949,7 +1952,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
           {loginErr&&<div style={{fontSize:12.5,color:"#E85C5C",marginBottom:14,padding:"9px 12px",borderRadius:8,background:"rgba(232,92,92,0.08)",border:"1px solid rgba(232,92,92,0.18)"}}>{loginErr}</div>}
           <button onClick={doLogin} disabled={loginLoading}
-            style={{width:"100%",height:46,borderRadius:10,border:"none",background:loginLoading?"rgba(49,130,246,0.6)":"#3182F6",color:"#fff",fontFamily:FONT,fontSize:14.5,fontWeight:700,cursor:loginLoading?"not-allowed":"pointer",letterSpacing:"-0.2px"}}>
+            style={{width:"100%",height:46,borderRadius:10,border:"none",background:loginLoading?"rgba(49,130,246,0.6)":"#3182F6",color:"#fff",fontFamily:FONT,fontSize:14.5,fontWeight:600,cursor:loginLoading?"not-allowed":"pointer",letterSpacing:"-0.2px"}}>
             {loginLoading?"로그인 중...":"로그인"}
           </button>
           {!supabaseUrl&&<div style={{marginTop:18,fontSize:11.5,color:t3,textAlign:"center" as const,lineHeight:1.6}}>환경변수에 Supabase URL과 Key를 먼저 입력해주세요</div>}
@@ -1985,7 +1988,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <span style={{fontSize:12.5,color:A.t3}}>{authUser?.email}</span>
           <button onClick={doLogout} style={{fontSize:12.5,fontWeight:500,padding:"5px 12px",borderRadius:8,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,cursor:"pointer",fontFamily:FONT}}>로그아웃</button>
           <button onClick={()=>setShowBrandModal(true)}
-            style={{height:36,padding:"0 16px",borderRadius:8,border:"none",background:"#3182F6",color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+            style={{height:36,padding:"0 16px",borderRadius:8,border:"none",background:"#3182F6",color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
             <span style={{fontSize:17,lineHeight:1,marginTop:-1}}>+</span> 새 폼 만들기
           </button>
           <button onClick={()=>{
@@ -2108,7 +2111,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               const sfSesac=snList.filter((x:any)=>sfCatOf(x)==="새싹")
               const sfInjae=snList.filter((x:any)=>sfCatOf(x)==="인재키움")
               const sfEtc=snList.filter((x:any)=>sfCatOf(x)==="기타")
-              const sfTitle=(label:string)=><span style={{fontSize:14,fontWeight:800,color:A.t1,letterSpacing:"-0.2px"}}>{label}</span>
+              const sfTitle=(label:string)=><span style={{fontSize:14,fontWeight:600,color:A.t1,letterSpacing:"-0.2px"}}>{label}</span>
               return <>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
                   {renderCard(sfTitle("KDT"),sfKdt)}
@@ -2134,9 +2137,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             const ioProject=ioList.filter((x:any)=>catNameOf(x)==="프로젝트형")
             const ioEtc=ioList.filter((x:any)=>catNameOf(x)==="기타")
             return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
-              {renderCard(<span style={{fontSize:14,fontWeight:800,color:A.t1,letterSpacing:"-0.2px"}}>인턴형</span>,ioIntern)}
-              {renderCard(<span style={{fontSize:14,fontWeight:800,color:A.t1,letterSpacing:"-0.2px"}}>프로젝트형</span>,ioProject)}
-              {renderCard(<span style={{fontSize:14,fontWeight:800,color:A.t1,letterSpacing:"-0.2px"}}>기타</span>,ioEtc)}
+              {renderCard(<span style={{fontSize:14,fontWeight:600,color:A.t1,letterSpacing:"-0.2px"}}>인턴형</span>,ioIntern)}
+              {renderCard(<span style={{fontSize:14,fontWeight:600,color:A.t1,letterSpacing:"-0.2px"}}>프로젝트형</span>,ioProject)}
+              {renderCard(<span style={{fontSize:14,fontWeight:600,color:A.t1,letterSpacing:"-0.2px"}}>기타</span>,ioEtc)}
             </div>
           })()}
         </div>
@@ -2145,7 +2148,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={()=>setShowBrandModal(false)}>
             <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:16,padding:"28px 28px 24px",width:380,boxShadow:A.shadow,position:"relative" as const}} onClick={e=>e.stopPropagation()}>
               <button onClick={()=>setShowBrandModal(false)} style={{position:"absolute",top:14,right:14,width:28,height:28,borderRadius:"50%",border:`1px solid ${A.border}`,background:A.card2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:A.t3,fontFamily:FONT,lineHeight:1}}>×</button>
-              <div style={{fontSize:18,fontWeight:800,color:A.t1,marginBottom:22,letterSpacing:"-0.3px"}}>어떤 브랜드 폼을 만들까요?</div>
+              <div style={{fontSize:18,fontWeight:600,color:A.t1,marginBottom:22,letterSpacing:"-0.3px"}}>어떤 브랜드 폼을 만들까요?</div>
               <div style={{display:"flex",flexDirection:"column" as const,gap:12}}>
                 <button onClick={()=>startNewForm("SNIPERFACTORY")}
                   style={{width:"100%",padding:"22px 28px",borderRadius:12,border:`1px solid ${A.border2}`,background:"transparent",cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,transition:"all .15s"}}
@@ -2170,7 +2173,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <button onClick={()=>{setShowTemplateModal(false);setPendingBrand(null)}} style={{position:"absolute",top:14,right:14,width:28,height:28,borderRadius:"50%",border:`1px solid ${A.border}`,background:A.card2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:A.t3,lineHeight:1}}>×</button>
             {/* 왼쪽: 기본 폼 종류 */}
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:18,fontWeight:800,color:A.t1,marginBottom:6,letterSpacing:"-0.3px"}}>어떤 형식의 폼을 만들까요?</div>
+              <div style={{fontSize:18,fontWeight:600,color:A.t1,marginBottom:6,letterSpacing:"-0.3px"}}>어떤 형식의 폼을 만들까요?</div>
               <div style={{fontSize:13,color:A.t3,marginBottom:20}}>
                 {pendingBrand==="SNIPERFACTORY"?"스나이퍼팩토리":"인사이드아웃"} 브랜드 폼
               </div>
@@ -2201,7 +2204,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.borderColor=A.border}}>
                   <div style={{flexShrink:0,marginTop:1}}>{t.icon}</div>
                   <div>
-                    <div style={{fontSize:13.5,fontWeight:700,color:A.t1,marginBottom:3}}>{t.label}</div>
+                    <div style={{fontSize:13.5,fontWeight:600,color:A.t1,marginBottom:3}}>{t.label}</div>
                     <div style={{fontSize:12,color:A.t3,lineHeight:1.5}}>{t.desc}</div>
                   </div>
                 </button>
@@ -2210,7 +2213,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </div>
             {/* 오른쪽: 내 템플릿 */}
             {customTemplates.length>0&&<div style={{width:300,flexShrink:0,borderLeft:`1px solid ${A.border}`,paddingLeft:24}}>
-              <div style={{fontSize:14,fontWeight:700,color:A.t1,marginBottom:16,paddingTop:2}}>내 템플릿</div>
+              <div style={{fontSize:14,fontWeight:600,color:A.t1,marginBottom:16,paddingTop:2}}>내 템플릿</div>
               <div style={{display:"flex",flexDirection:"column" as const,gap:8}}>
                 {customTemplates.map(t=>(
                   <div key={t.id} style={{display:"flex",alignItems:"center",gap:6}}>
@@ -2243,7 +2246,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       {/* TEMPLATE NAME MODAL */}
       {tmplModal&&<div style={{position:"fixed" as const,inset:0,zIndex:10000,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setTmplModal(null)}>
         <div style={{background:A.card,borderRadius:16,padding:"28px 24px",width:360,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-          <div style={{fontSize:16,fontWeight:800,color:A.t1,marginBottom:6}}>템플릿으로 저장</div>
+          <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:6}}>템플릿으로 저장</div>
           <div style={{fontSize:12.5,color:A.t3,marginBottom:18}}>이 폼을 템플릿으로 저장하면 새 폼 만들기에서 사용할 수 있어요.</div>
           <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>템플릿 이름</div>
           <input value={tmplName} onChange={e=>setTmplName(e.target.value)}
@@ -2255,7 +2258,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <button onClick={()=>setTmplModal(null)}
               style={{flex:1,height:40,borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
             <button onClick={()=>{if(tmplName.trim()){saveCustomTemplate(tmplModal.item,tmplName);setTmplModal(null)}}}
-              style={{flex:2,height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>저장하기</button>
+              style={{flex:2,height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>저장하기</button>
           </div>
         </div>
       </div>}
@@ -2302,7 +2305,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       {/* RENAME MODAL */}
       {renameModal&&<div style={{position:"fixed" as const,inset:0,zIndex:10000,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setRenameModal(null)}>
         <div style={{background:A.card,borderRadius:16,padding:"28px 24px",width:360,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-          <div style={{fontSize:16,fontWeight:800,color:A.t1,marginBottom:6}}>폼 이름 변경</div>
+          <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:6}}>폼 이름 변경</div>
           <div style={{fontSize:12.5,color:A.t3,marginBottom:18}}>새로운 폼 이름을 입력해주세요.</div>
           <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 이름</div>
           <input value={renameName} onChange={e=>setRenameName(e.target.value)}
@@ -2314,14 +2317,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <button onClick={()=>setRenameModal(null)}
               style={{flex:1,height:40,borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
             <button onClick={()=>renameCfg(renameModal.id,renameName)}
-              style={{flex:2,height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>변경하기</button>
+              style={{flex:2,height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>변경하기</button>
           </div>
         </div>
       </div>}
       {/* TEMPLATE NAME MODAL */}
       {tmplModal&&<div style={{position:"fixed" as const,inset:0,zIndex:10000,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setTmplModal(null)}>
         <div style={{background:A.card,borderRadius:16,padding:"28px 24px",width:360,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-          <div style={{fontSize:16,fontWeight:800,color:A.t1,marginBottom:6}}>템플릿으로 저장</div>
+          <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:6}}>템플릿으로 저장</div>
           <div style={{fontSize:12.5,color:A.t3,marginBottom:18}}>이 폼을 템플릿으로 저장하면 새 폼 만들기에서 사용할 수 있어요.</div>
           <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>템플릿 이름</div>
           <input value={tmplName} onChange={e=>setTmplName(e.target.value)}
@@ -2333,7 +2336,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <button onClick={()=>setTmplModal(null)}
               style={{flex:1,height:40,borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
             <button onClick={()=>{if(tmplName.trim()){saveCustomTemplate(tmplModal.item,tmplName);setTmplModal(null)}}}
-              style={{flex:2,height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>저장하기</button>
+              style={{flex:2,height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>저장하기</button>
           </div>
         </div>
       </div>}
@@ -2382,7 +2385,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{position:"absolute" as const,bottom:24,left:"50%",background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:"10px 16px",fontSize:13,fontWeight:600,color:toast.ok?A.t1:A.red,zIndex:99999,display:"flex",alignItems:"center",gap:8,boxShadow:A.shadow,whiteSpace:"nowrap" as const,animation:`${toastLeaving?"toastOut":"toastIn"} .3s cubic-bezier(.4,0,.2,1) forwards`}}>
           <span>{toast.ok?"✓":"✗"}</span><span>{toast.msg}</span>
           {toast.undo&&<button onClick={toast.undo}
-            style={{marginLeft:8,padding:"2px 10px",borderRadius:4,border:"none",background:"transparent",cursor:"pointer",color:A.blue,fontFamily:FONT,fontSize:12,fontWeight:700}}>실행 취소</button>}
+            style={{marginLeft:8,padding:"2px 10px",borderRadius:4,border:"none",background:"transparent",cursor:"pointer",color:A.blue,fontFamily:FONT,fontSize:12,fontWeight:600}}>실행 취소</button>}
         </div>
       )}
       {/* GUIDE MODAL */}
@@ -2407,7 +2410,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   <div style={{width:28,height:28,borderRadius:8,background:A.blue2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={A.blue} strokeWidth="1.8"/><path d="M12 16v-4M12 8.5v.5" stroke={A.blue} strokeWidth="2" strokeLinecap="round"/></svg>
                   </div>
-                  <span style={{fontSize:13,fontWeight:800,color:A.t1,letterSpacing:"-0.3px"}}>사용 가이드</span>
+                  <span style={{fontSize:13,fontWeight:600,color:A.t1,letterSpacing:"-0.3px"}}>사용 가이드</span>
                 </div>
               </div>
               <div style={{flex:1,overflowY:"auto" as const,padding:"8px 8px"}}>
@@ -2428,9 +2431,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                         return <button key={ti} onClick={()=>{setGuideTopic(ti);setGuidePage(0)}}
                           style={{width:"100%",padding:"9px 12px",borderRadius:8,border:"none",background:isActive?A.blue2:"transparent",cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,display:"flex",alignItems:"center",gap:8,marginBottom:2,transition:"background .12s"}}>
                           <div style={{width:20,height:20,borderRadius:"50%",background:isActive?A.blue:A.card,border:`1.5px solid ${isActive?A.blue:A.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s"}}>
-                            <span style={{fontSize:10,fontWeight:800,color:isActive?"#fff":A.t3}}>{ti+1}</span>
+                            <span style={{fontSize:10,fontWeight:600,color:isActive?"#fff":A.t3}}>{ti+1}</span>
                           </div>
-                          <span style={{fontSize:12.5,fontWeight:isActive?700:400,color:isActive?A.blue:A.t2,lineHeight:1.4,textAlign:"left" as const}}>{t.label||t.title||"제목 없음"}</span>
+                          <span style={{fontSize:12.5,fontWeight:isActive?600:400,color:isActive?A.blue:A.t2,lineHeight:1.4,textAlign:"left" as const}}>{t.label||t.title||"제목 없음"}</span>
                         </button>
                       })}
               </div>
@@ -2477,7 +2480,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                             ))}
                           </div>}
                           {/* 제목 */}
-                          <div style={{fontSize:20,fontWeight:800,color:A.t1,letterSpacing:"-0.4px",marginBottom:14,lineHeight:1.3}}>{curPage.title}</div>
+                          <div style={{fontSize:20,fontWeight:600,color:A.t1,letterSpacing:"-0.4px",marginBottom:14,lineHeight:1.3}}>{curPage.title}</div>
                           {/* 설명 */}
                           {curPage.desc&&<div style={{fontSize:14,color:A.t2,lineHeight:1.8,whiteSpace:"pre-line" as const}}>{curPage.desc}</div>}
                         </div>
@@ -2491,11 +2494,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                         <span style={{fontSize:12,color:A.t3}}>{guideTopic+1} / {topics.length}</span>
                         {!isLastPage||!isLastTopic
                           ? <button onClick={goNext}
-                              style={{height:36,padding:"0 20px",borderRadius:8,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+                              style={{height:36,padding:"0 20px",borderRadius:8,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
                               다음 단계 →
                             </button>
                           : <button onClick={()=>setShowGuide(false)}
-                              style={{height:36,padding:"0 20px",borderRadius:8,border:"none",background:A.green,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                              style={{height:36,padding:"0 20px",borderRadius:8,border:"none",background:A.green,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>
                               완료 ✓
                             </button>
                         }
@@ -2571,11 +2574,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <F label="지원 유형" A={A}>
             {cfg.formType==="alert"
               ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12.5,color:A.t3,fontFamily:FONT}}>
-                  <span style={{padding:"2px 8px",borderRadius:4,background:A.blue2,color:A.blue,fontSize:11,fontWeight:700}}>자동</span> 사전 알림
+                  <span style={{padding:"2px 8px",borderRadius:4,background:A.blue2,color:A.blue,fontSize:11,fontWeight:600}}>자동</span> 사전 알림
                 </div>
               : cfg.formType==="kdt"
               ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12.5,color:A.t3,fontFamily:FONT}}>
-                  <span style={{padding:"2px 8px",borderRadius:4,background:A.blue2,color:A.blue,fontSize:11,fontWeight:700}}>자동</span> 정식 신청
+                  <span style={{padding:"2px 8px",borderRadius:4,background:A.blue2,color:A.blue,fontSize:11,fontWeight:600}}>자동</span> 정식 신청
                 </div>
               : <div style={{display:"flex",flexDirection:"column" as const,gap:6}}>
                   {([{value:"pre",label:"사전 알림"},{value:"formal",label:"정식 신청"}].concat(
@@ -2588,7 +2591,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       <div style={{width:14,height:14,borderRadius:"50%",border:`1.5px solid ${sel?A.blue:A.border}`,background:sel?A.blue:"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
                         {sel&&<div style={{width:5,height:5,borderRadius:"50%",background:"#fff"}}/>}
                       </div>
-                      <span style={{fontWeight:sel?700:400}}>{opt.label}</span>
+                      <span style={{fontWeight:sel?600:400}}>{opt.label}</span>
                     </button>
                   })}
                   <TIn value={(cfg.header.applicationType!=="pre"&&cfg.header.applicationType!=="formal")?cfg.header.applicationType||"":""} onChange={v=>uh("applicationType",v)} placeholder="직접 입력 (예: interview)" A={A}/>
@@ -2606,7 +2609,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {cfg.header.educationStart&&cfg.header.educationEnd&&(()=>{
               const s=cfg.header.educationStart,e=cfg.header.educationEnd
               const days=Math.round((new Date(e+"T00:00:00").getTime()-new Date(s+"T00:00:00").getTime())/(1000*60*60*24))+1
-              return <div style={{marginTop:8,padding:"8px 14px",borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,fontWeight:700,color:A.blue,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              return <div style={{marginTop:8,padding:"8px 14px",borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,fontWeight:600,color:A.blue,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                 <span>{fmtDateKo(s)} ~ {fmtDateKo(e)}</span>
                 <span>{(()=>{if(days<30)return `총 ${days}일`;const m=Math.floor(days/30),rD=days%30,w=Math.floor(rD/7),d2=rD%7;let r=`총 ${m}개월`;if(w>0)r+=` ${w}주`;if(d2>0)r+=` ${d2}일`;return r})()}</span>
               </div>
@@ -2640,7 +2643,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     <rect x="1" y="1" width="42" height="16" rx={val==="pill"?8:3} stroke={cur?A.blue:A.t3} strokeWidth="1.5" fill={cur?A.blue+"18":"transparent"}/>
                     <line x1="10" y1="9" x2="34" y2="9" stroke={cur?A.blue:A.t3} strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
-                  <span style={{fontSize:11,color:cur?A.blue:A.t2,fontWeight:cur?700:400,fontFamily:FONT}}>{label}</span>
+                  <span style={{fontSize:11,color:cur?A.blue:A.t2,fontWeight:cur?600:400,fontFamily:FONT}}>{label}</span>
                 </button>
               })}
             </div>
@@ -2662,7 +2665,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <div style={{marginBottom:14,background:A.card2,borderRadius:A.r,border:`1px solid ${A.border}`,overflow:"hidden"}}>
             {/* 헤더 */}
             <div style={{display:"flex",alignItems:"center",padding:"8px 10px",borderBottom:`1px solid ${A.border}`}}>
-              <span style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:"0.6px",textTransform:"uppercase" as const,flex:1}}>섹션 목록</span>
+              <span style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.6px",textTransform:"uppercase" as const,flex:1}}>섹션 목록</span>
               <button onClick={()=>{if(isKdt){const newPage=formPages+1;setCfg(p=>({...p,kdtFields:[...(p.kdtFields||[]),{id:"kdt_p"+newPage+"_"+Date.now(),label:"새 질문",type:"text" as const,page:newPage,required:false}]}));setPvPage(newPage)}else{addPage();setPvPage(formPages+1)}}}
                 style={{display:"flex",alignItems:"center",gap:4,height:24,padding:"0 8px",borderRadius:A.r,border:`1px dashed ${A.border2}`,background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12,fontWeight:600}}>
                 <span style={{fontSize:14,lineHeight:1}}>+</span> 섹션 추가
@@ -2682,7 +2685,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     onBlur={e=>{e.currentTarget.contentEditable="false";setPageLabel(p,e.currentTarget.textContent||getPageLabel(p))}}
                     onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();(e.currentTarget as HTMLElement).blur()}e.stopPropagation()}}
                     onClick={()=>{setPvPage(p);setEditIdx(null)}}
-                    style={{flex:1,color:isActive?A.blue:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:isActive?700:500,outline:"none",cursor:"default",minWidth:0,userSelect:"none" as const}}>
+                    style={{flex:1,color:isActive?A.blue:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:isActive?600:500,outline:"none",cursor:"default",minWidth:0,userSelect:"none" as const}}>
                     {getPageLabel(p)}
                   </span>
                   {/* 필드 개수 뱃지 */}
@@ -2701,7 +2704,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           {/* Layer list */}
           <div style={{marginBottom:12}}>
             {isKdt&&<div style={{fontSize:11,fontWeight:600,color:A.t3,marginBottom:8}}>{getPageLabel(pvPage)}</div>}
-            {!isKdt&&<div style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,marginBottom:10}}>필드 레이어</div>}
+            {!isKdt&&<div style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,marginBottom:10}}>필드 레이어</div>}
             {pageFields.length===0&&<div style={{padding:"16px",textAlign:"center" as const,fontSize:12.5,color:A.t3,borderRadius:A.r,border:`1px dashed ${A.border2}`}}>필드를 추가해주세요</div>}
             {pageFields.map((field,idx)=>(
               <div key={(field as any).id||idx}
@@ -2728,7 +2731,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       {FTYPE_ICONS[(field as any).type as string]||FTYPE_ICONS.text}
                     </div>
                     <span style={{flex:1,fontSize:12.5,fontWeight:500,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{(field as any).label||"(라벨 없음)"}</span>
-                    {(field as any).required&&<span style={{fontSize:9,color:accentBg,fontWeight:700,flexShrink:0}}>필수</span>}
+                    {(field as any).required&&<span style={{fontSize:9,color:accentBg,fontWeight:600,flexShrink:0}}>필수</span>}
                   </div>
                   {!isKdt&&<button
                     onClick={e=>{e.stopPropagation();duplicateField(cfg.form.fields.indexOf(pageFields[idx] as FormField))}}
@@ -2846,7 +2849,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                           <span style={{fontSize:11,color:A.t3}}>열</span>
                           {[1,2,3].map(c=>{const cur=((field as any).cols||0)===c||(!(field as any).cols&&c===1);return(
                             <button key={c} onClick={()=>patchActiveField(idx,{cols:c})}
-                              style={{width:24,height:20,borderRadius:4,border:`1px solid ${cur?A.blue:A.border}`,background:cur?A.blue2:"transparent",color:cur?A.blue:A.t3,fontFamily:FONT,fontSize:11,fontWeight:cur?700:400,cursor:"pointer"}}>
+                              style={{width:24,height:20,borderRadius:4,border:`1px solid ${cur?A.blue:A.border}`,background:cur?A.blue2:"transparent",color:cur?A.blue:A.t3,fontFamily:FONT,fontSize:11,fontWeight:cur?600:400,cursor:"pointer"}}>
                               {c}
                             </button>
                           )})}
@@ -2928,7 +2931,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       case "consent": return <div style={pd}>
         {cfg.consents.map((cs,idx)=><FG key={idx} A={A} last={idx===cfg.consents.length-1}>
           <div style={{display:"flex",alignItems:"center",marginBottom:12}}>
-            <span style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const}}>동의 항목 {idx+1}</span>
+            <span style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const}}>동의 항목 {idx+1}</span>
             <div style={{flex:1}}/>
             <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:A.t2,fontFamily:FONT}}>
               <span>필수</span>
@@ -2992,7 +2995,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 {(["existing","new"] as const).map(mode=>{
                   const on=gs.mode===mode
                   return <button key={mode} onClick={()=>ug("mode",mode)}
-                    style={{height:42,borderRadius:A.r,border:`1.5px solid ${on?A.blue:A.border}`,background:on?A.blue2:A.card2,color:on?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:800,cursor:"pointer"}}>
+                    style={{height:42,borderRadius:A.r,border:`1.5px solid ${on?A.blue:A.border}`,background:on?A.blue2:A.card2,color:on?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
                     {mode==="existing"?"기존 스프레드시트 사용":"새 스프레드시트 생성"}
                   </button>
                 })}
@@ -3007,12 +3010,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <F label="연동 상태" A={A}>
               <div style={{padding:"12px",borderRadius:A.r,border:`1px solid ${statusColor}44`,background:statusColor+"10",display:"grid",gap:8}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,color:statusColor,fontSize:13,fontWeight:800}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,color:statusColor,fontSize:13,fontWeight:600}}>
                     <span style={{width:8,height:8,borderRadius:999,background:statusColor,display:"inline-block"}} />{statusLabel}
                   </div>
                   <button onClick={()=>sheetOpenUrl?window.open(sheetOpenUrl,"_blank","noopener,noreferrer"):showToast(gs.mode==="new"?"Apps Script Web App URL을 입력하면 생성된 시트로 이동할 수 있어요.":"연결할 시트 링크를 입력하면 바로 이동할 수 있어요.",false)}
                     disabled={!sheetOpenUrl}
-                    style={{height:30,padding:"0 10px",borderRadius:A.r,border:`1px solid ${sheetOpenUrl?A.border2:A.border}`,background:sheetOpenUrl?A.card:A.card2,color:sheetOpenUrl?A.t1:A.t3,fontFamily:FONT,fontSize:12,fontWeight:800,cursor:sheetOpenUrl?"pointer":"not-allowed"}}>
+                    style={{height:30,padding:"0 10px",borderRadius:A.r,border:`1px solid ${sheetOpenUrl?A.border2:A.border}`,background:sheetOpenUrl?A.card:A.card2,color:sheetOpenUrl?A.t1:A.t3,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:sheetOpenUrl?"pointer":"not-allowed"}}>
                     시트로 이동
                   </button>
                 </div>
@@ -3024,11 +3027,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </F>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               <button onClick={()=>loadedId?updateCfg(false):setShowSave(true)}
-                style={{height:40,borderRadius:A.r,border:`1px solid ${A.border2}`,background:A.card,color:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:800,cursor:"pointer"}}>
+                style={{height:40,borderRadius:A.r,border:`1px solid ${A.border2}`,background:A.card,color:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
                 설정 저장
               </button>
               <button onClick={testGoogleSheetsIntegration}
-                style={{height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:800,cursor:"pointer"}}>
+                style={{height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
                 테스트 전송
               </button>
             </div>
@@ -3050,7 +3053,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <FG title="폼 슬러그" A={A} last>
             <F label="슬러그" A={A}><TIn value={slugDraft} onChange={v=>setSlugDraft(v)} placeholder="my-form-slug" A={A}/></F>
             {preview&&<F label="미리보기 URL" A={A}><div style={{padding:"9px 10px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:11.5,color:A.t2,wordBreak:"break-all" as const,fontFamily:"Courier New,monospace"}}>{preview}</div></F>}
-            <button onClick={updateFormSlug} style={{width:"100%",height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:800,cursor:"pointer"}}>
+            <button onClick={updateFormSlug} style={{width:"100%",height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>
               {loadedId?"슬러그 저장":"저장 전 슬러그 적용"}
             </button>
           </FG>
@@ -3083,7 +3086,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 <div style={{width:"100%",height:28,borderRadius:6,background:t==="dark"?"#0B0C0E":"#FFFFFF",border:"1px solid rgba(128,128,128,0.2)",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>
                   {t==="dark"?<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M13.5 8.5A5.5 5.5 0 0 1 7 2a6 6 0 1 0 6.5 6.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M8 1v1.5M8 13.5V15M15 8h-1.5M2.5 8H1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1M12.6 12.6l-1.1-1.1M4.5 4.5 3.4 3.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
                 </div>
-                <div style={{fontSize:12.5,fontWeight:700,color:a?A.blue:A.t2}}>{t==="dark"?"다크":"라이트"}</div>
+                <div style={{fontSize:12.5,fontWeight:600,color:a?A.blue:A.t2}}>{t==="dark"?"다크":"라이트"}</div>
               </div>
             )})}
           </div>
@@ -3092,7 +3095,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             {[{c:"#529DFF",l:"스나이퍼팩토리"},{c:"#EA594D",l:"인사이드아웃"}].map(({c,l})=>(
               <button key={c} onClick={()=>{ut("bg",c)}} title={l}
-                style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px 6px 8px",borderRadius:A.r,border:`1.5px solid ${cfg.cta.bg===c?c:A.border}`,background:cfg.cta.bg===c?c+"15":"transparent",cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:cfg.cta.bg===c?700:400,color:cfg.cta.bg===c?c:A.t2,flexShrink:0,transition:"all .15s"}}>
+                style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px 6px 8px",borderRadius:A.r,border:`1.5px solid ${cfg.cta.bg===c?c:A.border}`,background:cfg.cta.bg===c?c+"15":"transparent",cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:cfg.cta.bg===c?600:400,color:cfg.cta.bg===c?c:A.t2,flexShrink:0,transition:"all .15s"}}>
                 <div style={{width:18,height:18,borderRadius:"50%",background:c,flexShrink:0}}/>
                 {l}
               </button>
@@ -3147,8 +3150,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <img src={cfg.header.imageUrl} alt="" style={imagePreviewImgStyle(cfg.header)}/>
         </div>}
         <div style={{textAlign:"center" as const,marginBottom:22}}>
-          {cfg.header.overline&&<div style={{fontSize:12,fontWeight:800,color:accentBg,marginBottom:8}}>{cfg.header.overline}</div>}
-          <div style={{fontSize:22,fontWeight:900,color:FC.t1,lineHeight:1.2,letterSpacing:"-0.5px",marginBottom:10}}>{cfg.header.title}</div>
+          {cfg.header.overline&&<div style={{fontSize:12,fontWeight:600,color:accentBg,marginBottom:8}}>{cfg.header.overline}</div>}
+          <div style={{fontSize:22,fontWeight:600,color:FC.t1,lineHeight:1.2,letterSpacing:"-0.5px",marginBottom:10}}>{cfg.header.title}</div>
           <div style={{display:"flex",justifyContent:"center",gap:8,fontSize:12.5,color:FC.t2,flexWrap:"wrap" as const}}>
             {(()=>{const s=cfg.header.educationStart,e=cfg.header.educationEnd;if(!s&&!e)return null;const days=s&&e?Math.round((new Date(e+"T00:00:00").getTime()-new Date(s+"T00:00:00").getTime())/(1000*60*60*24))+1:0;return <span>{s&&e?`${fmtDateKo(s)} ~ ${fmtDateKo(e)} · ${days<30?"총 "+days+"일":days%7>0?"총 "+Math.floor(days/7)+"주 "+days%7+"일":"총 "+Math.floor(days/7)+"주"}`:s?fmtDateKo(s):fmtDateKo(e)}</span>})()}
             {cfg.header.tuitionFree?<><span style={{opacity:.3}}>|</span><span>{cfg.header.tuitionFreeText||"수강료 전액 무료"}</span></>:cfg.header.tuitionAmount?<><span style={{opacity:.3}}>|</span><span>{cfg.header.tuitionAmount}원</span></>:null}
@@ -3171,14 +3174,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <div style={{width:4,height:18,borderRadius:2,background:accentBg,flexShrink:0}}/>
-            <span style={{fontSize:15,fontWeight:700,color:FC.t1,fontFamily:FONT,letterSpacing:"-0.2px"}}>{getPageLabel(pvPage)}</span>
+            <span style={{fontSize:15,fontWeight:600,color:FC.t1,fontFamily:FONT,letterSpacing:"-0.2px"}}>{getPageLabel(pvPage)}</span>
           </div>
         </div>}
         {/* Dynamic fields */}
         {fields.map((field:any,i:number)=>{
           // KDT section_desc
           if(field.type==="section_desc") return <div key={field.id} style={{padding:"14px 16px",borderRadius:fr2,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`}}>
-            <div style={{fontSize:14,fontWeight:700,color:FC.t1,marginBottom:field.desc?6:0}}>{field.label}</div>
+            <div style={{fontSize:14,fontWeight:600,color:FC.t1,marginBottom:field.desc?6:0}}>{field.label}</div>
             {field.desc&&<div style={{fontSize:12.5,color:FC.t3,lineHeight:1.7,whiteSpace:"pre-line" as const}}>{field.desc}</div>}
           </div>
           const id=field.id
@@ -3251,7 +3254,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 {replaceId===id&&<div style={{position:"absolute" as const,top:0,right:28,background:A.card||FC.bg||"#fff",border:`1px solid ${A.border||FC.fieldBorder}`,borderRadius:"8px",padding:6,zIndex:200,display:"flex",flexDirection:"column" as const,gap:2,minWidth:130,boxShadow:"0 4px 16px rgba(0,0,0,0.15)"}}>
                   {FTYPES_DATA.map(ft=>{const cur=(field as any).type===ft.type;return(
                     <button key={ft.type} onClick={e=>{e.stopPropagation();patchActiveField(i,{type:ft.type as FieldType});setReplaceId(null)}}
-                      style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:6,border:"none",background:cur?A.blue2||accentC+"18":"transparent",color:cur?A.blue||accentC:A.t1||FC.t1,fontFamily:FONT,fontSize:12.5,cursor:"pointer",textAlign:"left" as const,fontWeight:cur?700:400,transition:"background .1s"}}
+                      style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:6,border:"none",background:cur?A.blue2||accentC+"18":"transparent",color:cur?A.blue||accentC:A.t1||FC.t1,fontFamily:FONT,fontSize:12.5,cursor:"pointer",textAlign:"left" as const,fontWeight:cur?600:400,transition:"background .1s"}}
                       onMouseEnter={e=>{if(!cur)(e.currentTarget as HTMLElement).style.background=A.card2||FC.fieldBg}}
                       onMouseLeave={e=>{if(!cur)(e.currentTarget as HTMLElement).style.background="transparent"}}>
                       <span style={{color:A.t3||FC.t3,display:"flex",alignItems:"center",flexShrink:0}}>{FTYPE_ICONS[ft.type]}</span>
@@ -3319,7 +3322,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=FC.fieldBg} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
                       <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M10 4l-4 4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </button>
-                    <span style={{fontSize:14,fontWeight:700,color:FC.t1,fontFamily:FONT}}>{dpY}년 {MONTHS[dpM]}</span>
+                    <span style={{fontSize:14,fontWeight:600,color:FC.t1,fontFamily:FONT}}>{dpY}년 {MONTHS[dpM]}</span>
                     <button onClick={nextM} style={{width:28,height:28,borderRadius:8,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:FC.t2}}
                       onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=FC.fieldBg} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
                       <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -3339,7 +3342,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       const dow=(firstDay+d-1)%7
                       const color=isSelected?"#fff":dow===0?"#FF5C5C":dow===6?accentC:FC.t1
                       return <button key={d} onClick={()=>selectDate(d)}
-                        style={{aspectRatio:"1",borderRadius:8,border:isToday&&!isSelected?`1.5px solid ${accentC}`:"none",background:isSelected?accentC:"transparent",color,fontFamily:FONT,fontSize:12.5,fontWeight:isSelected?700:isToday?600:400,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"background .1s"}}
+                        style={{aspectRatio:"1",borderRadius:8,border:isToday&&!isSelected?`1.5px solid ${accentC}`:"none",background:isSelected?accentC:"transparent",color,fontFamily:FONT,fontSize:12.5,fontWeight:isSelected?600:isToday?600:400,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"background .1s"}}
                         onMouseEnter={e=>{if(!isSelected)(e.currentTarget as HTMLElement).style.background=FC.fieldBg}}
                         onMouseLeave={e=>{if(!isSelected)(e.currentTarget as HTMLElement).style.background="transparent"}}>
                         {d}
@@ -3349,7 +3352,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   {/* 오늘 버튼 */}
                   <div style={{marginTop:10,borderTop:`1px solid ${FC.fieldBorder}`,paddingTop:10,display:"flex",justifyContent:"center"}}>
                     <button onClick={()=>{setDpY(today.getFullYear());setDpM(today.getMonth());const y=today.getFullYear();const mo=String(today.getMonth()+1).padStart(2,"0");const da=String(today.getDate()).padStart(2,"0");setVal(`${y}-${mo}-${da}`);setDpOpen(false)}}
-                      style={{padding:"5px 20px",borderRadius:8,border:`1px solid ${accentC}44`,background:accentC+"0f",color:accentC,fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
+                      style={{padding:"5px 20px",borderRadius:8,border:`1px solid ${accentC}44`,background:accentC+"0f",color:accentC,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
                       오늘
                     </button>
                     {val&&<button onClick={()=>{setVal("");setDpOpen(false)}}
@@ -3375,7 +3378,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 {/* 오전/오후 */}
                 <div style={{display:"flex",borderRadius:fr2,border:`1px solid ${FC.fieldBorder}`,overflow:"hidden",flexShrink:0}}>
                   {["오전","오후"].map(v=><button key={v} onClick={()=>setAmpm(v)}
-                    style={{height:fh,padding:"0 12px",border:"none",background:ampm===v?accentC:FC.fieldBg,color:ampm===v?"#fff":FC.t2,fontFamily:FONT,fontSize:13,fontWeight:ampm===v?700:400,cursor:"pointer",transition:"all .15s"}}>
+                    style={{height:fh,padding:"0 12px",border:"none",background:ampm===v?accentC:FC.fieldBg,color:ampm===v?"#fff":FC.t2,fontFamily:FONT,fontSize:13,fontWeight:ampm===v?600:400,cursor:"pointer",transition:"all .15s"}}>
                     {v}
                   </button>)}
                 </div>
@@ -3394,7 +3397,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     {hours.map(h=><option key={h} value={h}>{h}</option>)}
                   </select>
                 </div>
-                <span style={{color:FC.t3,fontWeight:700,fontSize:16,flexShrink:0}}>:</span>
+                <span style={{color:FC.t3,fontWeight:600,fontSize:16,flexShrink:0}}>:</span>
                 {/* 분 */}
                 <div style={boxS}>
                   <input value={mm} onChange={e=>{const v=e.target.value.replace(/\D/g,"");if(v===""||Number(v)<=59)setMm(v)}}
@@ -3457,7 +3460,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     style={{padding:"9px 13px",cursor:"pointer",fontSize:13,fontFamily:FONT,display:"flex",alignItems:"center",justifyContent:"space-between",background:s?accentC+"14":"transparent",color:s?accentC:FC.t1}}
                     onMouseEnter={e=>{if(!s)(e.currentTarget as HTMLElement).style.background=FC.fieldBg}}
                     onMouseLeave={e=>{if(!s)(e.currentTarget as HTMLElement).style.background="transparent"}}>
-                    {opt.label}{s&&<span style={{fontWeight:700}}>✓</span>}
+                    {opt.label}{s&&<span style={{fontWeight:600}}>✓</span>}
                   </div>
                 )})}
               </div>}
@@ -3475,7 +3478,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <div style={{display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:8}}>
                 {opts.map((opt:any)=>{const s=opt.value===val;return(
                   <button key={opt.value} onClick={()=>{setVal(s?"":opt.value);if(!s&&opt.nextPage){if(opt.nextPage===9999){setTimeout(()=>setPvShowModal(true),300)}else{setTimeout(()=>setPvPage(opt.nextPage),300)}}}}
-                    style={{padding:"10px 8px",borderRadius:fr2,border:`1px solid ${s?accentC:FC.fieldBorder}`,background:s?accentC+"14":"transparent",color:s?accentC:FC.t2,fontFamily:FONT,fontSize:13,cursor:"pointer",fontWeight:s?700:400,transition:"all .12s",textAlign:"center" as const,whiteSpace:"pre-wrap" as const,wordBreak:"keep-all" as const}}>
+                    style={{padding:"10px 8px",borderRadius:fr2,border:`1px solid ${s?accentC:FC.fieldBorder}`,background:s?accentC+"14":"transparent",color:s?accentC:FC.t2,fontFamily:FONT,fontSize:13,cursor:"pointer",fontWeight:s?600:400,transition:"all .12s",textAlign:"center" as const,whiteSpace:"pre-wrap" as const,wordBreak:"keep-all" as const}}>
                     {opt.label}
                   </button>
                 )})}
@@ -3522,10 +3525,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         {/* Consents — 단계형 폼은 마지막 단계에만 표시 */}
         {(!isMultiPage||pvPage===formPages)&&cfg.consents.filter(cs=>cs.enabled).map((cs,idx)=><div key={idx} style={{marginBottom:qg}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-            <div style={{fontSize:14,fontWeight:900,color:FC.t1,display:"flex",alignItems:"center",gap:3}}>
-              {cs.title}{cs.required&&<span style={{color:accentBg,fontSize:14,fontWeight:900,lineHeight:1}}>*</span>}
+            <div style={{fontSize:14,fontWeight:600,color:FC.t1,display:"flex",alignItems:"center",gap:3}}>
+              {cs.title}{cs.required&&<span style={{color:accentBg,fontSize:14,fontWeight:600,lineHeight:1}}>*</span>}
             </div>
-            {cs.policyUrl&&<a href={cs.policyUrl} target="_blank" rel="noopener" style={{fontSize:12,fontWeight:700,color:accentBg,textDecoration:"none",padding:"2px 9px",borderRadius:5,border:`1px solid ${accentBg}44`,flexShrink:0}}>보기</a>}
+            {cs.policyUrl&&<a href={cs.policyUrl} target="_blank" rel="noopener" style={{fontSize:12,fontWeight:600,color:accentBg,textDecoration:"none",padding:"2px 9px",borderRadius:5,border:`1px solid ${accentBg}44`,flexShrink:0}}>보기</a>}
           </div>
           {(()=>{
             const lines=cs.body.split("\n")
@@ -3548,7 +3551,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           })()}
           <div style={{display:"flex",alignItems:"center",gap:9,cursor:"pointer"}} onClick={()=>setPvOk(v=>!v)}>
             <div style={{width:16,height:16,borderRadius:4,border:`1px solid ${pvOk?accentBg+"cc":FC.fieldBorder}`,background:pvOk?accentBg+"d9":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s"}}>
-              {pvOk&&<span style={{color:"#fff",fontSize:11,fontWeight:900}}>✓</span>}
+              {pvOk&&<span style={{color:"#fff",fontSize:11,fontWeight:600}}>✓</span>}
             </div>
             <span style={{fontSize:13,color:FC.t2}}>{cs.checkLabel}</span>
           </div>
@@ -3559,8 +3562,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             style={{flex:1,height:cfg.cta.height,borderRadius:fr2,border:"none",background:FC.fieldBg||"#F2F4F6",color:FC.t2,fontFamily:FONT,fontSize:14,fontWeight:600,cursor:"pointer"}}>이전</button>}
           {isMultiPage&&pvPage<formPages
             ?<button onClick={()=>setPvPage(p=>p+1)}
-                style={{flex:2,height:cfg.cta.height,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color,fontFamily:FONT,fontSize:14,fontWeight:800,cursor:"pointer"}}>다음</button>
-            :<button style={{flex:2,height:cfg.cta.height,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color,fontFamily:FONT,fontSize:14,fontWeight:800,cursor:"pointer"}}>{cfg.cta.label}</button>}
+                style={{flex:2,height:cfg.cta.height,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color,fontFamily:FONT,fontSize:14,fontWeight:600,cursor:"pointer"}}>다음</button>
+            :<button style={{flex:2,height:cfg.cta.height,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color,fontFamily:FONT,fontSize:14,fontWeight:600,cursor:"pointer"}}>{cfg.cta.label}</button>}
         </div>
       </div>
     </div>
@@ -3575,18 +3578,18 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       <div style={{width:"100%",maxWidth:cfg.styles.maxW}}>
         {/* 헤더 */}
         {cfg.header.title&&<div style={{marginBottom:24}}>
-          {cfg.header.overline&&<div style={{fontSize:12,fontWeight:800,color:accentBg,marginBottom:6}}>{cfg.header.overline}</div>}
-          <div style={{fontSize:22,fontWeight:900,color:FC.t1,letterSpacing:"-0.5px"}}>{cfg.header.title}</div>
+          {cfg.header.overline&&<div style={{fontSize:12,fontWeight:600,color:accentBg,marginBottom:6}}>{cfg.header.overline}</div>}
+          <div style={{fontSize:22,fontWeight:600,color:FC.t1,letterSpacing:"-0.5px"}}>{cfg.header.title}</div>
         </div>}
         {/* 스텝 인디케이터 — elastic stepper */}
         <div style={{display:"flex",gap:6,marginBottom:28}}>
           {pages.map(p=>{const active=pvPage===p;const done=pvPage>p;return(
             <button key={p} onClick={()=>setPvPage(p)}
               style={{flex:active?3:1,height:38,borderRadius:fr2,border:"none",cursor:"pointer",fontFamily:FONT,transition:"all .35s cubic-bezier(.4,0,.2,1)",overflow:"hidden",display:"flex",alignItems:"center",justifyContent:active?"flex-start":"center",gap:8,padding:active?"0 14px":"0 8px",background:active?accentBg:done?"transparent":"transparent",borderBottom:`2px solid ${active?accentBg:done?accentBg+"66":FC.fieldBorder}`}}>
-              <span style={{width:16,height:16,borderRadius:"50%",background:active?"rgba(255,255,255,0.25)":done?accentBg+"22":"transparent",border:`1.5px solid ${active?"rgba(255,255,255,0.6)":done?accentBg+"88":FC.fieldBorder}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:active?"#fff":done?accentBg:FC.t3,flexShrink:0,transition:"all .35s"}}>
+              <span style={{width:16,height:16,borderRadius:"50%",background:active?"rgba(255,255,255,0.25)":done?accentBg+"22":"transparent",border:`1.5px solid ${active?"rgba(255,255,255,0.6)":done?accentBg+"88":FC.fieldBorder}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:600,color:active?"#fff":done?accentBg:FC.t3,flexShrink:0,transition:"all .35s"}}>
                 {done?<svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>:p}
               </span>
-              <span style={{fontSize:active?13:10.5,fontWeight:active?700:500,color:active?"#fff":done?FC.t2:FC.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,transition:"all .35s",maxWidth:active?"none":"60px"}}>
+              <span style={{fontSize:active?13:10.5,fontWeight:active?600:500,color:active?"#fff":done?FC.t2:FC.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,transition:"all .35s",maxWidth:active?"none":"60px"}}>
                 {getPageLabel(p)}
               </span>
             </button>
@@ -3596,7 +3599,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{display:"flex",flexDirection:"column" as const,gap:cfg.styles.qGap||20}}>
           {curFields.map((field,idx)=>{
             if(field.type==="section_desc") return <div key={field.id} style={{padding:"14px 16px",borderRadius:fr2,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`}}>
-              <div style={{fontSize:14,fontWeight:700,color:FC.t1,marginBottom:field.desc?6:0}}>{field.label}</div>
+              <div style={{fontSize:14,fontWeight:600,color:FC.t1,marginBottom:field.desc?6:0}}>{field.label}</div>
               {field.desc&&<div style={{fontSize:12.5,color:FC.t3,lineHeight:1.7,whiteSpace:"pre-line" as const}}>{field.desc}</div>}
             </div>
             const kdtId=field.id
@@ -3623,7 +3626,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   {replaceId===kdtId&&<div style={{position:"absolute" as const,top:0,right:28,background:A.card||FC.bg||"#fff",border:`1px solid ${A.border||FC.fieldBorder}`,borderRadius:"8px",padding:6,zIndex:200,display:"flex",flexDirection:"column" as const,gap:2,minWidth:130,boxShadow:"0 4px 16px rgba(0,0,0,0.15)"}}>
                     {FTYPES_DATA.map(ft=>{const cur=(field as any).type===ft.type;return(
                       <button key={ft.type} onClick={e=>{e.stopPropagation();patchActiveField(idx,{type:ft.type as FieldType});setReplaceId(null)}}
-                        style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:6,border:"none",background:cur?A.blue2||accentBg+"18":"transparent",color:cur?A.blue||accentBg:A.t1||FC.t1,fontFamily:FONT,fontSize:12.5,cursor:"pointer",textAlign:"left" as const,fontWeight:cur?700:400}}
+                        style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:6,border:"none",background:cur?A.blue2||accentBg+"18":"transparent",color:cur?A.blue||accentBg:A.t1||FC.t1,fontFamily:FONT,fontSize:12.5,cursor:"pointer",textAlign:"left" as const,fontWeight:cur?600:400}}
                         onMouseEnter={e=>{if(!cur)(e.currentTarget as HTMLElement).style.background=A.card2||FC.fieldBg}}
                         onMouseLeave={e=>{if(!cur)(e.currentTarget as HTMLElement).style.background="transparent"}}>
                         <span style={{color:A.t3||FC.t3,display:"flex",alignItems:"center",flexShrink:0}}>{FTYPE_ICONS[ft.type]}</span>
@@ -3674,7 +3677,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       style={{padding:"9px 13px",cursor:"pointer",fontSize:13,fontFamily:FONT,display:"flex",alignItems:"center",justifyContent:"space-between",background:sel?accentBg+"14":"transparent",color:sel?accentBg:FC.t1,transition:"background .08s"}}
                       onMouseEnter={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background=FC.fieldBg}}
                       onMouseLeave={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background="transparent"}}>
-                      <span>{opt}</span>{sel&&<span style={{fontWeight:700}}>✓</span>}
+                      <span>{opt}</span>{sel&&<span style={{fontWeight:600}}>✓</span>}
                     </div>
                   )})}
                 </div>}
@@ -3687,7 +3690,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 <div style={{display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:8}}>
                   {opts.map((opt:any)=>{const sel=pvKdtVals[field.id]===opt.value;return(
                     <button key={opt.value} onClick={()=>setPvKdtVals(v=>({...v,[field.id]:sel?"":opt.value}))}
-                      style={{padding:"10px 8px",borderRadius:fr2,border:`1px solid ${sel?accentBg:FC.fieldBorder}`,background:sel?accentBg+"14":"transparent",color:sel?accentBg:FC.t2,fontFamily:FONT,fontSize:13,cursor:"pointer",fontWeight:sel?700:400,transition:"all .12s",textAlign:"center" as const,whiteSpace:"pre-wrap" as const,wordBreak:"keep-all" as const}}>
+                      style={{padding:"10px 8px",borderRadius:fr2,border:`1px solid ${sel?accentBg:FC.fieldBorder}`,background:sel?accentBg+"14":"transparent",color:sel?accentBg:FC.t2,fontFamily:FONT,fontSize:13,cursor:"pointer",fontWeight:sel?600:400,transition:"all .12s",textAlign:"center" as const,whiteSpace:"pre-wrap" as const,wordBreak:"keep-all" as const}}>
                       {opt.label}
                     </button>
                   )})}
@@ -3706,8 +3709,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         {/* 페이지 이동 */}
         <div style={{display:"flex",gap:10,marginTop:28}}>
           {isMultiPage&&pvPage>1&&<button onClick={()=>setPvPage(p=>p-1)} style={{flex:1,height:fh,borderRadius:fr2,border:`1px solid ${FC.fieldBorder}`,background:"transparent",color:FC.t2,fontFamily:FONT,fontSize:14,fontWeight:600,cursor:"pointer"}}>이전</button>}
-          {pvPage<3?<button onClick={()=>setPvPage(p=>p+1)} style={{flex:1,height:fh,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color||"#fff",fontFamily:FONT,fontSize:14,fontWeight:700,cursor:"pointer"}}>다음</button>
-          :<button style={{flex:1,height:fh,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color||"#fff",fontFamily:FONT,fontSize:14,fontWeight:700,cursor:"pointer"}}>{cfg.cta.label}</button>}
+          {pvPage<3?<button onClick={()=>setPvPage(p=>p+1)} style={{flex:1,height:fh,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color||"#fff",fontFamily:FONT,fontSize:14,fontWeight:600,cursor:"pointer"}}>다음</button>
+          :<button style={{flex:1,height:fh,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color||"#fff",fontFamily:FONT,fontSize:14,fontWeight:600,cursor:"pointer"}}>{cfg.cta.label}</button>}
         </div>
       </div>
     </div>
@@ -3737,8 +3740,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       {/* Step 1: URL */}
       <div style={{padding:"14px 16px",borderRadius:A.r2,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-          <div style={{width:20,height:20,borderRadius:"50%",background:hasBase?A.blue:A.card2,border:`1px solid ${hasBase?A.blue:A.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:hasBase?"#fff":A.t3,flexShrink:0}}>1</div>
-          <div style={{fontSize:12.5,fontWeight:700,color:A.t1}}>배포 페이지 URL</div>
+          <div style={{width:20,height:20,borderRadius:"50%",background:hasBase?A.blue:A.card2,border:`1px solid ${hasBase?A.blue:A.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,color:hasBase?"#fff":A.t3,flexShrink:0}}>1</div>
+          <div style={{fontSize:12.5,fontWeight:600,color:A.t1}}>배포 페이지 URL</div>
         </div>
         <div style={{fontSize:12,color:A.t3,marginBottom:10,lineHeight:1.5}}>환경변수 {urlPropName} 에 배포된 페이지 주소를 입력하세요.</div>
         <div style={{padding:"9px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${hasBase?A.blue:A.border}`,fontSize:12,fontFamily:"Courier New,monospace",color:hasBase?A.t1:A.t3}}>
@@ -3749,8 +3752,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       {/* Step 2: Save */}
       <div style={{padding:"14px 16px",borderRadius:A.r2,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-          <div style={{width:20,height:20,borderRadius:"50%",background:hasSaved?A.blue:A.card2,border:`1px solid ${hasSaved?A.blue:A.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:hasSaved?"#fff":A.t3,flexShrink:0}}>2</div>
-          <div style={{fontSize:12.5,fontWeight:700,color:A.t1}}>폼 설정 저장</div>
+          <div style={{width:20,height:20,borderRadius:"50%",background:hasSaved?A.blue:A.card2,border:`1px solid ${hasSaved?A.blue:A.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,color:hasSaved?"#fff":A.t3,flexShrink:0}}>2</div>
+          <div style={{fontSize:12.5,fontWeight:600,color:A.t1}}>폼 설정 저장</div>
         </div>
         <div style={{fontSize:12,color:A.t3,marginBottom:10,lineHeight:1.5}}>현재 설정을 Supabase에 저장하면 slug가 생성됩니다.</div>
         {hasSaved
@@ -3761,8 +3764,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       {/* Step 3: Final link */}
       <div style={{padding:"14px 16px",borderRadius:A.r2,background:A.card,border:`1.5px solid ${formUrl?A.blue:A.border}`,boxShadow:A.shadow,transition:"border .2s"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-          <div style={{width:20,height:20,borderRadius:"50%",background:formUrl?A.blue:A.card2,border:`1px solid ${formUrl?A.blue:A.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:formUrl?"#fff":A.t3,flexShrink:0}}>3</div>
-          <div style={{fontSize:12.5,fontWeight:700,color:A.t1}}>신청 폼 링크</div>
+          <div style={{width:20,height:20,borderRadius:"50%",background:formUrl?A.blue:A.card2,border:`1px solid ${formUrl?A.blue:A.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,color:formUrl?"#fff":A.t3,flexShrink:0}}>3</div>
+          <div style={{fontSize:12.5,fontWeight:600,color:A.t1}}>신청 폼 링크</div>
         </div>
         {formUrl
           ?<>
@@ -3947,11 +3950,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const activeAnalyticsTab=tabs.some(t=>t.id===analyticsTab)?analyticsTab:"responses"
     const metric=(icon:any,value:string,label:string,color:string=accent)=><div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,display:"flex",alignItems:"center",gap:14,minHeight:88,boxShadow:A.shadow}}>
       <div style={{width:46,height:46,borderRadius:A.r,background:color===accent?accentSoft:color+"18",display:"flex",alignItems:"center",justifyContent:"center",color}}><svg width="22" height="22" viewBox="0 0 16 16" fill="none">{icon}</svg></div>
-      <div style={{minWidth:0}}><div style={{fontSize:23,fontWeight:900,color:A.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:210}}>{value}</div><div style={{fontSize:13,color:A.t2,marginTop:3}}>{label}</div></div>
+      <div style={{minWidth:0}}><div style={{fontSize:23,fontWeight:600,color:A.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:210}}>{value}</div><div style={{fontSize:13,color:A.t2,marginTop:3}}>{label}</div></div>
     </div>
     const emptyState=(text:string)=><div style={{background:A.card,border:`1px dashed ${A.border2}`,borderRadius:A.r2,padding:28,textAlign:"center" as const,color:A.t3,fontSize:13}}>{text}</div>
     const infoTitle=(label:string,tip:string)=><div style={{display:"flex",alignItems:"center",gap:7,marginBottom:12,position:"relative" as const}}>
-      <span style={{fontSize:16,fontWeight:800,color:A.t1}}>{label}</span>
+      <span style={{fontSize:16,fontWeight:600,color:A.t1}}>{label}</span>
       <span
         onMouseEnter={()=>setAnalyticsInfoTip(label)}
         onMouseLeave={()=>setAnalyticsInfoTip("")}
@@ -3959,10 +3962,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         onBlur={()=>setAnalyticsInfoTip("")}
         tabIndex={0}
         aria-label={`${label} 데이터 설명`}
-        style={{width:18,height:18,borderRadius:"50%",border:`1px solid ${A.border2}`,color:A.t3,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,cursor:"help",background:A.card2,position:"relative" as const,outline:"none"}}>
+        style={{width:18,height:18,borderRadius:"50%",border:`1px solid ${A.border2}`,color:A.t3,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600,cursor:"help",background:A.card2,position:"relative" as const,outline:"none"}}>
         ?
         {analyticsInfoTip===label&&<div style={{position:"absolute" as const,left:"50%",top:25,transform:"translateX(-50%)",width:280,padding:"11px 12px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,boxShadow:A.shadow,fontSize:12.5,fontWeight:500,lineHeight:1.55,textAlign:"left" as const,zIndex:50,pointerEvents:"none" as const,whiteSpace:"normal" as const}}>
-          <div style={{fontSize:12,fontWeight:800,color:A.t1,marginBottom:5}}>{label} 데이터 기준</div>
+          <div style={{fontSize:12,fontWeight:600,color:A.t1,marginBottom:5}}>{label} 데이터 기준</div>
           {tip}
         </div>}
       </span>
@@ -3973,7 +3976,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       if(r)setPeriodHover({scope,x:e.clientX-r.left+14,y:e.clientY-r.top+14,...data})
     }
     const periodTip=(scope:string)=>periodHover?.scope===scope&&<div style={{position:"absolute" as const,left:periodHover.x,top:periodHover.y,background:A.card,border:`1px solid ${periodHover.color}`,borderRadius:A.r,padding:"12px 14px",boxShadow:A.shadow,minWidth:190,pointerEvents:"none" as const,zIndex:20}}>
-      <div style={{display:"flex",alignItems:"center",gap:8,fontSize:14,fontWeight:800,color:A.t1,marginBottom:7}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,fontSize:14,fontWeight:600,color:A.t1,marginBottom:7}}>
         <span style={{width:10,height:10,borderRadius:"50%",background:periodHover.color,flexShrink:0}}/>{periodHover.title}
       </div>
       {periodHover.lines.map((line:string,idx:number)=><div key={idx} style={{fontSize:13,color:A.t2,lineHeight:1.55}}>{line}</div>)}
@@ -3986,24 +3989,24 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     }
     return <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,color:A.t1,fontFamily:FONT,overflow:"hidden",position:"relative" as const}}>
       <div style={{height:52,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 16px",gap:10,flexShrink:0,boxShadow:A.shadow}}>
-        <button onClick={()=>setView("builder")} style={{display:"flex",alignItems:"center",gap:6,background:"transparent",border:"none",cursor:"pointer",color:A.t2,fontSize:12.5,fontWeight:700,fontFamily:FONT}}>
+        <button onClick={()=>setView("builder")} style={{display:"flex",alignItems:"center",gap:6,background:"transparent",border:"none",cursor:"pointer",color:A.t2,fontSize:12.5,fontWeight:600,fontFamily:FONT}}>
           <span style={{fontSize:13}}>←</span><span>편집으로</span>
         </button>
         <div style={{width:1,height:16,background:A.border}}/>
         <div style={{minWidth:0}}>
-          <div style={{fontSize:13,fontWeight:800,color:A.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:340}}>{loadedName||"응답 및 분석"}</div>
+          <div style={{fontSize:13,fontWeight:600,color:A.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:340}}>{loadedName||"응답 및 분석"}</div>
         </div>
         <div style={{flex:1}}/>
         <button onClick={loadAnalytics} style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M13 3v4H9M3 13V9h4M12.2 8.8A4.5 4.5 0 0 1 4.5 12M3.8 7.2A4.5 4.5 0 0 1 11.5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </button>
-        <button onClick={exportAnalyticsCsv} style={{height:32,padding:"0 13px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:800,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+        <button onClick={exportAnalyticsCsv} style={{height:32,padding:"0 13px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>시트 다운로드
         </button>
       </div>
       <div style={{height:50,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 20px",gap:6,flexShrink:0}}>
         {tabs.map(t=>{const on=activeAnalyticsTab===t.id;return <button key={t.id} onClick={()=>setAnalyticsTab(t.id)}
-          style={{height:32,padding:"0 12px",borderRadius:A.r,border:`1px solid ${on?A.blue+"33":"transparent"}`,background:on?A.blue2:"transparent",color:on?A.blue:A.t2,fontFamily:FONT,fontSize:13,fontWeight:800,cursor:"pointer",display:"flex",alignItems:"center",gap:7}}>
+          style={{height:32,padding:"0 12px",borderRadius:A.r,border:`1px solid ${on?A.blue+"33":"transparent"}`,background:on?A.blue2:"transparent",color:on?A.blue:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:7}}>
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none">{t.icon}</svg>{t.label}
         </button>})}
       </div>
@@ -4012,8 +4015,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         {analyticsLoading?<div style={{fontSize:14,color:A.t2}}>불러오는 중...</div>:analyticsErr?<div style={{fontSize:14,color:A.red}}>{analyticsErr}</div>:<>
           {activeAnalyticsTab==="responses"&&<div>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-              <div style={{fontSize:22,fontWeight:900,color:A.t1}}>응답별 데이터</div>
-              <div style={{height:26,padding:"0 12px",borderRadius:999,background:A.card2,border:`1px solid ${A.border}`,color:A.t2,display:"flex",alignItems:"center",fontSize:12.5,fontWeight:800}}>{rows.length}개 응답</div>
+              <div style={{fontSize:22,fontWeight:600,color:A.t1}}>응답별 데이터</div>
+              <div style={{height:26,padding:"0 12px",borderRadius:999,background:A.card2,border:`1px solid ${A.border}`,color:A.t2,display:"flex",alignItems:"center",fontSize:12.5,fontWeight:600}}>{rows.length}개 응답</div>
             </div>
             {rows.length===0?emptyState("아직 수집된 응답이 없습니다."):<div className="catchform-analytics-table-scroll" style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,overflow:"auto",boxShadow:A.shadow}}>
               <style>{`.catchform-analytics-table-scroll::-webkit-scrollbar{height:7px;width:7px}.catchform-analytics-table-scroll::-webkit-scrollbar-thumb{background:${A.border2};border-radius:999px}.catchform-analytics-table-scroll::-webkit-scrollbar-track{background:transparent}`}</style>
@@ -4021,7 +4024,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 <thead><tr><th style={{width:48,minWidth:48,padding:"13px 10px",textAlign:"center" as const,borderBottom:`1px solid ${A.border}`,color:A.t2,background:A.card2}}></th><th style={{width:190,minWidth:190,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t2,background:A.card2}}>날짜</th>{fields.map(f=>{const fileCount=analyticsFieldFiles(rows,f).length;return <th key={f.id} style={{padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,minWidth:fileCount?260:220,background:A.card2}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
                     <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{f.label}</span>
-                    {fileCount>0&&<button onClick={()=>downloadAnalyticsFilesZip(f,rows)} title={`첨부파일 ${fileCount}개 일괄 다운로드`} style={{height:28,padding:"0 9px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,flexShrink:0,fontFamily:FONT,fontSize:11.5,fontWeight:800,whiteSpace:"nowrap" as const}}>
+                    {fileCount>0&&<button onClick={()=>downloadAnalyticsFilesZip(f,rows)} title={`첨부파일 ${fileCount}개 일괄 다운로드`} style={{height:28,padding:"0 9px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,flexShrink:0,fontFamily:FONT,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const}}>
                       <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v7M5 6l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                       모두 다운로드
                     </button>}
@@ -4032,30 +4035,30 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </div>}
           </div>}
           {activeAnalyticsTab==="questions"&&<div>
-            <div style={{fontSize:22,fontWeight:700,color:A.t1,marginBottom:16}}>질문별 인사이트</div>
+            <div style={{fontSize:22,fontWeight:600,color:A.t1,marginBottom:16}}>질문별 인사이트</div>
             <div style={{display:"grid",gridTemplateColumns:"220px minmax(0,1fr)",background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,overflow:"hidden",boxShadow:A.shadow,marginBottom:18}}>
               <div style={{background:A.card2,borderRight:`1px solid ${A.border}`,padding:12}}>
-                <div style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:"0.6px",margin:"0 0 9px 2px"}}>섹션</div>
+                <div style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.6px",margin:"0 0 9px 2px"}}>섹션</div>
                 <div style={{display:"flex",flexDirection:"column" as const,gap:7}}>
                   {analyticsPages.map(p=>{const on=selectedAnalyticsPage===p;const first=(fieldsByPage[p]||[])[0];return <button key={p} onClick={()=>{setAnalyticsSection(p);setAnalyticsQuestionQuery("");if(first)setAnalyticsQuestionId(first.id);setAnalyticsHoverSlice(null)}} style={{width:"100%",minHeight:42,padding:"8px 10px",borderRadius:A.r,border:`1px solid ${on?A.blue+"55":A.border}`,background:on?A.blue2:A.card,color:on?A.blue:A.t1,fontFamily:FONT,cursor:"pointer",display:"flex",alignItems:"center",gap:9,textAlign:"left" as const}}>
                     <span style={{width:4,alignSelf:"stretch",borderRadius:999,background:on?A.blue:A.border,flexShrink:0}}/>
-                    <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{pageName(p)}</span>
-                    <span style={{height:22,minWidth:26,padding:"0 7px",borderRadius:999,background:on?A.blue:A.card2,border:`1px solid ${on?A.blue:A.border}`,color:on?"#fff":A.t3,fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>{(fieldsByPage[p]||[]).length}</span>
+                    <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{pageName(p)}</span>
+                    <span style={{height:22,minWidth:26,padding:"0 7px",borderRadius:999,background:on?A.blue:A.card2,border:`1px solid ${on?A.blue:A.border}`,color:on?"#fff":A.t3,fontSize:11,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center"}}>{(fieldsByPage[p]||[]).length}</span>
                   </button>})}
                 </div>
               </div>
               <div style={{padding:14}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:12}}>
                   <div style={{minWidth:0}}>
-                    <div style={{fontSize:14,fontWeight:700,color:A.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{pageName(selectedAnalyticsPage)}</div>
+                    <div style={{fontSize:14,fontWeight:600,color:A.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{pageName(selectedAnalyticsPage)}</div>
                     <div style={{fontSize:12,color:A.t3,marginTop:3}}>{sectionQuestionFields.length}개 질문 중 선택</div>
                   </div>
-                  <div style={{height:28,padding:"0 10px",borderRadius:999,background:A.card2,border:`1px solid ${A.border}`,color:A.t2,fontSize:12,fontWeight:800,display:"flex",alignItems:"center"}}>{activeField?.label||"질문 없음"}</div>
+                  <div style={{height:28,padding:"0 10px",borderRadius:999,background:A.card2,border:`1px solid ${A.border}`,color:A.t2,fontSize:12,fontWeight:600,display:"flex",alignItems:"center"}}>{activeField?.label||"질문 없음"}</div>
                 </div>
                 {sectionQuestionFields.length>8&&<div style={{position:"relative" as const,marginBottom:10}}>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{position:"absolute",left:11,top:10,color:A.t3}}><circle cx="7" cy="7" r="4" stroke="currentColor" strokeWidth="1.6"/><path d="M10 10l3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
                   <input value={analyticsQuestionQuery} onChange={e=>setAnalyticsQuestionQuery(e.target.value)} placeholder="질문 검색"
-                    style={{width:"100%",height:34,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:700,padding:"0 12px 0 34px",outline:"none",boxSizing:"border-box" as const}}/>
+                    style={{width:"100%",height:34,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:600,padding:"0 12px 0 34px",outline:"none",boxSizing:"border-box" as const}}/>
                 </div>}
                 {sectionQuestionFields.length===0
                   ? <div style={{height:92,borderRadius:A.r,border:`1px dashed ${A.border2}`,display:"flex",alignItems:"center",justifyContent:"center",color:A.t3,fontSize:13}}>이 섹션에는 질문이 없습니다.</div>
@@ -4063,10 +4066,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   ? <div style={{height:92,borderRadius:A.r,border:`1px dashed ${A.border2}`,display:"flex",alignItems:"center",justifyContent:"center",color:A.t3,fontSize:13}}>검색 결과가 없습니다.</div>
                   : <div style={{display:"flex",flexDirection:"column" as const,gap:6,maxHeight:300,overflow:"auto",paddingRight:3}}>
                     {visibleSectionQuestionFields.map((f:any)=>{const on=activeField?.id===f.id;const originalIdx=sectionQuestionFields.findIndex((sf:any)=>sf.id===f.id);return <button key={f.id} onClick={()=>{setAnalyticsQuestionId(f.id);setAnalyticsHoverSlice(null)}} style={{minHeight:46,padding:"8px 10px",borderRadius:A.r,border:`1px solid ${on?A.blue+"66":A.border}`,background:on?A.blue2:A.card2,color:on?A.blue:A.t1,fontFamily:FONT,cursor:"pointer",textAlign:"left" as const,display:"flex",alignItems:"center",gap:10,transition:"all .14s ease",boxShadow:on?`0 0 0 3px ${A.blue}14`:"none"}}>
-                      <span style={{width:26,height:26,borderRadius:8,background:on?A.blue:A.card,border:`1px solid ${on?A.blue:A.border}`,color:on?"#fff":A.t3,fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{originalIdx+1}</span>
+                      <span style={{width:26,height:26,borderRadius:8,background:on?A.blue:A.card,border:`1px solid ${on?A.blue:A.border}`,color:on?"#fff":A.t3,fontSize:12,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{originalIdx+1}</span>
                       <span style={{minWidth:0,flex:1}}>
-                        <span style={{display:"block",fontSize:13,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{f.label}</span>
-                        <span style={{display:"block",fontSize:11.5,color:on?A.blue:A.t3,marginTop:5,fontWeight:700}}>{fieldTypeName(f.type)}{f.required?" · 필수":""}</span>
+                        <span style={{display:"block",fontSize:13,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{f.label}</span>
+                        <span style={{display:"block",fontSize:11.5,color:on?A.blue:A.t3,marginTop:5,fontWeight:600}}>{fieldTypeName(f.type)}{f.required?" · 필수":""}</span>
                       </span>
                     </button>})}
                   </div>}
@@ -4074,8 +4077,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </div>
             {!activeField?emptyState("분석할 질문이 없습니다."):<div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:24,minHeight:440,boxShadow:A.shadow}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:22}}>
-                <div style={{fontSize:18,fontWeight:700,color:A.t1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{activeField.label}</div>
-                {activeFileCount>0&&<button onClick={()=>downloadAnalyticsFilesZip(activeField,rows)} style={{height:34,padding:"0 12px",borderRadius:A.r,border:`1px solid ${A.blue}33`,background:A.blue2,color:A.blue,fontFamily:FONT,fontSize:12.5,fontWeight:800,cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                <div style={{fontSize:18,fontWeight:600,color:A.t1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{activeField.label}</div>
+                {activeFileCount>0&&<button onClick={()=>downloadAnalyticsFilesZip(activeField,rows)} style={{height:34,padding:"0 12px",borderRadius:A.r,border:`1px solid ${A.blue}33`,background:A.blue2,color:A.blue,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v7M5 6l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   첨부파일 {activeFileCount}개 다운로드
                 </button>}
@@ -4083,7 +4086,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               {isListQuestion
                 ? <div>{directAnswerRows.length===0?emptyState("표시할 응답이 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:8}}>{directAnswerRows.map((item:any,idx:number)=><div key={item.row.id||idx} style={{display:"grid",gridTemplateColumns:"140px 1fr",gap:14,alignItems:"start",padding:"12px 14px",border:`1px solid ${A.border}`,borderRadius:A.r,background:A.card2}}>
                     <div style={{fontSize:12,color:A.t3,lineHeight:1.5}}><div>{item.date[0]}</div><div>{item.date[1]}</div></div>
-                    <div style={{fontSize:13.5,color:A.t1,lineHeight:1.65,whiteSpace:"pre-wrap" as const,wordBreak:"break-word" as const}}>{analyticsFileItems(item.raw).length?analyticsFileItems(item.raw).map((f:any,i:number)=>f.url?<button key={i} onClick={()=>setFilePreview(f)} style={{display:"block",border:"none",background:"transparent",padding:0,color:A.blue,textDecoration:"none",fontWeight:700,fontFamily:FONT,fontSize:13.5,cursor:"pointer",textAlign:"left" as const}}>{f.name}</button>:<span key={i} style={{display:"block"}}>{f.name}</span>):analyticsAnswer(item.row,activeField)}</div>
+                    <div style={{fontSize:13.5,color:A.t1,lineHeight:1.65,whiteSpace:"pre-wrap" as const,wordBreak:"break-word" as const}}>{analyticsFileItems(item.raw).length?analyticsFileItems(item.raw).map((f:any,i:number)=>f.url?<button key={i} onClick={()=>setFilePreview(f)} style={{display:"block",border:"none",background:"transparent",padding:0,color:A.blue,textDecoration:"none",fontWeight:600,fontFamily:FONT,fontSize:13.5,cursor:"pointer",textAlign:"left" as const}}>{f.name}</button>:<span key={i} style={{display:"block"}}>{f.name}</span>):analyticsAnswer(item.row,activeField)}</div>
                   </div>)}</div>}</div>
                 : <div style={{display:"grid",gridTemplateColumns:"minmax(280px,420px) 1fr",gap:34,alignItems:"center"}}>
                     <div style={{position:"relative" as const,width:"100%",maxWidth:420,aspectRatio:"1 / 1",margin:"0 auto"}}>
@@ -4094,13 +4097,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                         )}
                       </svg>}
                       {analyticsHoverSlice!==null&&pieSlices[analyticsHoverSlice]&&<div style={{position:"absolute" as const,left:(analyticsHoverPoint?.x??210)+14,top:(analyticsHoverPoint?.y??170)+14,background:A.card,border:`1px solid ${pieSlices[analyticsHoverSlice].color}`,borderRadius:A.r,padding:"12px 14px",boxShadow:A.shadow,minWidth:190,pointerEvents:"none" as const,zIndex:5}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:14,fontWeight:700,color:A.t1,marginBottom:6}}><span style={{width:10,height:10,borderRadius:"50%",background:pieSlices[analyticsHoverSlice].color,flexShrink:0}}/>{pieSlices[analyticsHoverSlice].label}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:14,fontWeight:600,color:A.t1,marginBottom:6}}><span style={{width:10,height:10,borderRadius:"50%",background:pieSlices[analyticsHoverSlice].color,flexShrink:0}}/>{pieSlices[analyticsHoverSlice].label}</div>
                         <div style={{fontSize:13,color:A.t2}}>카운트 : <b style={{color:A.t1}}>{pieSlices[analyticsHoverSlice].count}</b> ({pieSlices[analyticsHoverSlice].pct}%)</div>
                       </div>}
                     </div>
-                    <div>{countEntries.length===0?emptyState("표시할 응답이 없습니다."):countEntries.map((item:any,i)=>{const k=item[0],v=item[1];const pct=totalCount?Math.round((v/totalCount)*1000)/10:0;return <div key={k} onMouseEnter={()=>setAnalyticsHoverSlice(i)} onMouseLeave={()=>{setAnalyticsHoverSlice(null);setAnalyticsHoverPoint(null)}} style={{display:"grid",gridTemplateColumns:"18px 1fr auto",gap:10,alignItems:"center",padding:"9px 0",borderBottom:`1px solid ${A.border}`,cursor:"default"}}><span style={{width:14,height:14,borderRadius:4,background:colors[i%colors.length]}}/><span style={{fontSize:13.5,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{k}</span><span style={{fontSize:13,fontWeight:700,color:A.t1}}>{v} · {pct}%</span></div>})}</div>
+                    <div>{countEntries.length===0?emptyState("표시할 응답이 없습니다."):countEntries.map((item:any,i)=>{const k=item[0],v=item[1];const pct=totalCount?Math.round((v/totalCount)*1000)/10:0;return <div key={k} onMouseEnter={()=>setAnalyticsHoverSlice(i)} onMouseLeave={()=>{setAnalyticsHoverSlice(null);setAnalyticsHoverPoint(null)}} style={{display:"grid",gridTemplateColumns:"18px 1fr auto",gap:10,alignItems:"center",padding:"9px 0",borderBottom:`1px solid ${A.border}`,cursor:"default"}}><span style={{width:14,height:14,borderRadius:4,background:colors[i%colors.length]}}/><span style={{fontSize:13.5,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{k}</span><span style={{fontSize:13,fontWeight:600,color:A.t1}}>{v} · {pct}%</span></div>})}</div>
                     {choiceDirectRows.length>0&&<div style={{gridColumn:"1 / -1",marginTop:4,borderTop:`1px solid ${A.border}`,paddingTop:18}}>
-                      <div style={{fontSize:13,fontWeight:700,color:A.t1,marginBottom:10}}>직접 입력 응답</div>
+                      <div style={{fontSize:13,fontWeight:600,color:A.t1,marginBottom:10}}>직접 입력 응답</div>
                       <div style={{display:"flex",flexDirection:"column" as const,gap:8}}>{choiceDirectRows.map((item:any,idx:number)=><div key={item.row.id||idx} style={{display:"grid",gridTemplateColumns:"140px 1fr",gap:14,alignItems:"start",padding:"10px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`}}>
                         <div style={{fontSize:12,color:A.t3,lineHeight:1.5}}><div>{item.date[0]}</div><div>{item.date[1]}</div></div>
                         <div style={{fontSize:13.5,color:A.t1,lineHeight:1.6,whiteSpace:"pre-wrap" as const,wordBreak:"break-word" as const}}>{item.answers.join(" / ")}</div>
@@ -4110,7 +4113,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </div>}
           </div>}
           {activeAnalyticsTab==="period"&&<div>
-            <div style={{fontSize:22,fontWeight:900,color:A.t1,marginBottom:16}}>기간별 인사이트</div>
+            <div style={{fontSize:22,fontWeight:600,color:A.t1,marginBottom:16}}>기간별 인사이트</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14,marginBottom:16}}>
               {metric(<path d="M5 3l7 5-7 5V3z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/>,String(sessionCount),"참여")}
               {metric(<path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>,`${completionRate}%`,"완료율",A.green)}
@@ -4129,8 +4132,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   </svg>
                   <div>{sourceEntries.map((s:any,i:number)=><div key={s.label} style={{display:"grid",gridTemplateColumns:"14px 1fr auto",gap:9,alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${A.border}`}}>
                     <span style={{width:12,height:12,borderRadius:4,background:colors[i%colors.length]}}/>
-                    <span style={{fontSize:13,color:A.t1,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{s.label}</span>
-                    <span style={{fontSize:12.5,color:A.t2,fontWeight:700}}>참여 {s.participation} · 완료 {s.complete} · 전환 {s.conversion}%</span>
+                    <span style={{fontSize:13,color:A.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{s.label}</span>
+                    <span style={{fontSize:12.5,color:A.t2,fontWeight:600}}>참여 {s.participation} · 완료 {s.complete} · 전환 {s.conversion}%</span>
                   </div>)}</div>
                 </div>}
               </div>
@@ -4139,9 +4142,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 {periodTip("location")}
                 {locationEntries.length===0?emptyState("위치 데이터가 아직 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:10}}>
                   {locationEntries.slice(0,8).map((item:any,i:number)=>{const max=Math.max(1,locationEntries[0]?.[1]||1);const pct=sessionCount?Math.round((item[1]/sessionCount)*1000)/10:0;const color=i===0?A.blue:A.border2;return <div key={item[0]} onMouseMove={e=>movePeriodTip("location",e,{title:item[0],color,lines:[`카운트 : ${item[1]}`,`전체 세션 대비 : ${pct}%`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"110px 1fr 48px",gap:10,alignItems:"center",cursor:"default"}}>
-                    <div style={{fontSize:13,color:A.t1,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item[0]}</div>
+                    <div style={{fontSize:13,color:A.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item[0]}</div>
                     <div style={{height:10,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${(item[1]/max)*100}%`,background:color,transform:periodHover?.scope==="location"&&periodHover.title===item[0]?"scaleY(1.35)":"scaleY(1)",transformOrigin:"center",transition:"transform .16s ease"}}/></div>
-                    <div style={{fontSize:13,color:A.t1,fontWeight:800,textAlign:"right" as const}}>{item[1]}</div>
+                    <div style={{fontSize:13,color:A.t1,fontWeight:600,textAlign:"right" as const}}>{item[1]}</div>
                   </div>})}
                 </div>}
               </div>
@@ -4152,7 +4155,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 {periodTip("share")}
                 {shareEntries.length===0?emptyState("공유 이벤트가 아직 없습니다. 링크/공유 버튼 클릭 데이터가 쌓이면 표시됩니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:12}}>
                   {shareEntries.slice(0,8).map((s:any)=>{const max=Math.max(1,shareEntries[0]?.total||1);return <div key={s.channel} onMouseMove={e=>movePeriodTip("share",e,{title:s.channel,color:A.blue,lines:[`전체 공유 클릭 : ${s.total}`,`중복 제외 사용자 : ${s.unique}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"90px 1fr 88px",gap:12,alignItems:"center",cursor:"default"}}>
-                    <div style={{fontSize:13,color:A.t1,fontWeight:700}}>{s.channel}</div>
+                    <div style={{fontSize:13,color:A.t1,fontWeight:600}}>{s.channel}</div>
                     <div style={{display:"flex",flexDirection:"column" as const,gap:5}}>
                       <div style={{height:10,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${(s.total/max)*100}%`,background:A.blue,transform:periodHover?.scope==="share"&&periodHover.title===s.channel?"scaleY(1.35)":"scaleY(1)",transformOrigin:"center",transition:"transform .16s ease"}}/></div>
                       <div style={{height:10,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${(s.unique/max)*100}%`,background:A.border2}}/></div>
@@ -4174,25 +4177,25 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </div>
             {periodRows.length===0?emptyState("기간별로 표시할 응답이 없습니다."):<div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:16,boxShadow:A.shadow}}>
               {infoTitle("일자별 응답 수","applications 또는 company_applications 응답 row의 created_at을 기준으로 실제 제출 완료 응답 수를 날짜별로 집계합니다. 막대 길이는 전체 응답 대비 해당 날짜의 비중입니다.")}
-              {periodRows.map((item:any)=>{const d=item[0],c=item[1];return <div key={d} style={{display:"flex",alignItems:"center",gap:14,padding:"10px 0",borderBottom:`1px solid ${A.border}`}}><div style={{width:110,fontWeight:700,color:A.t1,fontSize:13}}>{d}</div><div style={{flex:1,height:9,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${rows.length?(c/rows.length)*100:0}%`,background:A.blue}}/></div><div style={{width:44,textAlign:"right" as const,fontWeight:700,color:A.t1,fontSize:13}}>{c}</div></div>})}
+              {periodRows.map((item:any)=>{const d=item[0],c=item[1];return <div key={d} style={{display:"flex",alignItems:"center",gap:14,padding:"10px 0",borderBottom:`1px solid ${A.border}`}}><div style={{width:110,fontWeight:600,color:A.t1,fontSize:13}}>{d}</div><div style={{flex:1,height:9,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${rows.length?(c/rows.length)*100:0}%`,background:A.blue}}/></div><div style={{width:44,textAlign:"right" as const,fontWeight:600,color:A.t1,fontSize:13}}>{c}</div></div>})}
             </div>}
           </div>}
           {activeAnalyticsTab==="dropoff"&&<div>
-            <div style={{fontSize:22,fontWeight:900,color:A.t1,marginBottom:16}}>질문별 이탈률</div>
+            <div style={{fontSize:22,fontWeight:600,color:A.t1,marginBottom:16}}>질문별 이탈률</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14,marginBottom:16}}>
               {metric(<path d="M4 4h8M12 4v8M12 12H4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>,String(dropTotal),"추정 이탈",A.red)}
               {metric(<path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>,`${completionRate}%`,"완료율",A.green)}
               {metric(<path d="M3 12h10M6 3h4M8 3v9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>,String(dropRows[0]?.question||"-"),"최다 이탈 질문",A.blue)}
             </div>
             {dropRows.length===0?emptyState("아직 이탈 이벤트가 없습니다."):<div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,overflow:"hidden",boxShadow:A.shadow}}>
-              <div style={{display:"grid",gridTemplateColumns:"150px minmax(260px,1fr) 160px 90px",gap:0,background:A.card2,borderBottom:`1px solid ${A.border}`,fontSize:12,color:A.t2,fontWeight:800}}>
+              <div style={{display:"grid",gridTemplateColumns:"150px minmax(260px,1fr) 160px 90px",gap:0,background:A.card2,borderBottom:`1px solid ${A.border}`,fontSize:12,color:A.t2,fontWeight:600}}>
                 <div style={{padding:"12px 14px"}}>섹션</div><div style={{padding:"12px 14px",borderLeft:`1px solid ${A.border}`}}>질문</div><div style={{padding:"12px 14px",borderLeft:`1px solid ${A.border}`}}>전체 대비</div><div style={{padding:"12px 14px",borderLeft:`1px solid ${A.border}`,textAlign:"right" as const}}>이탈 수</div>
               </div>
               {dropRows.map((item:any)=>{const pct=sessionCount?Math.round((item.count/sessionCount)*1000)/10:0;return <div key={item.key} style={{display:"grid",gridTemplateColumns:"150px minmax(260px,1fr) 160px 90px",alignItems:"center",borderBottom:`1px solid ${A.border}`,fontSize:13}}>
-                <div style={{padding:"13px 14px",color:A.t2,fontWeight:800}}>{item.section}</div>
-                <div style={{padding:"13px 14px",borderLeft:`1px solid ${A.border}`,color:A.t1,fontWeight:800,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.question}</div>
+                <div style={{padding:"13px 14px",color:A.t2,fontWeight:600}}>{item.section}</div>
+                <div style={{padding:"13px 14px",borderLeft:`1px solid ${A.border}`,color:A.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.question}</div>
                 <div style={{padding:"13px 14px",borderLeft:`1px solid ${A.border}`}}><div style={{height:9,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:A.red}}/></div><div style={{fontSize:11.5,color:A.t3,marginTop:5}}>{pct}%</div></div>
-                <div style={{padding:"13px 14px",borderLeft:`1px solid ${A.border}`,textAlign:"right" as const,color:A.t1,fontWeight:900}}>{item.count}</div>
+                <div style={{padding:"13px 14px",borderLeft:`1px solid ${A.border}`,textAlign:"right" as const,color:A.t1,fontWeight:600}}>{item.count}</div>
               </div>})}
             </div>}
           </div>}
@@ -4203,8 +4206,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:10002,padding:22,boxSizing:"border-box" as const}} onClick={()=>setFilePreview(null)}>
           <div style={{width:820,maxWidth:"92vw",height:620,maxHeight:"86vh",background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,boxShadow:A.shadow,overflow:"hidden",display:"flex",flexDirection:"column" as const}} onClick={e=>e.stopPropagation()}>
             <div style={{height:54,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",gap:12,padding:"0 16px",flexShrink:0}}>
-              <div style={{flex:1,minWidth:0,fontSize:14,fontWeight:900,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{filePreview.name}</div>
-              <button onClick={()=>downloadAnalyticsFile(filePreview)} style={{height:32,padding:"0 12px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:900,cursor:"pointer"}}>다운로드</button>
+              <div style={{flex:1,minWidth:0,fontSize:14,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{filePreview.name}</div>
+              <button onClick={()=>downloadAnalyticsFile(filePreview)} style={{height:32,padding:"0 12px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>다운로드</button>
               <button onClick={()=>setFilePreview(null)} style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>
             </div>
             <div style={{flex:1,minHeight:0,background:A.card2,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
@@ -4213,7 +4216,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 : (/\.pdf$/i.test(filePreview.name)||String(filePreview.type||"").includes("pdf"))
                 ? <iframe src={filePreview.url} title={filePreview.name} style={{width:"100%",height:"100%",border:"none",borderRadius:A.r,background:A.card}}/>
                 : <div style={{textAlign:"center" as const,color:A.t2,fontSize:13,lineHeight:1.7}}>
-                    <div style={{fontSize:15,fontWeight:900,color:A.t1,marginBottom:6}}>미리보기를 지원하지 않는 파일 형식입니다.</div>
+                    <div style={{fontSize:15,fontWeight:600,color:A.t1,marginBottom:6}}>미리보기를 지원하지 않는 파일 형식입니다.</div>
                     <div>상단의 다운로드 버튼으로 파일을 확인해주세요.</div>
                   </div>}
             </div>
@@ -4225,7 +4228,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const msg=(e as any)?.message||"알 수 없는 오류"
       return <div style={{width,height,display:"flex",alignItems:"center",justifyContent:"center",background:A.bg,color:A.t1,fontFamily:FONT,padding:32}}>
         <div style={{maxWidth:520,background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:24,boxShadow:A.shadow}}>
-          <div style={{fontSize:18,fontWeight:900,marginBottom:8}}>응답 및 분석 화면 오류</div>
+          <div style={{fontSize:18,fontWeight:600,marginBottom:8}}>응답 및 분석 화면 오류</div>
           <div style={{fontSize:13,color:A.red,lineHeight:1.6,marginBottom:16}}>{msg}</div>
           <Btn onClick={()=>setView("builder")} sm A={A}>편집으로 돌아가기</Btn>
         </div>
@@ -4281,7 +4284,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <path d="M3 13V8M8 13V3M13 13V6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
             </svg>
           </button>
-          {showAnalyticsTip&&<div style={{position:"absolute" as const,top:"calc(100% + 7px)",left:"50%",transform:"translateX(-50%)",background:A.t1,color:A.card,padding:"5px 8px",borderRadius:6,fontSize:11.5,fontWeight:700,whiteSpace:"nowrap" as const,zIndex:1000,boxShadow:A.shadow}}>응답 및 분석</div>}
+          {showAnalyticsTip&&<div style={{position:"absolute" as const,top:"calc(100% + 7px)",left:"50%",transform:"translateX(-50%)",background:A.t1,color:A.card,padding:"5px 8px",borderRadius:6,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const,zIndex:1000,boxShadow:A.shadow}}>응답 및 분석</div>}
         </div>
         <Btn onClick={onSaveClick} sm A={A}>저장</Btn>
         <Btn onClick={()=>{
@@ -4305,12 +4308,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           {/* Nav */}
           {NAV.map(grp=>(
             <div key={grp.group} style={{padding:"8px 12px 4px",flexShrink:0}}>
-              <div style={{fontSize:10,fontWeight:700,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,padding:"0 4px",marginBottom:4}}>{grp.group}</div>
+              <div style={{fontSize:10,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,padding:"0 4px",marginBottom:4}}>{grp.group}</div>
               {grp.items.map(item=>{const a=sec===item.id;return(
                 <div key={item.id} onClick={()=>setSec(item.id)}
-                  style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:A.r,cursor:"pointer",fontSize:13,fontWeight:a?700:500,color:a?A.blue:A.t2,background:a?A.blue2:"transparent",marginBottom:1,transition:"all .1s"}}>
+                  style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:A.r,cursor:"pointer",fontSize:13,fontWeight:a?600:500,color:a?A.blue:A.t2,background:a?A.blue2:"transparent",marginBottom:1,transition:"all .1s"}}>
                   <span style={{flex:1}}>{item.label}</span>
-                  {"badge" in item&&<span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:999,background:(item as any).badge==="ON"?A.blue2:A.card2,color:(item as any).badge==="ON"?A.blue:A.t3,border:`1px solid ${(item as any).badge==="ON"?A.blue+"33":A.border}`}}>{(item as any).badge}</span>}
+                  {"badge" in item&&<span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:999,background:(item as any).badge==="ON"?A.blue2:A.card2,color:(item as any).badge==="ON"?A.blue:A.t3,border:`1px solid ${(item as any).badge==="ON"?A.blue+"33":A.border}`}}>{(item as any).badge}</span>}
                 </div>
               )})}
             </div>
@@ -4320,7 +4323,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
           {/* Saved list — 메뉴 아래 */}
           <div style={{padding:"10px 12px 8px",flex:1,overflow:"hidden",display:"flex",flexDirection:"column" as const}}>
-            <div style={{fontSize:10.5,fontWeight:700,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,padding:"0 4px",marginBottom:8}}>저장된 폼</div>
+            <div style={{fontSize:10.5,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,padding:"0 4px",marginBottom:8}}>저장된 폼</div>
             <div style={{flex:1,overflowY:"auto" as const,scrollbarWidth:"none" as any}}>
             {(()=>{const filteredSaved=saved.filter((item:any)=>(item.config?.brand||item.brand)===currentBrand).slice(0,20);return filteredSaved.length===0
               ?<div style={{fontSize:12,color:A.t3,padding:"6px 4px",lineHeight:1.5}}>{supa?"저장된 폼 없음":"Supabase 연결 필요"}</div>
@@ -4331,7 +4334,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   onMouseEnter={e=>{if(loadedId!==item.id){(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.borderColor=A.border}}}
                   onMouseLeave={e=>{if(loadedId!==item.id){(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.borderColor="transparent"}}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,fontWeight:loadedId===item.id?700:600,color:loadedId===item.id?A.blue:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name}</div>
+                    <div style={{fontSize:12,fontWeight:loadedId===item.id?600:600,color:loadedId===item.id?A.blue:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name}</div>
                     <div style={{fontSize:10.5,color:A.t3}}>{new Date(item.updated_at).toLocaleDateString("ko-KR")}</div>
                   </div>
                   <button onClick={e=>{e.stopPropagation();delCfg(item.id,item.name)}} style={{width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center",border:"none",borderRadius:6,background:"none",cursor:"pointer",flexShrink:0,color:A.t4}} onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.color=A.red;(e.currentTarget as HTMLElement).style.background="rgba(232,92,92,0.08)"}} onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.color=A.t4;(e.currentTarget as HTMLElement).style.background="none"}}><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
@@ -4383,7 +4386,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             onMouseLeave={e=>{if(!isResizingRef.current)(e.currentTarget as HTMLElement).style.background="transparent"}}
           />
           <div style={{padding:"14px 18px 12px",borderBottom:`1px solid ${A.border}`,position:"sticky" as const,top:0,background:A.card,zIndex:10}}>
-            <div style={{fontSize:15,fontWeight:800,color:A.t1,letterSpacing:"-0.3px"}}>{NAV.flatMap(g=>g.items).find(i=>i.id===sec)?.label||sec}</div>
+            <div style={{fontSize:15,fontWeight:600,color:A.t1,letterSpacing:"-0.3px"}}>{NAV.flatMap(g=>g.items).find(i=>i.id===sec)?.label||sec}</div>
           </div>
           {renderPanel()}
         </div>
@@ -4395,7 +4398,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9998}} onClick={()=>setShowBrandModal(false)}>
           <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:16,padding:"26px 26px 22px",width:360,boxShadow:A.shadow,position:"relative" as const}} onClick={e=>e.stopPropagation()}>
             <button onClick={()=>setShowBrandModal(false)} style={{position:"absolute",top:12,right:12,width:26,height:26,borderRadius:"50%",border:`1px solid ${A.border}`,background:A.card2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,color:A.t3,lineHeight:1}}>×</button>
-            <div style={{fontSize:16,fontWeight:800,color:A.t1,marginBottom:6}}>어떤 브랜드 폼을 만들까요?</div>
+            <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:6}}>어떤 브랜드 폼을 만들까요?</div>
             <div style={{fontSize:12.5,color:A.t3,marginBottom:18}}>현재 작업 중인 내용은 초기화됩니다</div>
             <div style={{display:"flex",flexDirection:"column" as const,gap:10}}>
               <button onClick={()=>startNewForm("SNIPERFACTORY")}
@@ -4420,7 +4423,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>{setShowTemplateModal(false);setPendingBrand(null)}}>
           <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:16,padding:"28px 24px",width:420,boxShadow:A.shadow,position:"relative" as const}} onClick={e=>e.stopPropagation()}>
             <button onClick={()=>{setShowTemplateModal(false);setPendingBrand(null)}} style={{position:"absolute",top:14,right:14,width:28,height:28,borderRadius:"50%",border:`1px solid ${A.border}`,background:A.card2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:A.t3,lineHeight:1}}>×</button>
-            <div style={{fontSize:18,fontWeight:800,color:A.t1,marginBottom:6,letterSpacing:"-0.3px"}}>어떤 형식의 폼을 만들까요?</div>
+            <div style={{fontSize:18,fontWeight:600,color:A.t1,marginBottom:6,letterSpacing:"-0.3px"}}>어떤 형식의 폼을 만들까요?</div>
             <div style={{fontSize:13,color:A.t3,marginBottom:20}}>
               {pendingBrand==="SNIPERFACTORY"?"스나이퍼팩토리":"인사이드아웃"} 브랜드 폼
             </div>
@@ -4451,7 +4454,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.borderColor=A.border}}>
                   <div style={{flexShrink:0,marginTop:1}}>{t.icon}</div>
                   <div>
-                    <div style={{fontSize:13.5,fontWeight:700,color:A.t1,marginBottom:3}}>{t.label}</div>
+                    <div style={{fontSize:13.5,fontWeight:600,color:A.t1,marginBottom:3}}>{t.label}</div>
                     <div style={{fontSize:12,color:A.t3,lineHeight:1.5}}>{t.desc}</div>
                   </div>
                 </button>
@@ -4465,8 +4468,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       {showUpdateModal&&(
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setShowUpdateModal(false)}>
           <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:320,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:16,fontWeight:800,color:A.t1,marginBottom:8}}>수정 사항 저장</div>
-            <div style={{fontSize:13.5,color:A.t2,marginBottom:6}}><span style={{fontWeight:700,color:A.t1}}>"{loadedName}"</span>에 변경 사항을 덮어쓰시겠어요?</div>
+            <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:8}}>수정 사항 저장</div>
+            <div style={{fontSize:13.5,color:A.t2,marginBottom:6}}><span style={{fontWeight:600,color:A.t1}}>"{loadedName}"</span>에 변경 사항을 덮어쓰시겠어요?</div>
             <div style={{fontSize:12,color:A.t3,marginBottom:22,lineHeight:1.5}}>기존 설정이 수정된 내용으로 교체됩니다.</div>
             <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
               <Btn onClick={()=>{setShowUpdateModal(false);setShowSave(true)}} sm A={A}>새 이름으로 저장</Btn>
@@ -4481,7 +4484,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       {showSave&&(
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setShowSave(false)}>
           <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:310,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:16,fontWeight:800,color:A.t1,marginBottom:18}}>설정 저장</div>
+            <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:18}}>설정 저장</div>
             <div style={{marginBottom:12}}>
               <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:5}}>설정 이름</div>
               <input value={saveName} onChange={e=>setSaveName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveCfg()} placeholder="예) UXUI 9기 오픈폼"
@@ -4506,8 +4509,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:10002,padding:22,boxSizing:"border-box" as const}} onClick={()=>setFilePreview(null)}>
           <div style={{width:820,maxWidth:"92vw",height:620,maxHeight:"86vh",background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,boxShadow:A.shadow,overflow:"hidden",display:"flex",flexDirection:"column" as const}} onClick={e=>e.stopPropagation()}>
             <div style={{height:54,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",gap:12,padding:"0 16px",flexShrink:0}}>
-              <div style={{flex:1,minWidth:0,fontSize:14,fontWeight:900,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{filePreview.name}</div>
-              <button onClick={()=>downloadAnalyticsFile(filePreview)} style={{height:32,padding:"0 12px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:900,cursor:"pointer"}}>다운로드</button>
+              <div style={{flex:1,minWidth:0,fontSize:14,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{filePreview.name}</div>
+              <button onClick={()=>downloadAnalyticsFile(filePreview)} style={{height:32,padding:"0 12px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>다운로드</button>
               <button onClick={()=>setFilePreview(null)} style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>
             </div>
             <div style={{flex:1,minHeight:0,background:A.card2,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
@@ -4516,7 +4519,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 : (/\.pdf$/i.test(filePreview.name)||String(filePreview.type||"").includes("pdf"))
                 ? <iframe src={filePreview.url} title={filePreview.name} style={{width:"100%",height:"100%",border:"none",borderRadius:A.r,background:A.card}}/>
                 : <div style={{textAlign:"center" as const,color:A.t2,fontSize:13,lineHeight:1.7}}>
-                    <div style={{fontSize:15,fontWeight:900,color:A.t1,marginBottom:6}}>미리보기를 지원하지 않는 파일 형식입니다.</div>
+                    <div style={{fontSize:15,fontWeight:600,color:A.t1,marginBottom:6}}>미리보기를 지원하지 않는 파일 형식입니다.</div>
                     <div>상단의 다운로드 버튼으로 파일을 확인해주세요.</div>
                   </div>}
             </div>
@@ -4531,14 +4534,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <div style={{height:72,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 24px",borderBottom:`1px solid ${A.border}`}}>
               <button onClick={()=>setImageCropModal(m=>m?{...m,imageCropX:0,imageCropY:0,imageCropW:100,imageCropH:100}:m)}
                 title="원본 전체 선택"
-                style={{height:36,padding:"0 12px",border:`1px solid ${A.border}`,borderRadius:A.r,background:A.card2,cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12,fontWeight:800}}>
+                style={{height:36,padding:"0 12px",border:`1px solid ${A.border}`,borderRadius:A.r,background:A.card2,cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12,fontWeight:600}}>
                 원본 전체
               </button>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
                 <button onClick={()=>setImageCropModal(null)}
-                  style={{height:40,padding:"0 14px",border:"none",background:"transparent",color:A.t2,fontFamily:FONT,fontSize:15,fontWeight:700,cursor:"pointer"}}>취소</button>
+                  style={{height:40,padding:"0 14px",border:"none",background:"transparent",color:A.t2,fontFamily:FONT,fontSize:15,fontWeight:600,cursor:"pointer"}}>취소</button>
                 <button onClick={applyImageCropModal}
-                  style={{height:42,padding:"0 18px",border:"none",borderRadius:10,background:A.blue,color:"#fff",fontFamily:FONT,fontSize:15,fontWeight:900,cursor:"pointer"}}>저장</button>
+                  style={{height:42,padding:"0 18px",border:"none",borderRadius:10,background:A.blue,color:"#fff",fontFamily:FONT,fontSize:15,fontWeight:600,cursor:"pointer"}}>저장</button>
               </div>
             </div>
             <div style={{padding:"34px 28px 40px",display:"flex",flexDirection:"column" as const,alignItems:"center",gap:12}}>
@@ -4568,7 +4571,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   </>
                 })()}
               </div>
-              <div style={{fontSize:12,color:A.t3,fontWeight:700}}>선택 영역을 드래그해서 이동하고, 모서리와 변을 잡아 자를 규격을 조절하세요.</div>
+              <div style={{fontSize:12,color:A.t3,fontWeight:600}}>선택 영역을 드래그해서 이동하고, 모서리와 변을 잡아 자를 규격을 조절하세요.</div>
             </div>
           </div>
         </div>
@@ -4581,7 +4584,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{position:"absolute" as const,bottom:24,left:"50%",background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:"10px 16px",fontSize:13,fontWeight:600,color:toast.ok?A.t1:A.red,zIndex:99999,display:"flex",alignItems:"center",gap:8,boxShadow:A.shadow,whiteSpace:"nowrap" as const,animation:`${toastLeaving?"toastOut":"toastIn"} .3s cubic-bezier(.4,0,.2,1) forwards`}}>
           <span>{toast.ok?"✓":"✗"}</span><span>{toast.msg}</span>
           {toast.undo&&<button onClick={toast.undo}
-            style={{marginLeft:8,padding:"2px 10px",borderRadius:4,border:"none",background:"transparent",cursor:"pointer",color:A.blue,fontFamily:FONT,fontSize:12,fontWeight:700}}>실행 취소</button>}
+            style={{marginLeft:8,padding:"2px 10px",borderRadius:4,border:"none",background:"transparent",cursor:"pointer",color:A.blue,fontFamily:FONT,fontSize:12,fontWeight:600}}>실행 취소</button>}
         </div>
       )}
 

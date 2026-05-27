@@ -23,7 +23,7 @@ export function MissingEnvNotice({ surface }: MissingEnvNoticeProps) {
         padding: 28,
         boxShadow: "0 12px 36px rgba(25,31,40,0.08)",
       }}>
-        <div style={{ fontSize: 13, fontWeight: 900, color: "#3182F6", marginBottom: 8 }}>
+        <div style={{ fontSize: 13, fontWeight:600, color: "#3182F6", marginBottom: 8 }}>
           환경변수 설정 필요
         </div>
         <h1 style={{ margin: "0 0 10px", fontSize: 25, lineHeight: 1.3, letterSpacing: 0 }}>
