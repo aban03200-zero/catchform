@@ -79,23 +79,7 @@ const FORM_SUMMARY_SELECT = "id,name,slug,updated_at,brand,config_brand:config->
 const DEFAULT_GOOGLE_SHEETS = {enabled:false,mode:"existing" as const,accountEmail:"",sheetUrl:"",sheetName:"",webhookUrl:"",lastSyncStatus:"idle" as const,lastSyncAt:"",lastSyncMessage:""}
 function postAppsScriptPayload(url:string,payload:any){
   const body=JSON.stringify(payload)
-  if(typeof document==="undefined"){
-    return fetch(url,{method:"POST",mode:"no-cors",body:new URLSearchParams({payload:body}).toString(),headers:{"content-type":"application/x-www-form-urlencoded;charset=UTF-8"}}).then(()=>{})
-  }
-  return new Promise<void>((resolve)=>{
-    const id=`cf_sheet_post_${Date.now()}_${Math.random().toString(36).slice(2)}`
-    const iframe=document.createElement("iframe")
-    const form=document.createElement("form")
-    const input=document.createElement("input")
-    iframe.name=id;iframe.style.display="none"
-    form.method="POST";form.action=url;form.target=id;form.enctype="application/x-www-form-urlencoded";form.style.display="none"
-    input.type="hidden";input.name="payload";input.value=body
-    form.appendChild(input)
-    const cleanup=()=>{try{form.remove()}catch{};try{iframe.remove()}catch{}}
-    const timer=window.setTimeout(()=>{cleanup();resolve()},1800)
-    iframe.onload=()=>{window.clearTimeout(timer);cleanup();resolve()}
-    document.body.appendChild(iframe);document.body.appendChild(form);form.submit()
-  })
+  return fetch(url,{method:"POST",mode:"no-cors",body:new URLSearchParams({payload:body}).toString(),headers:{"content-type":"application/x-www-form-urlencoded;charset=UTF-8"}}).then(()=>{})
 }
 
 // ─── Static data ──────────────────────────────────────────────────────────
@@ -941,6 +925,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [showAnalyticsTip,setShowAnalyticsTip]=React.useState(false)
   const [actionLoading,setActionLoading]=React.useState("")
   const [analyticsInfoTip,setAnalyticsInfoTip]=React.useState("")
+  const [analyticsTopTip,setAnalyticsTopTip]=React.useState("")
+  const [showDeleteAllAnalytics,setShowDeleteAllAnalytics]=React.useState(false)
   const [imageCropModal,setImageCropModal]=React.useState<null|{
     target:"header"|"field"
     fieldId?:string
@@ -1063,6 +1049,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     fullFormCache.current[item.id]={updatedAt:item.updated_at,data}
     return data
   }
+  function prefetchFullFormRow(item:any){
+    if(!supa||!item?.id)return
+    if(fullFormCache.current[item.id])return
+    supa.from("form_configs").select("config,slug,name,brand").eq("id",item.id).single()
+      .then(({data,error})=>{if(!error&&data)fullFormCache.current[item.id]={updatedAt:item.updated_at,data}})
+  }
 
   // ── Sidebar scroll ────────────────────────────────────────────────────
   const sbRef=React.useRef<HTMLDivElement>(null)
@@ -1114,6 +1106,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       setSnList(all.filter((x:any)=>(x.config?.brand||x.brand)==="SNIPERFACTORY"))
       setIoList(all.filter((x:any)=>(x.config?.brand||x.brand)==="INSIDEOUT"))
       setSaved(all)
+      const warm=()=>all.slice(0,16).forEach((item:any)=>prefetchFullFormRow(item))
+      if(typeof window!=="undefined"&&"requestIdleCallback" in window)(window as any).requestIdleCallback(warm,{timeout:1200})
+      else setTimeout(warm,350)
     } finally {setDashLoading(false)}
   }
 
@@ -1334,11 +1329,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(!supa)return
     setSaved(await fetchFormSummaries(supa,20))
   }
-  async function loadCfgById(id:string,name:string){
+  async function loadCfgById(id:string,name:string,item?:any){
     if(!supa)return
     setActionLoading("폼을 불러오는 중이에요.")
     try{
-      const full=await getFullFormRow({id,name})
+      const full=await getFullFormRow(item||{id,name})
       setCfg(mergeCfg(full.config))
       setLoadedId(id);setLoadedName(name)
       if(full.slug)setSavedSlug(full.slug)
@@ -1409,14 +1404,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       setSaveErr("저장 실패: "+msg+(msg.includes("security")||msg.includes("RLS")?" — form_configs 테이블의 RLS를 비활성화해주세요.":""))
     } finally {setSaving(false)}
   }
-  function updateCfg(silent?:boolean){
-    if(!supa||!loadedId)return
-    setShowUpdateModal(false)
-    if(!silent)showToast(`"${loadedName}" 수정 완료!`)
-    const cfgFinal={...cfg,brand:currentBrand}
-    supa.from("form_configs").update({config:cfgFinal,brand:currentBrand,updated_at:new Date().toISOString()}).eq("id",loadedId)
-	      .then(({error})=>{if(error)showToast("저장 중 오류가 발생했어요",false);else{loadList();loadDashboard(supa)}})
-	  }
+	  function updateCfg(silent?:boolean){
+	    if(!supa||!loadedId)return
+	    setShowUpdateModal(false)
+	    if(!silent)showToast(`"${loadedName}" 수정 완료!`)
+	    const cfgFinal={...cfg,brand:currentBrand}
+	    const updatedAt=new Date().toISOString()
+	    fullFormCache.current[loadedId]={updatedAt,data:{config:cfgFinal,slug:savedSlug,name:loadedName,brand:currentBrand}}
+	    supa.from("form_configs").update({config:cfgFinal,brand:currentBrand,updated_at:updatedAt}).eq("id",loadedId)
+		      .then(({error})=>{if(error)showToast("저장 중 오류가 발생했어요",false);else{loadList();loadDashboard(supa)}})
+		  }
 	  function onSaveClick(){if(loadedId)setShowUpdateModal(true);else setShowSave(true)}
   async function setGoogleSheetsSyncStatus(status:"sent"|"error",message:string){
     const nextCfg={
@@ -1695,6 +1692,24 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(error){showToast("응답 삭제 실패: "+(error.message||""),false);return}
     setAnalyticsRows(prev=>prev.filter(r=>r.id!==row.id))
     showToast("응답을 삭제했어요.")
+  }
+  async function deleteAllAnalyticsData(){
+    if(!supa||!loadedId)return
+    setActionLoading("응답 데이터를 삭제하는 중이에요.")
+    try{
+      const tableName=analyticsTableName()
+      const res=await supa.from(tableName).delete().eq("form_id",loadedId)
+      if(res.error)throw res.error
+      await supa.from("form_response_events").delete().eq("form_id",loadedId)
+      setAnalyticsRows([])
+      setAnalyticsEvents([])
+      setShowDeleteAllAnalytics(false)
+      showToast("해당 폼의 응답 데이터를 모두 삭제했어요.")
+    } catch(e){
+      showToast("전체 응답 삭제 실패: "+((e as any)?.message||"오류"),false)
+    } finally {
+      setActionLoading("")
+    }
   }
   React.useEffect(()=>{
     if(view==="analytics")loadAnalytics()
@@ -2021,11 +2036,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </div>
         {/* Grid */}
         <div style={{flex:1,overflowY:"auto" as const,padding:24,display:"flex",flexDirection:"column" as const,gap:16,alignContent:"start"}}>
-          {(()=>{
-            const renderFormItem=(item:any)=>(
-              <div key={item.id}
-                onContextMenu={e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,item,source:"dashboard"})}}
-                style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:A.r,marginBottom:2}}>
+	          {(()=>{
+	            const renderFormItem=(item:any)=>(
+	              <div key={item.id}
+	                onMouseEnter={()=>prefetchFullFormRow(item)}
+	                onContextMenu={e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,item,source:"dashboard"})}}
+	                style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:A.r,marginBottom:2}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name}</div>
                   <div style={{fontSize:11.5,color:A.t3,marginTop:2}}>{new Date(item.updated_at).toLocaleDateString("ko-KR")} · {item.config?.header?.title||""}</div>
@@ -3794,11 +3810,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
   function renderAnalyticsPage(){
     try{
-    const accent=A.blue, accentSoft=A.blue2
-    const rows=Array.isArray(analyticsRows)?analyticsRows:[]
-    const events=Array.isArray(analyticsEvents)?analyticsEvents:[]
-    const fields=getAnalyticsFields()
-    const colors=[A.blue,A.green,"#F59E0B","#64748B","#8B5CF6","#F97316","#06B6D4","#EC4899"]
+	    const chartBlue="#8DBDFD", chartGreen="#8BE3B0", chartYellow="#F6D487", chartSlate="#AEB9C9", chartPurple="#B7A7F6", chartOrange="#F6B486", chartCyan="#8DDDE8", chartPink="#F3A6CB"
+	    const accent=chartBlue, accentSoft=A.blue2
+	    const rows=Array.isArray(analyticsRows)?analyticsRows:[]
+	    const events=Array.isArray(analyticsEvents)?analyticsEvents:[]
+	    const fields=getAnalyticsFields()
+	    const colors=[chartBlue,chartGreen,chartYellow,chartSlate,chartPurple,chartOrange,chartCyan,chartPink]
     const pageName=(p:any)=>{
       const n=Number(p||1)
       const labels=cfg.form.pageLabels||[]
@@ -3874,23 +3891,33 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       return `M ${cx} ${cy} L ${e.x} ${e.y} A ${r} ${r} 0 ${large} 1 ${s.x} ${s.y} Z`
     }
     const byDate=rows.reduce((acc:any,row:any)=>{const d=fmtAnalyticsDate(row.created_at)[0]||"날짜 없음";acc[d]=(acc[d]||0)+1;return acc},{})
-    const periodRows=Object.keys(byDate).map(k=>[k,byDate[k]]).sort((a:any,b:any)=>String(b[0]).localeCompare(String(a[0])))
-    const eventMeta=(e:any)=>{try{return typeof e?.metadata==="string"?JSON.parse(e.metadata||"{}"):(e?.metadata||{})}catch{return{}}}
-    const dayOf=(v:any)=>fmtAnalyticsDate(v)[0]||"날짜 없음"
-    const countryName=(code:string)=>{
-      const m:any={KR:"대한민국",US:"미국",JP:"일본",CN:"중국",VN:"베트남",TH:"태국",ID:"인도네시아",PH:"필리핀",SG:"싱가포르",GB:"영국",DE:"독일",FR:"프랑스",AU:"호주",CA:"캐나다"}
-      const c=String(code||"").toUpperCase()
-      return m[c]||c||"미확인"
-    }
-    const sourceBySession:any={}
-    const sessionSummaries=sessions.map((evs:any[])=>{
-      const first=evs[0]||{}
-      const meta=eventMeta(first)
-      const source=meta.source||meta.utm_source||meta.referrer_host||"직접 유입"
-      const country=countryName(meta.country||"")
-      const completed=evs.some(e=>e.event_type==="completed")
-      sourceBySession[first.session_id||"unknown"]=source
-      return{session:first.session_id||"unknown",source,country,completed,startedAt:first.created_at}
+	    const periodRows=Object.keys(byDate).map(k=>[k,byDate[k]]).sort((a:any,b:any)=>String(b[0]).localeCompare(String(a[0])))
+	    const periodChartRows=[...periodRows].sort((a:any,b:any)=>String(a[0]).localeCompare(String(b[0]))).slice(-14)
+	    const maxPeriodCount=Math.max(1,...periodChartRows.map((item:any)=>Number(item[1])||0))
+	    const eventMeta=(e:any)=>{try{return typeof e?.metadata==="string"?JSON.parse(e.metadata||"{}"):(e?.metadata||{})}catch{return{}}}
+	    const dayOf=(v:any)=>fmtAnalyticsDate(v)[0]||"날짜 없음"
+	    const countryName=(code:string)=>{
+	      const m:any={KR:"대한민국",US:"미국",JP:"일본",CN:"중국",VN:"베트남",TH:"태국",ID:"인도네시아",PH:"필리핀",SG:"싱가포르",GB:"영국",DE:"독일",FR:"프랑스",AU:"호주",CA:"캐나다"}
+	      const c=String(code||"").toUpperCase()
+	      return m[c]||c||"미확인"
+	    }
+	    const regionName=(value:string)=>{
+	      const raw=String(value||"").trim()
+	      const key=raw.toUpperCase()
+	      const m:any={11:"서울",26:"부산",27:"대구",28:"인천",29:"광주",30:"대전",31:"울산",36:"세종",41:"경기",42:"강원",43:"충북",44:"충남",45:"전북",46:"전남",47:"경북",48:"경남",49:"제주",SEOUL:"서울",BUSAN:"부산",DAEGU:"대구",INCHEON:"인천",GWANGJU:"광주",DAEJEON:"대전",ULSAN:"울산",SEJONG:"세종",GYEONGGI:"경기",GANGWON:"강원",CHUNGBUK:"충북",CHUNGNAM:"충남",JEONBUK:"전북",JEONNAM:"전남",GYEONGBUK:"경북",GYEONGNAM:"경남",JEJU:"제주"}
+	      return m[key]||raw
+	    }
+	    const sourceBySession:any={}
+	    const sessionSummaries=sessions.map((evs:any[])=>{
+	      const first=evs[0]||{}
+	      const metaEvent=evs.find(e=>{const m=eventMeta(e);return m.country||m.region||m.city})||first
+	      const meta=eventMeta(metaEvent)
+	      const source=meta.source||meta.utm_source||meta.referrer_host||"직접 유입"
+	      const country=countryName(meta.country||"")
+	      const region=regionName(meta.region||meta.city||"")
+	      const completed=evs.some(e=>e.event_type==="completed")
+	      sourceBySession[first.session_id||"unknown"]=source
+	      return{session:first.session_id||"unknown",source,country,region,completed,startedAt:first.created_at}
     })
     rows.forEach((row:any)=>{
       if(!sessionSummaries.length){
@@ -3919,14 +3946,26 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const sourceTotal=sourceEntries.reduce((a:any,b:any)=>a+b.participation,0)
     let donutDeg=0
     const donutSlices=sourceEntries.map((s:any,i:number)=>{const part=sourceTotal?(s.participation/sourceTotal)*360:0;const start=donutDeg;donutDeg+=part;return{...s,start,end:donutDeg,color:colors[i%colors.length],pct:sourceTotal?Math.round((s.participation/sourceTotal)*1000)/10:0}})
-    const donutPath=(cx:number,cy:number,ro:number,ri:number,start:number,end:number)=>{
-      const o1=polar(cx,cy,ro,end),o2=polar(cx,cy,ro,start),i1=polar(cx,cy,ri,start),i2=polar(cx,cy,ri,end)
-      const large=end-start<=180?0:1
-      return`M ${o2.x} ${o2.y} A ${ro} ${ro} 0 ${large} 1 ${o1.x} ${o1.y} L ${i2.x} ${i2.y} A ${ri} ${ri} 0 ${large} 0 ${i1.x} ${i1.y} Z`
-    }
-    const locMap:any={}
-    sessionSummaries.forEach(s=>{locMap[s.country]=(locMap[s.country]||0)+1})
-    const locationEntries=Object.keys(locMap).map(k=>[k,locMap[k]]).sort((a:any,b:any)=>b[1]-a[1])
+	    const donutPath=(cx:number,cy:number,r:number,start:number,end:number)=>{
+	      const s=polar(cx,cy,r,start),e=polar(cx,cy,r,end)
+	      const large=end-start<=180?0:1
+	      return`M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y}`
+	    }
+	    const donutGap=(slice:any)=>Math.min(1.5,Math.max(0,(slice.end-slice.start)/4))
+	    const donutFillPath=(cx:number,cy:number,ro:number,ri:number,start:number,end:number)=>{
+	      const o1=polar(cx,cy,ro,end),o2=polar(cx,cy,ro,start),i1=polar(cx,cy,ri,start),i2=polar(cx,cy,ri,end)
+	      const large=end-start<=180?0:1
+	      return`M ${o2.x} ${o2.y} A ${ro} ${ro} 0 ${large} 1 ${o1.x} ${o1.y} L ${i2.x} ${i2.y} A ${ri} ${ri} 0 ${large} 0 ${i1.x} ${i1.y} Z`
+	    }
+	    const locMap:any={}
+	    sessionSummaries.forEach((s:any)=>{
+	      const label=s.country==="대한민국"&&s.region?`대한민국 · ${s.region}`:s.country
+	      locMap[label]=(locMap[label]||0)+1
+	    })
+	    const locationEntries=Object.keys(locMap).map(k=>[k,locMap[k]]).sort((a:any,b:any)=>b[1]-a[1])
+	    const koreaRegionEntries=locationEntries.filter((item:any)=>String(item[0]).startsWith("대한민국 · ")).map((item:any)=>[String(item[0]).replace("대한민국 · ",""),item[1]])
+	    const otherLocationEntries=locationEntries.filter((item:any)=>!String(item[0]).startsWith("대한민국 · "))
+	    const regionPointMap:any={서울:[54,27],경기:[51,34],인천:[43,31],강원:[66,31],충북:[56,43],충남:[45,48],대전:[53,52],세종:[50,47],전북:[50,63],광주:[45,73],전남:[47,79],대구:[66,62],경북:[71,53],부산:[75,75],울산:[78,68],경남:[66,74],제주:[35,92]}
     const shareMap:any={}
     events.filter((e:any)=>String(e.event_type).includes("share")).forEach((e:any)=>{
       const m=eventMeta(e)
@@ -3945,7 +3984,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       {id:"questions",label:"질문별 인사이트",icon:<path d="M4 13V7M8 13V3M12 13V9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>},
       {id:"responses",label:"응답별 데이터",icon:<path d="M3 4h10M3 8h10M3 12h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>},
       {id:"period",label:"기간별 인사이트",icon:<><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v4l3 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></>},
-      {id:"dropoff",label:"질문별 이탈률",icon:<path d="M4 4h8M12 4v8M12 12H4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>},
+	      {id:"dropoff",label:"질문별 이탈률",icon:<path d="M4 3.5h5v9H4M9 8h5M12 5.8 14.2 8 12 10.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>},
     ] as any[]
     const activeAnalyticsTab=tabs.some(t=>t.id===analyticsTab)?analyticsTab:"responses"
     const metric=(icon:any,value:string,label:string,color:string=accent)=><div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,display:"flex",alignItems:"center",gap:14,minHeight:88,boxShadow:A.shadow}}>
@@ -3981,13 +4020,24 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       </div>
       {periodHover.lines.map((line:string,idx:number)=><div key={idx} style={{fontSize:13,color:A.t2,lineHeight:1.55}}>{line}</div>)}
     </div>
-    const movePieTip=(i:number,e:any)=>{
-      const wrap=(e.currentTarget.ownerSVGElement as SVGElement)?.parentElement
-      const r=wrap?.getBoundingClientRect()
-      if(r)setAnalyticsHoverPoint({x:e.clientX-r.left,y:e.clientY-r.top})
-      setAnalyticsHoverSlice(i)
-    }
-    return <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,color:A.t1,fontFamily:FONT,overflow:"hidden",position:"relative" as const}}>
+	    const movePieTip=(i:number,e:any)=>{
+	      const wrap=(e.currentTarget.ownerSVGElement as SVGElement)?.parentElement
+	      const r=wrap?.getBoundingClientRect()
+	      if(r)setAnalyticsHoverPoint({x:e.clientX-r.left,y:e.clientY-r.top})
+	      setAnalyticsHoverSlice(i)
+	    }
+	    const topIconButton=(key:string,label:string,onClick:()=>void,icon:any,color=A.t2)=><div style={{position:"relative" as const}}>
+	      <button
+	        onClick={onClick}
+	        onMouseEnter={()=>setAnalyticsTopTip(key)}
+	        onMouseLeave={()=>setAnalyticsTopTip("")}
+	        aria-label={label}
+	        style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+	        <svg width="15" height="15" viewBox="0 0 16 16" fill="none">{icon}</svg>
+	      </button>
+	      {analyticsTopTip===key&&<div style={{position:"absolute" as const,top:39,left:"50%",transform:"translateX(-50%)",padding:"5px 8px",borderRadius:6,background:A.t1,color:A.card,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const,zIndex:1000,boxShadow:A.shadow,pointerEvents:"none" as const}}>{label}</div>}
+	    </div>
+	    return <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,color:A.t1,fontFamily:FONT,overflow:"hidden",position:"relative" as const}}>
       <div style={{height:52,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 16px",gap:10,flexShrink:0,boxShadow:A.shadow}}>
         <button onClick={()=>setView("builder")} style={{display:"flex",alignItems:"center",gap:6,background:"transparent",border:"none",cursor:"pointer",color:A.t2,fontSize:12.5,fontWeight:600,fontFamily:FONT}}>
           <span style={{fontSize:13}}>←</span><span>편집으로</span>
@@ -3997,9 +4047,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <div style={{fontSize:13,fontWeight:600,color:A.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:340}}>{loadedName||"응답 및 분석"}</div>
         </div>
         <div style={{flex:1}}/>
-        <button onClick={loadAnalytics} style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M13 3v4H9M3 13V9h4M12.2 8.8A4.5 4.5 0 0 1 4.5 12M3.8 7.2A4.5 4.5 0 0 1 11.5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </button>
+	        {topIconButton("delete-all","응답 전체 삭제",()=>setShowDeleteAllAnalytics(true),<path d="M2 4h12M6 4V2.8h4V4M5 6v6M8 6v6M11 6v6M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/>,A.red)}
+	        {topIconButton("refresh","새로고침",loadAnalytics,<path d="M13 3v4H9M3 13V9h4M12.2 8.8A4.5 4.5 0 0 1 4.5 12M3.8 7.2A4.5 4.5 0 0 1 11.5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>)}
         <button onClick={exportAnalyticsCsv} style={{height:32,padding:"0 13px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>시트 다운로드
         </button>
@@ -4115,21 +4164,22 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           {activeAnalyticsTab==="period"&&<div>
             <div style={{fontSize:22,fontWeight:600,color:A.t1,marginBottom:16}}>기간별 인사이트</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14,marginBottom:16}}>
-              {metric(<path d="M5 3l7 5-7 5V3z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/>,String(sessionCount),"참여")}
-              {metric(<path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>,`${completionRate}%`,"완료율",A.green)}
-              {metric(<><circle cx="8" cy="8" r="5" stroke="currentColor" strokeWidth="1.6"/><path d="M8 5v3l2 1.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></>,avgTime,"평균 세션시간","#F59E0B")}
+	              {metric(<path d="M5 3l7 5-7 5V3z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/>,String(sessionCount),"참여",chartBlue)}
+	              {metric(<path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>,`${completionRate}%`,"완료율",chartGreen)}
+	              {metric(<><circle cx="8" cy="8" r="5" stroke="currentColor" strokeWidth="1.6"/><path d="M8 5v3l2 1.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></>,avgTime,"평균 세션시간",chartYellow)}
             </div>
             <div style={{display:"grid",gridTemplateColumns:"minmax(340px,1fr) minmax(320px,1fr)",gap:16,marginBottom:16}}>
               <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
                 {infoTitle("유입경로","form_response_events의 started/page 이벤트 metadata에 저장된 source, utm_source, referrer_host를 기준으로 채널을 묶습니다. 각 채널별 참여 세션, 완료 세션, 공유/링크 클릭 수와 전환율을 보여줍니다.")}
                 {periodTip("source")}
                 {sourceEntries.length===0?emptyState("유입경로 데이터가 아직 없습니다."):<div style={{display:"grid",gridTemplateColumns:"280px 1fr",gap:18,alignItems:"center"}}>
-                  <svg viewBox="0 0 260 260" style={{width:"100%",maxWidth:280,overflow:"visible"}}>
-                    {donutSlices.map((s:any,i:number)=>s.end-s.start>=359.99
-                      ? <circle key={s.label} cx="130" cy="130" r="86" fill="none" stroke={s.color} strokeWidth="42" onMouseMove={e=>movePeriodTip("source",e,{title:s.label,color:s.color,lines:[`참여 : ${s.participation} (${s.pct}%)`,`완료 : ${s.complete}`,`전환율 : ${s.conversion}%`,`공유 : ${s.share} · 링크 클릭 : ${s.link}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{cursor:"pointer",transform:periodHover?.scope==="source"&&periodHover.title===s.label?"scale(1.035)":"scale(1)",transformOrigin:"130px 130px",transition:"transform .16s ease"}}/>
-                      : <path key={s.label} d={donutPath(130,130,108,66,s.start,s.end)} fill={s.color} stroke={A.card} strokeWidth="4" onMouseMove={e=>movePeriodTip("source",e,{title:s.label,color:s.color,lines:[`참여 : ${s.participation} (${s.pct}%)`,`완료 : ${s.complete}`,`전환율 : ${s.conversion}%`,`공유 : ${s.share} · 링크 클릭 : ${s.link}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{cursor:"pointer",transform:periodHover?.scope==="source"&&periodHover.title===s.label?"scale(1.035)":"scale(1)",transformOrigin:"130px 130px",transition:"transform .16s ease"}}/>
-                    )}
-                  </svg>
+	                  <svg viewBox="0 0 260 260" style={{width:"100%",maxWidth:280,overflow:"visible"}}>
+	                    <circle cx="130" cy="130" r="86" fill="none" stroke={A.card2} strokeWidth="42"/>
+	                    {donutSlices.map((s:any,i:number)=>s.end-s.start>=359.99
+	                      ? <circle key={s.label} cx="130" cy="130" r="86" fill="none" stroke={s.color} strokeWidth="42" onMouseMove={e=>movePeriodTip("source",e,{title:s.label,color:s.color,lines:[`참여 : ${s.participation} (${s.pct}%)`,`완료 : ${s.complete}`,`전환율 : ${s.conversion}%`,`공유 : ${s.share} · 링크 클릭 : ${s.link}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{cursor:"pointer",transform:periodHover?.scope==="source"&&periodHover.title===s.label?"scale(1.035)":"scale(1)",transformOrigin:"130px 130px",transition:"transform .16s ease"}}/>
+	                      : <path key={s.label} d={donutPath(130,130,86,s.start+donutGap(s),s.end-donutGap(s))} fill="none" stroke={s.color} strokeWidth="42" strokeLinecap="round" onMouseMove={e=>movePeriodTip("source",e,{title:s.label,color:s.color,lines:[`참여 : ${s.participation} (${s.pct}%)`,`완료 : ${s.complete}`,`전환율 : ${s.conversion}%`,`공유 : ${s.share} · 링크 클릭 : ${s.link}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{cursor:"pointer",transform:periodHover?.scope==="source"&&periodHover.title===s.label?"scale(1.035)":"scale(1)",transformOrigin:"130px 130px",transition:"transform .16s ease"}}/>
+	                    )}
+	                  </svg>
                   <div>{sourceEntries.map((s:any,i:number)=><div key={s.label} style={{display:"grid",gridTemplateColumns:"14px 1fr auto",gap:9,alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${A.border}`}}>
                     <span style={{width:12,height:12,borderRadius:4,background:colors[i%colors.length]}}/>
                     <span style={{fontSize:13,color:A.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{s.label}</span>
@@ -4138,15 +4188,28 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 </div>}
               </div>
               <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-                {infoTitle("위치","form_response_events metadata의 country 값을 세션 단위로 집계합니다. 브라우저나 배포 환경에서 국가값을 받을 수 없었던 세션은 미확인으로 표시됩니다. 정확한 국가 분석이 필요하면 서버/엣지의 IP 국가 정보 연동이 필요합니다.")}
-                {periodTip("location")}
-                {locationEntries.length===0?emptyState("위치 데이터가 아직 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:10}}>
-                  {locationEntries.slice(0,8).map((item:any,i:number)=>{const max=Math.max(1,locationEntries[0]?.[1]||1);const pct=sessionCount?Math.round((item[1]/sessionCount)*1000)/10:0;const color=i===0?A.blue:A.border2;return <div key={item[0]} onMouseMove={e=>movePeriodTip("location",e,{title:item[0],color,lines:[`카운트 : ${item[1]}`,`전체 세션 대비 : ${pct}%`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"110px 1fr 48px",gap:10,alignItems:"center",cursor:"default"}}>
-                    <div style={{fontSize:13,color:A.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item[0]}</div>
-                    <div style={{height:10,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${(item[1]/max)*100}%`,background:color,transform:periodHover?.scope==="location"&&periodHover.title===item[0]?"scaleY(1.35)":"scaleY(1)",transformOrigin:"center",transition:"transform .16s ease"}}/></div>
-                    <div style={{fontSize:13,color:A.t1,fontWeight:600,textAlign:"right" as const}}>{item[1]}</div>
-                  </div>})}
-                </div>}
+	                {infoTitle("위치","form_response_events metadata의 country, region, city 값을 세션 단위로 집계합니다. 대한민국은 지역값이 들어오면 시/도 단위로 표시하고, 지역값이 없으면 미확인으로 표시됩니다.")}
+	                {periodTip("location")}
+	                {locationEntries.length===0?emptyState("위치 데이터가 아직 없습니다."):<div style={{display:"grid",gridTemplateColumns:"minmax(180px,260px) 1fr",gap:18,alignItems:"center"}}>
+	                  <div style={{position:"relative" as const}}>
+	                    <svg viewBox="0 0 100 110" style={{width:"100%",maxHeight:260,overflow:"visible"}}>
+	                      <path d="M58 10C72 16 81 28 79 43c-1 10-8 17-7 27 1 12-9 24-23 24-12 0-22-8-24-20-2-11 5-18 2-29-4-15 7-30 20-35 4-2 7-2 11 0z" fill={A.card2} stroke={A.border2} strokeWidth="1.2"/>
+	                      {koreaRegionEntries.length===0
+	                        ? <circle cx="54" cy="50" r="9" fill={chartBlue} opacity="0.85" onMouseMove={e=>movePeriodTip("location",e,{title:"대한민국",color:chartBlue,lines:[`카운트 : ${locationEntries.find((item:any)=>item[0]==="대한민국")?.[1]||0}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{cursor:"pointer"}}/>
+	                        : koreaRegionEntries.slice(0,12).map((item:any,i:number)=>{const pt=regionPointMap[item[0]]||[50,52];const max=Math.max(1,koreaRegionEntries[0]?.[1]||1);const r=5+Math.min(10,(Number(item[1])/max)*9);const color=colors[i%colors.length];return <g key={item[0]} onMouseMove={e=>movePeriodTip("location",e,{title:`대한민국 · ${item[0]}`,color,lines:[`카운트 : ${item[1]}`,`전체 세션 대비 : ${sessionCount?Math.round((Number(item[1])/sessionCount)*1000)/10:0}%`]})} onMouseLeave={()=>setPeriodHover(null)} style={{cursor:"pointer"}}>
+	                          <circle cx={pt[0]} cy={pt[1]} r={r+4} fill={color} opacity="0.16"/>
+	                          <circle cx={pt[0]} cy={pt[1]} r={r} fill={color} opacity="0.9" stroke={A.card} strokeWidth="1.5"/>
+	                        </g>})}
+	                    </svg>
+	                  </div>
+	                  <div style={{display:"flex",flexDirection:"column" as const,gap:8}}>
+	                    {[...koreaRegionEntries.map((item:any)=>[`대한민국 · ${item[0]}`,item[1]]),...otherLocationEntries].slice(0,8).map((item:any,i:number)=>{const max=Math.max(1,locationEntries[0]?.[1]||1);const pct=sessionCount?Math.round((item[1]/sessionCount)*1000)/10:0;const color=colors[i%colors.length];return <div key={item[0]} onMouseMove={e=>movePeriodTip("location",e,{title:item[0],color,lines:[`카운트 : ${item[1]}`,`전체 세션 대비 : ${pct}%`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"14px 1fr auto",gap:9,alignItems:"center",cursor:"default",borderBottom:`1px solid ${A.border}`,padding:"7px 0"}}>
+	                      <span style={{width:12,height:12,borderRadius:4,background:color}}/>
+	                      <span style={{fontSize:13,color:A.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item[0]}</span>
+	                      <span style={{fontSize:12.5,color:A.t2,fontWeight:600}}>{item[1]}</span>
+	                    </div>})}
+	                  </div>
+	                </div>}
               </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"minmax(340px,1fr) minmax(340px,1fr)",gap:16,marginBottom:16}}>
@@ -4154,11 +4217,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 {infoTitle("공유","폼의 공유 버튼 클릭을 share 이벤트로 저장합니다. 파란 막대는 전체 공유 클릭 수, 회색 막대는 같은 사용자가 여러 번 누른 것을 1명으로 묶은 중복 제외 사용자 수입니다.")}
                 {periodTip("share")}
                 {shareEntries.length===0?emptyState("공유 이벤트가 아직 없습니다. 링크/공유 버튼 클릭 데이터가 쌓이면 표시됩니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:12}}>
-                  {shareEntries.slice(0,8).map((s:any)=>{const max=Math.max(1,shareEntries[0]?.total||1);return <div key={s.channel} onMouseMove={e=>movePeriodTip("share",e,{title:s.channel,color:A.blue,lines:[`전체 공유 클릭 : ${s.total}`,`중복 제외 사용자 : ${s.unique}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"90px 1fr 88px",gap:12,alignItems:"center",cursor:"default"}}>
+	                  {shareEntries.slice(0,8).map((s:any)=>{const max=Math.max(1,shareEntries[0]?.total||1);return <div key={s.channel} onMouseMove={e=>movePeriodTip("share",e,{title:s.channel,color:chartBlue,lines:[`전체 공유 클릭 : ${s.total}`,`중복 제외 사용자 : ${s.unique}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"90px 1fr 88px",gap:12,alignItems:"center",cursor:"default"}}>
                     <div style={{fontSize:13,color:A.t1,fontWeight:600}}>{s.channel}</div>
                     <div style={{display:"flex",flexDirection:"column" as const,gap:5}}>
-                      <div style={{height:10,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${(s.total/max)*100}%`,background:A.blue,transform:periodHover?.scope==="share"&&periodHover.title===s.channel?"scaleY(1.35)":"scaleY(1)",transformOrigin:"center",transition:"transform .16s ease"}}/></div>
-                      <div style={{height:10,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${(s.unique/max)*100}%`,background:A.border2}}/></div>
+	                      <div style={{height:10,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${(s.total/max)*100}%`,background:chartBlue,transform:periodHover?.scope==="share"&&periodHover.title===s.channel?"scaleY(1.35)":"scaleY(1)",transformOrigin:"center",transition:"transform .16s ease"}}/></div>
+	                      <div style={{height:10,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${(s.unique/max)*100}%`,background:chartSlate}}/></div>
                     </div>
                     <div style={{fontSize:11.5,color:A.t2,textAlign:"right" as const,fontWeight:600,lineHeight:1.35}}>공유 {s.total}<br/>중복 제외 {s.unique}</div>
                   </div>})}
@@ -4169,23 +4232,30 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 {periodTip("activity")}
                 {activityEntries.length===0?emptyState("활동 데이터가 아직 없습니다."):<div style={{height:260,display:"flex",alignItems:"flex-end",gap:12,borderLeft:`1px solid ${A.border}`,borderBottom:`1px solid ${A.border}`,padding:"12px 8px 26px",position:"relative" as const}}>
                   {activityEntries.map((d:any)=><div key={d.date} style={{flex:1,height:"100%",display:"flex",alignItems:"flex-end",gap:3,position:"relative" as const}}>
-                    {[["participation",A.blue,"참여"],["complete",A.green,"완료"],["share",A.border2,"공유"],["link","#CBD5E1","링크 클릭"]].map((pair:any)=><div key={pair[0]} onMouseMove={e=>movePeriodTip("activity",e,{title:`${d.date} ${pair[2]}`,color:pair[1],lines:[`${pair[2]} : ${d[pair[0]]}`,`날짜 : ${d.date}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{flex:1,height:`${Math.max(2,(d[pair[0]]/maxActivity)*100)}%`,borderRadius:"6px 6px 0 0",background:pair[1],cursor:"pointer",transform:periodHover?.scope==="activity"&&periodHover.title===`${d.date} ${pair[2]}`?"scaleY(1.06)":"scaleY(1)",transformOrigin:"bottom",transition:"transform .16s ease"}}/>)}
+	                    {[["participation",chartBlue,"참여"],["complete",chartGreen,"완료"],["share",chartPurple,"공유"],["link",chartSlate,"링크 클릭"]].map((pair:any)=><div key={pair[0]} onMouseMove={e=>movePeriodTip("activity",e,{title:`${d.date} ${pair[2]}`,color:pair[1],lines:[`${pair[2]} : ${d[pair[0]]}`,`날짜 : ${d.date}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{flex:1,height:`${Math.max(2,(d[pair[0]]/maxActivity)*100)}%`,borderRadius:"6px 6px 0 0",background:pair[1],cursor:"pointer",transform:periodHover?.scope==="activity"&&periodHover.title===`${d.date} ${pair[2]}`?"scaleY(1.06)":"scaleY(1)",transformOrigin:"bottom",transition:"transform .16s ease"}}/>)}
                     <div style={{position:"absolute" as const,left:"50%",bottom:-22,transform:"translateX(-50%)",fontSize:10.5,color:A.t3,whiteSpace:"nowrap" as const}}>{String(d.date).slice(5)}</div>
                   </div>)}
                 </div>}
               </div>
             </div>
-            {periodRows.length===0?emptyState("기간별로 표시할 응답이 없습니다."):<div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:16,boxShadow:A.shadow}}>
-              {infoTitle("일자별 응답 수","applications 또는 company_applications 응답 row의 created_at을 기준으로 실제 제출 완료 응답 수를 날짜별로 집계합니다. 막대 길이는 전체 응답 대비 해당 날짜의 비중입니다.")}
-              {periodRows.map((item:any)=>{const d=item[0],c=item[1];return <div key={d} style={{display:"flex",alignItems:"center",gap:14,padding:"10px 0",borderBottom:`1px solid ${A.border}`}}><div style={{width:110,fontWeight:600,color:A.t1,fontSize:13}}>{d}</div><div style={{flex:1,height:9,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${rows.length?(c/rows.length)*100:0}%`,background:A.blue}}/></div><div style={{width:44,textAlign:"right" as const,fontWeight:600,color:A.t1,fontSize:13}}>{c}</div></div>})}
-            </div>}
+	            {periodRows.length===0?emptyState("기간별로 표시할 응답이 없습니다."):<div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
+	              {infoTitle("일자별 응답 수","applications 또는 company_applications 응답 row의 created_at을 기준으로 실제 제출 완료 응답 수를 날짜별로 집계합니다. 막대 길이는 전체 응답 대비 해당 날짜의 비중입니다.")}
+	              {periodTip("period")}
+	              <div style={{height:250,display:"flex",alignItems:"flex-end",gap:10,borderLeft:`1px solid ${A.border}`,borderBottom:`1px solid ${A.border}`,padding:"18px 10px 28px",position:"relative" as const}}>
+	                {periodChartRows.map((item:any,i:number)=>{const d=item[0],c=Number(item[1])||0;const h=Math.max(5,(c/maxPeriodCount)*100);const color=colors[i%colors.length];return <div key={d} style={{flex:1,height:"100%",display:"flex",alignItems:"flex-end",justifyContent:"center",position:"relative" as const}}>
+	                  <div onMouseMove={e=>movePeriodTip("period",e,{title:String(d),color,lines:[`응답 수 : ${c}`,`전체 대비 : ${rows.length?Math.round((c/rows.length)*1000)/10:0}%`]})} onMouseLeave={()=>setPeriodHover(null)}
+	                    style={{width:"70%",maxWidth:42,height:`${h}%`,borderRadius:"8px 8px 0 0",background:color,cursor:"pointer",transform:periodHover?.scope==="period"&&periodHover.title===String(d)?"scaleY(1.05)":"scaleY(1)",transformOrigin:"bottom",transition:"transform .16s ease, opacity .16s",opacity:periodHover?.scope==="period"&&periodHover.title!==String(d)?0.55:1}}/>
+	                  <div style={{position:"absolute" as const,bottom:-22,left:"50%",transform:"translateX(-50%)",fontSize:10.5,color:A.t3,whiteSpace:"nowrap" as const}}>{String(d).slice(5)}</div>
+	                </div>})}
+	              </div>
+	            </div>}
           </div>}
           {activeAnalyticsTab==="dropoff"&&<div>
             <div style={{fontSize:22,fontWeight:600,color:A.t1,marginBottom:16}}>질문별 이탈률</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14,marginBottom:16}}>
-              {metric(<path d="M4 4h8M12 4v8M12 12H4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>,String(dropTotal),"추정 이탈",A.red)}
-              {metric(<path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>,`${completionRate}%`,"완료율",A.green)}
-              {metric(<path d="M3 12h10M6 3h4M8 3v9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>,String(dropRows[0]?.question||"-"),"최다 이탈 질문",A.blue)}
+	              {metric(<path d="M4 3.5h5v9H4M9 8h5M12 5.8 14.2 8 12 10.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>,String(dropTotal),"추정 이탈",chartPink)}
+	              {metric(<path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>,`${completionRate}%`,"완료율",chartGreen)}
+	              {metric(<><path d="M3.5 4.5h7.2a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H8L5 14v-2.5H3.5a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2z" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round"/><path d="M8.8 7.2h4.5M11.4 5.1 13.5 7.2l-2.1 2.1" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></>,String(dropRows[0]?.question||"-"),"최다 이탈 질문",chartBlue)}
             </div>
             {dropRows.length===0?emptyState("아직 이탈 이벤트가 없습니다."):<div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,overflow:"hidden",boxShadow:A.shadow}}>
               <div style={{display:"grid",gridTemplateColumns:"150px minmax(260px,1fr) 160px 90px",gap:0,background:A.card2,borderBottom:`1px solid ${A.border}`,fontSize:12,color:A.t2,fontWeight:600}}>
@@ -4194,15 +4264,32 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               {dropRows.map((item:any)=>{const pct=sessionCount?Math.round((item.count/sessionCount)*1000)/10:0;return <div key={item.key} style={{display:"grid",gridTemplateColumns:"150px minmax(260px,1fr) 160px 90px",alignItems:"center",borderBottom:`1px solid ${A.border}`,fontSize:13}}>
                 <div style={{padding:"13px 14px",color:A.t2,fontWeight:600}}>{item.section}</div>
                 <div style={{padding:"13px 14px",borderLeft:`1px solid ${A.border}`,color:A.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.question}</div>
-                <div style={{padding:"13px 14px",borderLeft:`1px solid ${A.border}`}}><div style={{height:9,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:A.red}}/></div><div style={{fontSize:11.5,color:A.t3,marginTop:5}}>{pct}%</div></div>
+	                <div style={{padding:"13px 14px",borderLeft:`1px solid ${A.border}`}}><div style={{height:9,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:chartPink}}/></div><div style={{fontSize:11.5,color:A.t3,marginTop:5}}>{pct}%</div></div>
                 <div style={{padding:"13px 14px",borderLeft:`1px solid ${A.border}`,textAlign:"right" as const,color:A.t1,fontWeight:600}}>{item.count}</div>
               </div>})}
             </div>}
           </div>}
         </>}
         </div>
-      </div>
-      {filePreview&&(
+	      </div>
+	      {showDeleteAllAnalytics&&(
+	        <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:10001,padding:22,boxSizing:"border-box" as const}} onClick={()=>setShowDeleteAllAnalytics(false)}>
+	          <div style={{width:420,maxWidth:"92vw",background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,boxShadow:A.shadow,padding:22}} onClick={e=>e.stopPropagation()}>
+	            <div style={{width:44,height:44,borderRadius:A.r,background:A.red+"14",color:A.red,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:14}}>
+	              <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v6M8 6v6M11 6v6M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/></svg>
+	            </div>
+	            <div style={{fontSize:18,fontWeight:600,color:A.t1,marginBottom:8}}>응답 데이터를 모두 삭제할까요?</div>
+	            <div style={{fontSize:13,color:A.t2,lineHeight:1.65,marginBottom:18}}>
+	              현재 폼의 제출 응답과 분석 이벤트가 모두 삭제됩니다. 이 작업은 되돌릴 수 없어요.
+	            </div>
+	            <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+	              <button onClick={()=>setShowDeleteAllAnalytics(false)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>취소</button>
+	              <button onClick={deleteAllAnalyticsData} style={{height:38,padding:"0 14px",borderRadius:A.r,border:"none",background:A.red,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>모두 삭제</button>
+	            </div>
+	          </div>
+	        </div>
+	      )}
+	      {filePreview&&(
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:10002,padding:22,boxSizing:"border-box" as const}} onClick={()=>setFilePreview(null)}>
           <div style={{width:820,maxWidth:"92vw",height:620,maxHeight:"86vh",background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,boxShadow:A.shadow,overflow:"hidden",display:"flex",flexDirection:"column" as const}} onClick={e=>e.stopPropagation()}>
             <div style={{height:54,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",gap:12,padding:"0 16px",flexShrink:0}}>
@@ -4328,10 +4415,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {(()=>{const filteredSaved=saved.filter((item:any)=>(item.config?.brand||item.brand)===currentBrand).slice(0,20);return filteredSaved.length===0
               ?<div style={{fontSize:12,color:A.t3,padding:"6px 4px",lineHeight:1.5}}>{supa?"저장된 폼 없음":"Supabase 연결 필요"}</div>
               :filteredSaved.map((item:any)=>(
-                <div key={item.id} onClick={()=>loadCfgById(item.id,item.name)}
-                  onContextMenu={e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,item})}}
-                  style={{display:"flex",alignItems:"center",gap:6,padding:"7px 8px",borderRadius:A.r,border:`1px solid transparent`,marginBottom:2,cursor:"pointer",transition:"all .1s",background:loadedId===item.id?A.blue2:"transparent",borderColor:loadedId===item.id?A.blue+"44":"transparent"}}
-                  onMouseEnter={e=>{if(loadedId!==item.id){(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.borderColor=A.border}}}
+	                <div key={item.id} onClick={()=>loadCfgById(item.id,item.name,item)}
+	                  onContextMenu={e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,item})}}
+	                  style={{display:"flex",alignItems:"center",gap:6,padding:"7px 8px",borderRadius:A.r,border:`1px solid transparent`,marginBottom:2,cursor:"pointer",transition:"all .1s",background:loadedId===item.id?A.blue2:"transparent",borderColor:loadedId===item.id?A.blue+"44":"transparent"}}
+	                  onMouseEnter={e=>{prefetchFullFormRow(item);if(loadedId!==item.id){(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.borderColor=A.border}}}
                   onMouseLeave={e=>{if(loadedId!==item.id){(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.borderColor="transparent"}}}>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12,fontWeight:loadedId===item.id?600:600,color:loadedId===item.id?A.blue:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name}</div>

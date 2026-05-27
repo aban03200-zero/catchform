@@ -69,39 +69,12 @@ const imagePos = (img: any) => `${img?.imagePosX ?? 50}% ${img?.imagePosY ?? 50}
 const cropNumber = (v: any, d: number, min: number, max: number) => Math.max(min, Math.min(max, Number.isFinite(Number(v)) ? Number(v) : d))
 function postAppsScriptPayload(url: string, payload: any) {
     const body = JSON.stringify(payload)
-    if (typeof document === "undefined") {
-        return fetch(url, { method: "POST", mode: "no-cors", body: new URLSearchParams({ payload: body }).toString(), headers: { "content-type": "application/x-www-form-urlencoded;charset=UTF-8" } }).then(() => {})
-    }
-    return new Promise<void>((resolve) => {
-        const id = `cf_sheet_post_${Date.now()}_${Math.random().toString(36).slice(2)}`
-        const iframe = document.createElement("iframe")
-        const form = document.createElement("form")
-        const input = document.createElement("input")
-        iframe.name = id
-        iframe.style.display = "none"
-        form.method = "POST"
-        form.action = url
-        form.target = id
-        form.enctype = "application/x-www-form-urlencoded"
-        form.style.display = "none"
-        input.type = "hidden"
-        input.name = "payload"
-        input.value = body
-        form.appendChild(input)
-        const cleanup = () => {
-            try { form.remove() } catch {}
-            try { iframe.remove() } catch {}
-        }
-        const timer = window.setTimeout(() => { cleanup(); resolve() }, 1800)
-        iframe.onload = () => {
-            window.clearTimeout(timer)
-            cleanup()
-            resolve()
-        }
-        document.body.appendChild(iframe)
-        document.body.appendChild(form)
-        form.submit()
-    })
+    return fetch(url, {
+        method: "POST",
+        mode: "no-cors",
+        body: new URLSearchParams({ payload: body }).toString(),
+        headers: { "content-type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    }).then(() => {})
 }
 function imageCropBox(img: any) {
     const w = cropNumber(img?.imageCropW, 100, 8, 100)
@@ -301,9 +274,12 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const [authPw, setAuthPw] = React.useState("")
     const [authErr, setAuthErr] = React.useState("")
     const [authLoading, setAuthLoading] = React.useState(false)
+    const [geoMeta, setGeoMeta] = React.useState<Record<string, string>>({})
+    const [geoLoaded, setGeoLoaded] = React.useState(false)
     const trackingSessionRef = React.useRef("")
     const touchedFieldRef = React.useRef<Record<string, boolean>>({})
     const lastTouchedFieldRef = React.useRef<any>(null)
+    const startedTrackedRef = React.useRef(false)
 
     const setVal = (id: string, v: string) => setVals(p => ({ ...p, [id]: v }))
     const setErr = (id: string, msg: string) => setErrors(p => ({ ...p, [id]: msg }))
@@ -347,7 +323,9 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             source: sourceMap[sourceKey] || sourceRaw,
             referrer: ref,
             referrer_host: refHost,
-            country: params.get("country") || localeCountry || "",
+            country: params.get("country") || geoMeta.country || localeCountry || "",
+            region: params.get("region") || params.get("province") || params.get("sido") || geoMeta.region || "",
+            city: params.get("city") || geoMeta.city || "",
             language: locale,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
             platform: navigator.platform || "",
@@ -494,8 +472,21 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const isLastPage = page === formPages
 
     React.useEffect(() => {
-        trackEvent("started", { page: 1, metadata: { formType: cfg.formType || "" } })
+        let alive = true
+        fetch("/api/geo", { cache: "force-cache" })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => { if (alive && data) setGeoMeta(data) })
+            .catch(() => {})
+            .finally(() => { if (alive) setGeoLoaded(true) })
+        return () => { alive = false }
     }, [])
+
+    React.useEffect(() => {
+        if (!geoLoaded) return
+        if (startedTrackedRef.current) return
+        startedTrackedRef.current = true
+        trackEvent("started", { page: 1, metadata: { formType: cfg.formType || "" } })
+    }, [geoLoaded, geoMeta.country, geoMeta.region, geoMeta.city])
 
     React.useEffect(() => {
         lastTouchedFieldRef.current = null
