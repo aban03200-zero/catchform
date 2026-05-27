@@ -1,0 +1,1400 @@
+"use client"
+
+// CatchForm.tsx — CatchForm 배포용 폼 컴포넌트
+// Next.js Client Component — FormAdmin_v3 config 구조 완전 호환
+// URL ?slug=xxx 로 form_configs 테이블에서 config 자동 로드
+
+import * as React from "react"
+import { createClient, type SupabaseClient } from "@supabase/supabase-js"
+
+// ─── Types ────────────────────────────────────────────────────────────────
+type Opt = { label: string; value: string; isEtc: boolean; nextPage?: number }
+type HelperItem = { text: string; callout?: boolean }
+type FieldType = "text"|"name"|"email"|"phone"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"
+type FormField = {
+    id: string; type: FieldType; label: string; placeholder?: string
+    helper?: string; helpers?: HelperItem[]; required?: boolean
+    opts?: Opt[]; etcPh?: string; dupCheck?: boolean; page?: number; cols?: number
+    imageUrl?: string; imageCaption?: string; imageFit?: "contain"|"cover"; imagePosX?: number; imagePosY?: number
+    imageCropX?: number; imageCropY?: number; imageCropW?: number; imageCropH?: number; imageNaturalW?: number; imageNaturalH?: number
+}
+type KdtField = {
+    id: string; label: string; type: string; required?: boolean
+    page?: number; options?: string[]; opts?: Opt[]
+    placeholder?: string; desc?: string
+}
+type Cfg = {
+    header: {
+        imageUrl: string; programId?: string; overline: string; title: string
+        educationStart: string; educationEnd: string
+        tuitionFree: boolean; tuitionFreeText: string; tuitionAmount: string; stipend: string
+        noticeEnabled: boolean; noticeIconEnabled: boolean; noticeIconText: string; noticeText: string
+        noticeShape?: "pill"|"rect"
+        applicationType?: string
+        imageFit?: "contain"|"cover"; imagePosX?: number; imagePosY?: number
+        imageCropX?: number; imageCropY?: number; imageCropW?: number; imageCropH?: number; imageNaturalW?: number; imageNaturalH?: number
+    }
+    form: { fields: FormField[]; showNum: boolean; dupText: string; pages: number; pageLabels?: string[] }
+    consents: { enabled: boolean; required: boolean; title: string; consentType?: string; body: string; checkLabel: string; policyUrl: string }[]
+    cta: { label: string; loadLabel: string; height: number; bg: string; color: string }
+    modal: { title: string; body: string; btnLabel: string; btnUrl: string; btnReplace: boolean }
+    styles: { theme: "dark"|"light"; fieldH: number; qGap: number; maxW: number; labelGap?: number }
+    auth: { enabled: boolean; loginUrl: string; errText: string }
+    integrations?: { googleSheets?: { enabled: boolean; mode: "existing"|"new"; accountEmail: string; sheetUrl: string; sheetName: string; webhookUrl: string; lastSyncStatus?: "idle"|"sent"|"error"; lastSyncAt?: string; lastSyncMessage?: string } }
+    brand: string
+    formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"
+    kdtFields?: KdtField[]
+}
+
+// ─── Supabase ─────────────────────────────────────────────────────────────
+let _sb: SupabaseClient | null = null
+function getSB(url: string, key: string): SupabaseClient | null {
+    const u = url.trim(), k = key.trim()
+    if (!u || !k) return null
+    if (_sb && (_sb as any).__sig === `${u}::${k}`) return _sb
+    _sb = createClient(u, k); (_sb as any).__sig = `${u}::${k}`
+    return _sb
+}
+
+// ─── Color tokens ─────────────────────────────────────────────────────────
+const DARK = { bg: "#13151C", fieldBg: "#1E2230", fieldBorder: "#2C3148", t1: "#F0F3FF", t2: "#8B91A8", t3: "#555E7A", red: "#FF4747" }
+const LIGHT = { bg: "#FFFFFF", fieldBg: "#F7F8FA", fieldBorder: "#E2E5EA", t1: "#1A1D27", t2: "#4A5068", t3: "#9EA8C0", red: "#FF4747" }
+const FONT = "'Pretendard Variable','Pretendard','Noto Sans KR',-apple-system,sans-serif"
+const FILE_MAX_COUNT = 5
+const FILE_MAX_SIZE_MB = 10
+const FILE_MAX_SIZE = FILE_MAX_SIZE_MB * 1024 * 1024
+const FILE_LIMIT_TEXT = `최대 ${FILE_MAX_COUNT}개, 파일당 ${FILE_MAX_SIZE_MB}MB`
+const imageFit = (img: any) => img?.imageFit === "cover" ? "cover" : "contain"
+const imagePos = (img: any) => `${img?.imagePosX ?? 50}% ${img?.imagePosY ?? 50}%`
+const cropNumber = (v: any, d: number, min: number, max: number) => Math.max(min, Math.min(max, Number.isFinite(Number(v)) ? Number(v) : d))
+function postAppsScriptPayload(url: string, payload: any) {
+    const body = JSON.stringify(payload)
+    if (typeof document === "undefined") {
+        return fetch(url, { method: "POST", mode: "no-cors", body: new URLSearchParams({ payload: body }).toString(), headers: { "content-type": "application/x-www-form-urlencoded;charset=UTF-8" } }).then(() => {})
+    }
+    return new Promise<void>((resolve) => {
+        const id = `cf_sheet_post_${Date.now()}_${Math.random().toString(36).slice(2)}`
+        const iframe = document.createElement("iframe")
+        const form = document.createElement("form")
+        const input = document.createElement("input")
+        iframe.name = id
+        iframe.style.display = "none"
+        form.method = "POST"
+        form.action = url
+        form.target = id
+        form.enctype = "application/x-www-form-urlencoded"
+        form.style.display = "none"
+        input.type = "hidden"
+        input.name = "payload"
+        input.value = body
+        form.appendChild(input)
+        const cleanup = () => {
+            try { form.remove() } catch {}
+            try { iframe.remove() } catch {}
+        }
+        const timer = window.setTimeout(() => { cleanup(); resolve() }, 1800)
+        iframe.onload = () => {
+            window.clearTimeout(timer)
+            cleanup()
+            resolve()
+        }
+        document.body.appendChild(iframe)
+        document.body.appendChild(form)
+        form.submit()
+    })
+}
+function imageCropBox(img: any) {
+    const w = cropNumber(img?.imageCropW, 100, 8, 100)
+    const h = cropNumber(img?.imageCropH, 100, 8, 100)
+    const x = cropNumber(img?.imageCropX, 0, 0, 100 - w)
+    const y = cropNumber(img?.imageCropY, 0, 0, 100 - h)
+    return { x, y, w, h }
+}
+const hasImageCrop = (img: any) => imageFit(img) === "cover" && Number.isFinite(Number(img?.imageCropW)) && Number.isFinite(Number(img?.imageCropH))
+function imageCropAspect(img: any) {
+    const b = imageCropBox(img)
+    const nw = Number(img?.imageNaturalW) || 100
+    const nh = Number(img?.imageNaturalH) || 100
+    return Math.max(0.25, Math.min(5, (b.w * nw) / (b.h * nh)))
+}
+function croppedImageStyle(img: any): React.CSSProperties {
+    const b = imageCropBox(img)
+    return {
+        position: "absolute" as const,
+        width: `${10000 / b.w}%`,
+        height: `${10000 / b.h}%`,
+        left: `-${(b.x / b.w) * 100}%`,
+        top: `-${(b.y / b.h) * 100}%`,
+        objectFit: "fill" as const,
+        display: "block",
+    }
+}
+function imageBoxStyle(img: any, coverHeight: number, radius: number | string, bg: string): React.CSSProperties {
+    return hasImageCrop(img)
+        ? { width: "100%", aspectRatio: String(imageCropAspect(img)), borderRadius: radius, overflow: "hidden", position: "relative" as const, background: bg }
+        : { width: "100%", height: imageFit(img) === "cover" ? coverHeight : "auto", borderRadius: radius, overflow: "hidden", position: "relative" as const, background: bg }
+}
+function imageImgStyle(img: any): React.CSSProperties {
+    return hasImageCrop(img)
+        ? croppedImageStyle(img)
+        : { width: "100%", height: imageFit(img) === "cover" ? "100%" : "auto", display: "block", objectFit: imageFit(img), objectPosition: imagePos(img) }
+}
+
+// ─── Markdown → HTML ──────────────────────────────────────────────────────
+function mdToHtml(text: string): string {
+    if (!text) return ""
+    const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    const fmt = (s: string) => {
+        const e = esc(s)
+        return e
+            .replace(/\*\*__([^]*?)__\*\*/g, '<strong><span style="text-decoration:underline">$1</span></strong>')
+            .replace(/__\*\*([^]*?)\*\*__/g, '<strong><span style="text-decoration:underline">$1</span></strong>')
+            .replace(/\*\*([^]*?)\*\*/g, "<strong>$1</strong>")
+            .replace(/__([^]*?)__/g, '<span style="text-decoration:underline">$1</span>')
+            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color:var(--link-color,#3182F6);text-decoration:underline" target="_blank" rel="noopener">$1</a>')
+    }
+    const lines = text.split("\n")
+    let html = ""
+    let inList = false
+    for (let i = 0; i < lines.length; i++) {
+        const raw = lines[i]
+        if (raw.trim() === "---") {
+            if (inList) { html += "</ul>"; inList = false }
+            html += '<hr style="border:none;border-top:1px solid currentColor;opacity:0.15;margin:8px 0"/>'
+        } else if (/^- /.test(raw)) {
+            if (!inList) { html += '<ul style="margin:4px 0;padding-left:18px;list-style:disc">'; inList = true }
+            html += `<li style="margin:2px 0">${fmt(raw.slice(2))}</li>`
+        } else {
+            if (inList) { html += "</ul>"; inList = false }
+            html += fmt(raw) + (i < lines.length - 1 ? "<br>" : "")
+        }
+    }
+    if (inList) html += "</ul>"
+    return html
+}
+
+function fmtDateKo(d: string) {
+    if (!d) return ""
+    const dt = new Date(d + "T00:00:00")
+    const days = ["일", "월", "화", "수", "목", "금", "토"]
+    return `${String(dt.getFullYear()).slice(2)}.${String(dt.getMonth() + 1).padStart(2, "0")}.${String(dt.getDate()).padStart(2, "0")}(${days[dt.getDay()]})`
+}
+function isValidEmail(v: string) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) }
+function isValidPhone(v: string) { return /^01[0-9]-\d{3,4}-\d{4}$/.test(v) }
+function fmtPhone(v: string) {
+    const d = v.replace(/\D/g, "").slice(0, 11)
+    if (d.length <= 3) return d
+    if (d.length <= 7) return `${d.slice(0, 3)}-${d.slice(3)}`
+    return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────
+export function CatchForm(props: {
+    supabaseUrl?: string
+    supabaseAnonKey?: string
+    slug?: string
+    configJson?: string
+}) {
+    const { supabaseUrl = "", supabaseAnonKey = "", slug: propSlug = "", configJson = "" } = props
+    const supa = React.useMemo(() => getSB(supabaseUrl, supabaseAnonKey), [supabaseUrl, supabaseAnonKey])
+
+    const [cfg, setCfg] = React.useState<Cfg | null>(null)
+    const [loadErr, setLoadErr] = React.useState("")
+    const [loading, setLoading] = React.useState(true)
+    const [loadedFormId, setLoadedFormId] = React.useState("")
+
+    React.useEffect(() => {
+        if (configJson) {
+            try { setCfg(JSON.parse(configJson)); setLoading(false); return } catch {}
+        }
+        let slug = propSlug
+        try {
+            const params = new URLSearchParams(window.location.search)
+            const urlSlug = params.get("slug")
+            if (urlSlug) slug = urlSlug
+        } catch {}
+        if (!slug) { setLoadErr("폼 슬러그가 지정되지 않았어요."); setLoading(false); return }
+        if (!supa) { setLoadErr("Supabase 연결 정보가 없어요."); setLoading(false); return }
+        ;(async () => {
+            const { data, error } = await supa.from("form_configs").select("id,config").eq("slug", slug).single()
+            if (error || !data) { setLoadErr("폼을 불러오지 못했어요."); setLoading(false); return }
+            setLoadedFormId(data.id || "")
+            setCfg(data.config as Cfg)
+            setLoading(false)
+        })()
+    }, [supa, propSlug, configJson])
+
+    if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200, fontFamily: FONT, fontSize: 14, color: "#9EA8C0" }}>불러오는 중...</div>
+    if (loadErr) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200, fontFamily: FONT, fontSize: 14, color: "#FF4747" }}>{loadErr}</div>
+    if (!cfg) return null
+
+    const resolvedSlug = (() => {
+        try { const p=new URLSearchParams(window.location.search); return p.get("slug")||propSlug } catch { return propSlug }
+    })()
+    return <FormRenderer cfg={cfg} supa={supa} formSlug={resolvedSlug} formId={loadedFormId} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} />
+}
+
+// ─── Form Renderer ────────────────────────────────────────────────────────
+function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKey }: { cfg: Cfg; supa: SupabaseClient | null; formSlug?: string; formId?: string; supabaseUrl?: string; supabaseAnonKey?: string }) {
+    const isDark = cfg.styles.theme === "dark"
+    const FC = isDark ? DARK : LIGHT
+    const accentBg = cfg.cta.bg || "#3182F6"
+    const fh = cfg.styles.fieldH || 44
+    const qg = cfg.styles.qGap || 20
+    const lg = cfg.styles.labelGap ?? 8
+    const fr = "10px"
+    const isKdt = cfg.formType === "kdt" && !!cfg.kdtFields
+    const formPages = isKdt
+        ? Math.max(3, ...(cfg.kdtFields || []).map(f => f.page || 1))
+        : (cfg.form.pages || 1)
+    const isMultiPage = formPages > 1
+
+    // State
+    const [page, setPage] = React.useState(1)
+    const [vals, setVals] = React.useState<Record<string, string>>({})
+    const [checked, setChecked] = React.useState<Record<string, string[]>>({})
+    const [errors, setErrors] = React.useState<Record<string, string>>({})
+    const [consentOk, setConsentOk] = React.useState<boolean[]>([])
+    const [consentOpen, setConsentOpen] = React.useState<boolean[]>([])
+    const [dropOpen, setDropOpen] = React.useState<Record<string, boolean>>({})
+    const [dpOpen, setDpOpen] = React.useState<Record<string, boolean>>({})
+    const [dpY, setDpY] = React.useState<Record<string, number>>({})
+    const [dpM, setDpM] = React.useState<Record<string, number>>({})
+    const [submitting, setSubmitting] = React.useState(false)
+    const [showModal, setShowModal] = React.useState(false)
+    const [shareCopied, setShareCopied] = React.useState(false)
+    const [shareMenuOpen, setShareMenuOpen] = React.useState(false)
+    const [dupErr, setDupErr] = React.useState("")
+    const [showDupModal, setShowDupModal] = React.useState(false)
+    const [fileNames, setFileNames] = React.useState<Record<string, string[]>>({})
+    const [fileObjects, setFileObjects] = React.useState<Record<string, File[]>>({})
+    const [authUser, setAuthUser] = React.useState<any>(null)
+    const [showAuthModal, setShowAuthModal] = React.useState(false)
+    const [authEmail, setAuthEmail] = React.useState("")
+    const [authPw, setAuthPw] = React.useState("")
+    const [authErr, setAuthErr] = React.useState("")
+    const [authLoading, setAuthLoading] = React.useState(false)
+    const trackingSessionRef = React.useRef("")
+    const touchedFieldRef = React.useRef<Record<string, boolean>>({})
+    const lastTouchedFieldRef = React.useRef<any>(null)
+
+    const setVal = (id: string, v: string) => setVals(p => ({ ...p, [id]: v }))
+    const setErr = (id: string, msg: string) => setErrors(p => ({ ...p, [id]: msg }))
+    const clearErr = (id: string) => setErrors(p => { const n = { ...p }; delete n[id]; return n })
+
+    const getTrackingSessionId = () => {
+        if (trackingSessionRef.current) return trackingSessionRef.current
+        const key = `catchform_session_${formSlug || formId || "draft"}`
+        try {
+            const prev = window.sessionStorage.getItem(key)
+            if (prev) { trackingSessionRef.current = prev; return prev }
+            const next = `cf_${Date.now()}_${Math.random().toString(36).slice(2)}`
+            window.sessionStorage.setItem(key, next)
+            trackingSessionRef.current = next
+            return next
+        } catch {
+            const next = `cf_${Date.now()}_${Math.random().toString(36).slice(2)}`
+            trackingSessionRef.current = next
+            return next
+        }
+    }
+
+    const getTrackingMeta = () => {
+        if (typeof window === "undefined") return {}
+        const params = new URLSearchParams(window.location.search || "")
+        const ref = typeof document !== "undefined" ? document.referrer || "" : ""
+        const refHost = (() => { try { return ref ? new URL(ref).hostname.replace(/^www\./, "") : "" } catch { return "" } })()
+        const sourceRaw = params.get("utm_source") || params.get("source") || params.get("ref") || refHost || "direct"
+        const sourceMap: Record<string, string> = {
+            google: "Google", naver: "Naver", medium: "Medium", twitter: "Twitter", x: "Twitter",
+            bing: "Bing", kakao: "KakaoTalk", kakaotalk: "KakaoTalk", facebook: "Facebook",
+            instagram: "Instagram", direct: "직접 유입"
+        }
+        const sourceKey = sourceRaw.toLowerCase().replace(/\.(com|co\.kr|net|kr)$/g, "").split(".")[0]
+        const locale = navigator.language || ""
+        const localeCountry = locale.includes("-") ? locale.split("-").pop() || "" : ""
+        return {
+            utm_source: params.get("utm_source") || "",
+            utm_medium: params.get("utm_medium") || "",
+            utm_campaign: params.get("utm_campaign") || "",
+            source: sourceMap[sourceKey] || sourceRaw,
+            referrer: ref,
+            referrer_host: refHost,
+            country: params.get("country") || localeCountry || "",
+            language: locale,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+            platform: navigator.platform || "",
+        }
+    }
+
+    const trackEvent = (eventType: string, extra?: { page?: number; field?: any; metadata?: any; keepalive?: boolean }) => {
+        const payload = {
+            form_id: formId || null,
+            form_slug: formSlug || "",
+            session_id: getTrackingSessionId(),
+            event_type: eventType,
+            page: extra?.page ?? page,
+            field_id: extra?.field?.id || null,
+            field_label: extra?.field?.label || null,
+            metadata: { ...getTrackingMeta(), ...(extra?.metadata || {}) }
+        }
+        if (extra?.keepalive && supabaseUrl && supabaseAnonKey) {
+            try {
+                fetch(`${supabaseUrl.replace(/\/+$/, "")}/rest/v1/form_response_events`, {
+                    method: "POST",
+                    headers: {
+                        apikey: supabaseAnonKey,
+                        authorization: `Bearer ${supabaseAnonKey}`,
+                        "content-type": "application/json",
+                        prefer: "return=minimal"
+                    },
+                    body: JSON.stringify(payload),
+                    keepalive: true
+                }).catch(() => {})
+            } catch {}
+            return
+        }
+        if (!supa) return
+        supa.from("form_response_events").insert(payload).then(() => {})
+    }
+
+    const getShareUrl = () => {
+        if (typeof window === "undefined") return ""
+        return window.location.href
+    }
+    const getShareText = () => cfg.header?.title || "신청 폼"
+    const copyShareUrl = async (closeMenu = true) => {
+        const url = getShareUrl()
+        if (!url) return
+        try {
+            await navigator.clipboard.writeText(url)
+            setShareCopied(true)
+            window.setTimeout(() => setShareCopied(false), 1800)
+        } catch {}
+        if (closeMenu) setShareMenuOpen(false)
+        trackEvent("share", { metadata: { channel: "링크 복사", href: url } })
+    }
+    const shareKakao = async () => {
+        const url = getShareUrl()
+        if (!url) return
+        const title = getShareText()
+        const openKakaoDeepLink = async () => {
+            try { await navigator.clipboard?.writeText(url) } catch {}
+            window.location.href = `kakaotalk://sendurl?msg=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}`
+        }
+        try {
+            const kakao = (window as any).Kakao
+            if (kakao?.Share?.sendDefault) {
+                kakao.Share.sendDefault({
+                    objectType: "feed",
+                    content: {
+                        title,
+                        description: "함께 확인해보세요.",
+                        imageUrl: cfg.header?.imageUrl || "https://dummyimage.com/600x315/f2f4f6/333333&text=CatchForm",
+                        link: { mobileWebUrl: url, webUrl: url }
+                    },
+                    buttons: [{ title: "폼 열기", link: { mobileWebUrl: url, webUrl: url } }]
+                })
+            } else {
+                await openKakaoDeepLink()
+            }
+        } catch {
+            await openKakaoDeepLink()
+        }
+        setShareMenuOpen(false)
+        trackEvent("share", { metadata: { channel: "카카오톡", href: url } })
+    }
+    const shareInstagramStory = async () => {
+        const url = getShareUrl()
+        if (!url) return
+        try { await navigator.clipboard?.writeText(`${getShareText()}\n${url}`) } catch {}
+        try {
+            window.location.href = `instagram://story-camera?text=${encodeURIComponent(`${getShareText()}\n${url}`)}`
+            window.setTimeout(() => window.open("https://www.instagram.com/create/story/", "_blank", "noopener,noreferrer"), 700)
+        } catch {}
+        setShareMenuOpen(false)
+        trackEvent("share", { metadata: { channel: "Instagram Story", href: url } })
+    }
+    const shareThreads = () => {
+        const url = getShareUrl()
+        if (!url) return
+        const text = encodeURIComponent(`${getShareText()}\n${url}`)
+        window.open(`https://www.threads.net/intent/post?text=${text}`, "_blank", "noopener,noreferrer")
+        setShareMenuOpen(false)
+        trackEvent("share", { metadata: { channel: "Threads", href: url } })
+    }
+    const shareToX = () => {
+        const url = getShareUrl()
+        if (!url) return
+        const text = encodeURIComponent(getShareText())
+        window.open(`https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(url)}`, "_blank", "noopener,noreferrer")
+        setShareMenuOpen(false)
+        trackEvent("share", { metadata: { channel: "Twitter", href: url } })
+    }
+
+    const shareButtonStyle: React.CSSProperties = { width: 40, height: 40, borderRadius: 12, border: `1px solid ${FC.fieldBorder}`, background: FC.fieldBg, color: FC.t1, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontWeight: 900, fontSize: 13 }
+    const shareMenuButtonStyle: React.CSSProperties = { width: "100%", height: 38, border: "none", background: "transparent", color: FC.t1, display: "flex", alignItems: "center", gap: 10, padding: "0 10px", borderRadius: 10, cursor: "pointer", fontFamily: FONT, fontSize: 13, fontWeight: 700, textAlign: "left" as const }
+    const ShareIcon = ({type}:{type:"kakao"|"instagram"|"threads"|"x"|"link"}) => {
+        if(type==="kakao")return <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 3C5.3 3 2.3 5.3 2.3 8.1c0 1.8 1.2 3.3 3 4.2l-.5 2.1 2.3-1.4c.6.1 1.2.2 1.9.2 3.7 0 6.7-2.3 6.7-5.1S12.7 3 9 3z" stroke="currentColor" strokeWidth="1.55" strokeLinejoin="round"/></svg>
+        if(type==="instagram")return <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="3" y="3" width="12" height="12" rx="4" stroke="currentColor" strokeWidth="1.6"/><circle cx="9" cy="9" r="2.6" stroke="currentColor" strokeWidth="1.6"/><circle cx="12.7" cy="5.4" r=".8" fill="currentColor"/></svg>
+        if(type==="threads")return <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M12.7 8.1c-.4-2-1.9-3.1-4-3.1-2.5 0-4.1 1.8-4.1 4s1.6 4 4.4 4c2.3 0 3.9-1.2 3.9-3 0-1.5-1.1-2.4-3-2.4-1.5 0-2.6.7-2.6 1.8 0 .9.7 1.5 1.8 1.5 1.6 0 2.5-1 2.5-2.8" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round"/></svg>
+        if(type==="link")return <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M7.6 10.4a3 3 0 0 0 4.2 0l1.6-1.6a3 3 0 0 0-4.2-4.2l-.7.7M10.4 7.6a3 3 0 0 0-4.2 0L4.6 9.2a3 3 0 0 0 4.2 4.2l.7-.7" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3 3 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+    }
+
+    const trackFieldTouch = (field: any) => {
+        if (!field?.id) return
+        lastTouchedFieldRef.current = field
+        if (touchedFieldRef.current[field.id]) return
+        touchedFieldRef.current[field.id] = true
+        trackEvent("field_touch", { field })
+    }
+
+    const getPageLabel = (p: number) => {
+        if (isKdt) {
+            const def = ["기본 정보", "상세 정보", "자격 요건 및 동의"]
+            return (cfg.form.pageLabels || [])[p - 1] || def[p - 1] || `섹션${p}`
+        }
+        return (cfg.form.pageLabels || [])[p - 1] || `섹션${p}`
+    }
+
+    const currentFields: FormField[] = isKdt
+        ? (cfg.kdtFields || []).filter(f => (f as any).page === page) as any
+        : isMultiPage
+            ? cfg.form.fields.filter(f => (f.page || 1) === page)
+            : cfg.form.fields
+
+    const isLastPage = page === formPages
+
+    React.useEffect(() => {
+        trackEvent("started", { page: 1, metadata: { formType: cfg.formType || "" } })
+    }, [])
+
+    React.useEffect(() => {
+        lastTouchedFieldRef.current = null
+        trackEvent("page_view", { page })
+        try { window.scrollTo({ top: 0, behavior: "smooth" }) } catch {}
+    }, [page])
+
+    React.useEffect(() => {
+        if (typeof document === "undefined") return
+        const onClick = (e: MouseEvent) => {
+            const el = e.target as HTMLElement | null
+            const a = el?.closest?.("a[href]") as HTMLAnchorElement | null
+            if (!a) return
+            const text = (a.textContent || "").trim().slice(0, 80)
+            trackEvent("link_click", { metadata: { href: a.href, text } })
+            const shareHit = `${a.href} ${text}`.toLowerCase()
+            if (/share|공유|kakao|facebook|twitter|x\.com|linkedin/.test(shareHit)) {
+                const channel = /kakao/.test(shareHit) ? "카카오톡" : /facebook/.test(shareHit) ? "페이스북" : /twitter|x\.com/.test(shareHit) ? "트위터" : /linkedin/.test(shareHit) ? "링크드인" : "링크"
+                trackEvent("share", { metadata: { channel, href: a.href, text } })
+            }
+        }
+        document.addEventListener("click", onClick, true)
+        return () => document.removeEventListener("click", onClick, true)
+    }, [page, formId, formSlug])
+
+    React.useEffect(() => {
+        if (typeof document === "undefined") return
+        const onHidden = () => {
+            if (document.visibilityState === "hidden") trackEvent("leave", { page, field: lastTouchedFieldRef.current, keepalive: true })
+        }
+        document.addEventListener("visibilitychange", onHidden)
+        return () => document.removeEventListener("visibilitychange", onHidden)
+    }, [page, formId, formSlug])
+
+    // Check if all required fields on current page are filled
+    const isPageComplete = React.useMemo(() => {
+        for (const field of currentFields) {
+            const f = field as FormField
+            if (!f.required) continue
+            if (f.type === "info" || (f.type as any) === "section_desc") continue
+            if (f.type === "checkbox") {
+                if (!(checked[f.id] || []).length) return false
+            } else if (f.type === "file") {
+                const fs:any = fileObjects[f.id] || []
+                if (!(Array.isArray(fs) ? fs : [fs]).filter(Boolean).length) return false
+            } else {
+                if (!(vals[f.id] || "").trim()) return false
+            }
+        }
+        if (isLastPage) {
+            const enabledConsents = cfg.consents.filter(c => c.enabled && c.required)
+            for (let i = 0; i < enabledConsents.length; i++) {
+                if (!consentOk[i]) return false
+            }
+        }
+        return true
+    }, [currentFields, vals, checked, consentOk, isLastPage, fileObjects])
+
+    const inp: React.CSSProperties = {
+        width: "100%", height: fh, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`,
+        borderRadius: fr, color: FC.t1, fontFamily: FONT, fontSize: 13,
+        padding: "0 13px", outline: "none", boxSizing: "border-box", transition: "border .15s"
+    }
+
+    const validateField = (field: FormField, val: string): string => {
+        if (field.type === "checkbox") return ""
+        if (field.type === "file") return ""
+        if (field.required && !val.trim()) return "필수 입력 항목이에요."
+        if (field.type === "email" && val && !isValidEmail(val)) return "올바른 이메일 형식을 입력해주세요."
+        if (field.type === "text" && field.id.toLowerCase().includes("phone") && val && !isValidPhone(val)) return "올바른 휴대폰 번호를 입력해주세요."
+        return ""
+    }
+
+    const getFieldOpts = (field: any): Opt[] => {
+        const rawOpts = (field.opts && field.opts.length) ? field.opts : (field.options || [])
+        return rawOpts.map((o: any) => {
+            const label = String(o?.label ?? o?.value ?? o)
+            const value = String(o?.value ?? o?.label ?? o)
+            const key = value.trim().toLowerCase()
+            const isEtc = !!o?.isEtc || label.trim() === "기타" || value.trim() === "기타" || key === "etc" || key === "other"
+            return { ...(typeof o === "object" ? o : {}), label, value, isEtc }
+        })
+    }
+
+    const getFieldAnswer = (field: any): any => {
+        const fid = field.id as string
+        const fieldOpts = getFieldOpts(field)
+        const etcValue = (vals[fid + "_etc"] || "").trim()
+
+        if (field.type === "checkbox") {
+            const selected = checked[fid] || []
+            if (!etcValue) return selected
+            return selected.map(v => {
+                const opt = fieldOpts.find(o => o.value === v)
+                return opt?.isEtc ? `${opt.label}: ${etcValue}` : v
+            })
+        }
+
+        const answer = vals[fid] || ""
+        const selectedOpt = fieldOpts.find(o => o.value === answer)
+        return selectedOpt?.isEtc && etcValue ? `${selectedOpt.label}: ${etcValue}` : answer
+    }
+
+    const validateCurrentPage = (): boolean => {
+        const newErrors: Record<string, string> = {}
+        let hasErr = false
+        for (const field of currentFields) {
+            const f = field as FormField
+            if (!f.required) continue
+            if (f.type === "info" || (f.type as any) === "section_desc") continue
+            const val = vals[f.id] || ""
+            if (f.type === "checkbox") {
+                if (!(checked[f.id] || []).length) { newErrors[f.id] = "필수 입력 항목이에요."; hasErr = true }
+            } else if (!val.trim()) {
+                newErrors[f.id] = "필수 입력 항목이에요."; hasErr = true
+            }
+        }
+        setErrors(newErrors)
+        return !hasErr
+    }
+
+    const sheetAnswer = (answer: any) => {
+        if (Array.isArray(answer)) return answer.map(v => typeof v === "object" ? (v.name || v.url || JSON.stringify(v)) : String(v)).join(" / ")
+        if (answer && typeof answer === "object") return answer.name || answer.url || JSON.stringify(answer)
+        return answer ?? ""
+    }
+    const sheetDisplayAnswer = (answer: any) => {
+        const value = sheetAnswer(answer)
+        return value === undefined || value === null || value === "" ? "없음" : String(value)
+    }
+    const formatSheetDateTime = (date = new Date()) => [
+        date.toLocaleDateString("sv-SE"),
+        date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })
+    ]
+    const getSheetResponseFields = () => {
+        const raw: any[] = isKdt ? (cfg.kdtFields || []) as any[] : cfg.form.fields as any[]
+        return raw.filter(field => field.type !== "info" && field.type !== "section_desc")
+    }
+    const updateGoogleSheetsSyncStatus = async (formConfigId: string | null, status: "sent"|"error", message: string) => {
+        if (!supa || !formConfigId) return
+        try {
+            const { data } = await supa.from("form_configs").select("config").eq("id", formConfigId).single()
+            const baseCfg = (data as any)?.config || cfg
+            const nextConfig = {
+                ...baseCfg,
+                integrations: {
+                    ...(baseCfg.integrations || {}),
+                    googleSheets: {
+                        ...(baseCfg.integrations?.googleSheets || {}),
+                        lastSyncStatus: status,
+                        lastSyncAt: new Date().toISOString(),
+                        lastSyncMessage: message
+                    }
+                }
+            }
+            await supa.from("form_configs").update({ config: nextConfig }).eq("id", formConfigId)
+        } catch {}
+    }
+
+    const sendGoogleSheetsIntegration = async (payload: Record<string, any>, formData: Array<{question: string; answer: any; answerKey: string}>, formConfigId: string | null) => {
+        const gs = cfg.integrations?.googleSheets
+        if (!gs?.enabled || !gs.webhookUrl) return
+        const answerRow = formData.reduce((acc: Record<string, any>, item) => {
+            acc[item.question || item.answerKey] = sheetAnswer(item.answer)
+            if (item.answerKey) acc[item.answerKey] = sheetAnswer(item.answer)
+            return acc
+        }, {})
+        const [date, time] = formatSheetDateTime()
+        const responseFields = getSheetResponseFields()
+        const columns = ["날짜", "시간", "이름", "전화번호", "이메일", ...responseFields.map(field => field.label || field.id)]
+        const row = {
+            "날짜": date,
+            "시간": time,
+            "이름": payload.name || "",
+            "전화번호": payload.phone || "",
+            "이메일": payload.email || "",
+            ...responseFields.reduce((acc: Record<string, any>, field: any) => {
+                acc[field.label || field.id] = sheetDisplayAnswer(answerRow[field.id] ?? answerRow[field.label])
+                return acc
+            }, {})
+        }
+        const body = {
+            integration: "google_sheets",
+            action: "append_response",
+            schema: "analytics_export_v1",
+            mode: gs.mode || "existing",
+            accountEmail: gs.accountEmail || "",
+            sheetUrl: gs.mode === "existing" ? (gs.sheetUrl || "") : "",
+            sheetName: gs.sheetName || cfg.header?.title || "CatchForm Responses",
+            formId: formConfigId || formId || "",
+            formSlug: formSlug || "",
+            formTitle: cfg.header?.title || "",
+            submittedAt: new Date().toISOString(),
+            columns,
+            row,
+            answers: formData.map(item => ({ ...item, answer: sheetAnswer(item.answer) })),
+        }
+        try {
+            await postAppsScriptPayload(gs.webhookUrl, body)
+            await updateGoogleSheetsSyncStatus(formConfigId, "sent", "최근 제출 응답을 Apps Script Web App URL로 전송했어요.")
+            trackEvent("sheet_sync", { metadata: { provider: "google_sheets", mode: gs.mode || "existing", status: "sent" } })
+        } catch (err) {
+            const message = (err as any)?.message || "Google Sheets 전송 요청에 실패했어요."
+            await updateGoogleSheetsSyncStatus(formConfigId, "error", message)
+            trackEvent("sheet_sync_failed", { metadata: { provider: "google_sheets", message } })
+        }
+    }
+
+    const handleSubmit = async () => {
+        // Validate
+        let hasErr = false
+        const newErrors: Record<string, string> = {}
+        for (const field of currentFields) {
+            if (field.type === "info" || field.type === "section_desc" as any) continue
+            const val = vals[field.id] || ""
+            const chk = checked[field.id] || []
+            const fs:any = fileObjects[field.id] || []
+            const hasFile = field.type === "file" && !!(Array.isArray(fs) ? fs : [fs]).filter(Boolean).length
+            if (field.required && !val && chk.length === 0 && !hasFile) {
+                newErrors[field.id] = "필수 입력 항목이에요."
+                hasErr = true
+            } else {
+                const err = validateField(field as any, val)
+                if (err) { newErrors[field.id] = err; hasErr = true }
+            }
+        }
+        setErrors(newErrors)
+        if (hasErr) return
+
+        // Check consents
+        const enabledConsents = cfg.consents.filter(c => c.enabled)
+        for (let i = 0; i < enabledConsents.length; i++) {
+            if (enabledConsents[i].required && !consentOk[i]) {
+                setErrors(p => ({ ...p, [`consent_${i}`]: "필수 동의 항목이에요." }))
+                return
+            }
+        }
+
+        setSubmitting(true)
+        setDupErr("")
+        trackEvent("submit_attempt", { page })
+
+        try {
+            if (!supa) { setDupErr("서버 연결 오류입니다."); setSubmitting(false); return }
+
+            // Determine table
+            const companyTypes = ["edu_biz", "company", "recruit"]
+            const isCompanyForm = companyTypes.includes(cfg.formType || "")
+            const tableName = isCompanyForm ? "company_applications" : "applications"
+
+            // Resolve form_configs.id from slug before uploads
+            let formConfigId: string | null = formId || null
+            if (!formConfigId && formSlug) {
+                const { data: fcRow } = await supa.from("form_configs").select("id").eq("slug", formSlug).single()
+                if (fcRow) formConfigId = fcRow.id
+            }
+
+            const uploadFieldFile = async (field: any) => {
+                const rawFiles:any = fileObjects[field.id] || []
+                const files:File[] = Array.isArray(rawFiles) ? rawFiles : rawFiles ? [rawFiles] : []
+                if (!files.length) return []
+                if (files.length > FILE_MAX_COUNT) throw new Error(`파일은 최대 ${FILE_MAX_COUNT}개까지 업로드할 수 있어요.`)
+                const tooLarge = files.find(file => file.size > FILE_MAX_SIZE)
+                if (tooLarge) throw new Error(`${tooLarge.name} 파일이 ${FILE_MAX_SIZE_MB}MB를 초과했어요.`)
+                const safeKeySegment = (v: any, fallback = "file") => {
+                    const raw = String(v || "").normalize("NFKD")
+                    const ascii = raw.replace(/[^\x00-\x7F]/g, "").replace(/[^A-Za-z0-9._-]/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "")
+                    return ascii || fallback
+                }
+                const getExt = (name: string) => {
+                    const m = String(name || "").match(/\.([A-Za-z0-9]{1,12})$/)
+                    return m ? "." + m[1].toLowerCase() : ""
+                }
+                const base = safeKeySegment(formConfigId || formSlug || "draft", "draft")
+                const sessionKey = safeKeySegment(getTrackingSessionId(), `session_${Date.now()}`)
+                const uploaded:any[] = []
+                for (const [idx, file] of files.entries()) {
+                    const ext = getExt(file.name)
+                    const stem = safeKeySegment(file.name.replace(/\.[^.]+$/, ""), `upload_${idx + 1}`)
+                    const safeName = `${stem.slice(0, 80)}${ext}`
+                    const path = `${base}/${sessionKey}/${Date.now()}_${safeKeySegment(field.id, "field")}_${idx + 1}_${safeName}`
+                    const { error: uploadErr } = await supa.storage
+                        .from("form-uploads")
+                        .upload(path, file, { cacheControl: "3600", upsert: false, contentType: file.type || undefined })
+                    if (uploadErr) throw new Error(`파일 업로드 실패: ${file.name} (${uploadErr.message})`)
+                    const { data: pub } = supa.storage.from("form-uploads").getPublicUrl(path)
+                    uploaded.push({
+                        name: file.name,
+                        url: pub?.publicUrl || "",
+                        path,
+                        bucket: "form-uploads",
+                        size: file.size,
+                        type: file.type || "application/octet-stream"
+                    })
+                }
+                return uploaded
+            }
+
+            // User-ID based dup check — only when login is required
+            let currentUserId = ""
+            if (cfg.auth?.enabled) {
+                const { data: sessionData2 } = await supa.auth.getUser()
+                currentUserId = sessionData2?.user?.id || authUser?.id || ""
+                if (currentUserId && formConfigId) {
+                    const { data: dup } = await supa.from(tableName).select("id")
+                        .eq("user_id", currentUserId)
+                        .eq("form_id", formConfigId)
+                        .limit(1)
+                    if (dup && dup.length > 0) {
+                        setDupErr(cfg.form.dupText || "이미 신청하셨어요.")
+                        setShowDupModal(true)
+                        setSubmitting(false)
+                        return
+                    }
+                }
+            }
+
+            // Direct columns for applications table
+            const APP_DIRECT = ["name", "phone", "email"]
+            // Extra direct cols only for company_applications
+            const COMPANY_EXTRA_DIRECT = ["manager_name", "privacy_consent"]
+            // referral field IDs that map to referral_source column
+            const REFERRAL_IDS = ["referral", "referral_source", "referral_route"]
+
+            // Build payload
+            const payload: Record<string, any> = {}
+            const form_data: Array<{question: string; answer: any; answerKey: string}> = []
+
+            const allFields = isKdt ? (cfg.kdtFields || []) as any[] : cfg.form.fields
+
+            for (const field of allFields) {
+                if (field.type === "info" || (field.type as any) === "section_desc") continue
+                const fid = field.id as string
+                const label = field.label as string
+                const answer: any = field.type === "file" ? await uploadFieldFile(field) : getFieldAnswer(field)
+
+                const hasValue = Array.isArray(answer) ? answer.length > 0 : answer !== ""
+
+                // name, phone, email → direct column
+                if (APP_DIRECT.includes(fid)) {
+                    payload[fid] = answer
+                }
+                // referral → referral_source column
+                if (REFERRAL_IDS.includes(fid)) {
+                    payload.referral_source = answer
+                }
+                // company-only direct cols
+                if (isCompanyForm && COMPANY_EXTRA_DIRECT.includes(fid)) {
+                    payload[fid] = answer
+                }
+
+                // All fields go into form_data (except company-only direct cols)
+                const skipFromFormData = isCompanyForm && COMPANY_EXTRA_DIRECT.includes(fid)
+                if (!skipFromFormData && hasValue) {
+                    form_data.push({ question: label, answer, answerKey: fid })
+                }
+            }
+
+            // Add consent answers to form_data, route privacy_consent to column
+            const PRIVACY_CONSENT_KEY = "privacy_consent"
+            const MARKETING_KEYS = ["marketing_consent", "마케팅 정보 수신 동의", "마케팅 정보 수신"]
+            let marketingAgreed = false
+            const enabledConsents2 = cfg.consents.filter(c => c.enabled)
+            enabledConsents2.forEach((cs, i) => {
+                const isPrivacy = (cs as any).consentType === "privacy_consent"
+                    || cs.title === "개인정보 수집 및 이용동의"
+                const isMarketing = (cs as any).consentType === "marketing_consent"
+                    || MARKETING_KEYS.some(k => (cs.title || "").includes(k))
+                const answerKey = (cs as any).consentType || (isPrivacy ? "privacy_consent" : isMarketing ? "marketing_consent" : `consent_${i}`)
+                // Always add to form_data
+                form_data.push({
+                    question: cs.title || cs.checkLabel,
+                    answer: consentOk[i] ? "동의" : "미동의",
+                    answerKey
+                })
+                // Only privacy_consent goes to dedicated boolean column
+                if (isPrivacy) payload[PRIVACY_CONSENT_KEY] = consentOk[i] === true
+                // Track marketing consent
+                if (isMarketing && consentOk[i]) marketingAgreed = true
+            })
+
+            if (form_data.length > 0) payload.form_data = form_data
+
+            // Meta fields
+            if (cfg.header?.programId) payload.program_id = cfg.header.programId
+            if (cfg.brand) payload.brand = cfg.brand
+            // user_id from logged-in user only when auth is enabled
+            // application_type: auto for alert/kdt, custom for others
+            if (cfg.formType === "alert") payload.application_type = "pre"
+            else if (cfg.formType === "kdt") payload.application_type = "formal"
+            else if (cfg.header?.applicationType) payload.application_type = cfg.header.applicationType
+
+            // Phone value
+            const phoneVal = (payload.phone || vals["phone"] || vals["contact_phone"] || "").replace(/-/g, "")
+            if (!payload.phone && phoneVal) payload.phone = phoneVal
+
+            if (formConfigId) payload.form_id = formConfigId
+
+            if (cfg.auth?.enabled && currentUserId) {
+                payload.user_id = currentUserId
+            }
+
+            const { error: insertErr } = await supa.from(tableName).insert(payload)
+            if (insertErr) {
+                setDupErr("제출 중 오류가 발생했어요. (" + insertErr.message + ")")
+                setSubmitting(false)
+                return
+            }
+            await sendGoogleSheetsIntegration(payload, form_data, formConfigId)
+
+            // Update sms_consent in users table if marketing was agreed
+            if (cfg.auth?.enabled && marketingAgreed) {
+                const { data: sessionData } = await supa.auth.getUser()
+                const uid = sessionData?.user?.id || authUser?.id
+                if (uid) {
+                    const { data: userRow } = await supa.from("users").select("metadata").eq("id", uid).single()
+                    const currentMeta = (userRow as any)?.metadata || {}
+                    await supa.from("users").update({
+                        metadata: { ...currentMeta, sms_consent: true }
+                    }).eq("id", uid)
+                }
+            }
+
+            trackEvent("completed", { page: formPages })
+            setShareCopied(false)
+            setShowModal(true)
+        } catch (submitErr) {
+            const msg = (submitErr as any)?.message || "알 수 없는 오류가 발생했어요."
+            setDupErr("제출 중 오류가 발생했어요. (" + msg + ")")
+        }
+        setSubmitting(false)
+    }
+
+    const handleAuthLogin = async () => {
+        if (!supa || !authEmail.trim() || !authPw) { setAuthErr("이메일과 비밀번호를 입력해주세요."); return }
+        setAuthLoading(true); setAuthErr("")
+        const { data, error } = await supa.auth.signInWithPassword({ email: authEmail.trim(), password: authPw })
+        setAuthLoading(false)
+        if (error) { setAuthErr("이메일 또는 비밀번호가 올바르지 않아요."); return }
+        setAuthUser(data.user)
+        setShowAuthModal(false)
+    }
+
+    const renderField = (field: FormField | KdtField, i: number) => {
+        const f = field as FormField
+        if ((f.type as any) === "section_desc") {
+            return <div key={f.id} style={{ padding: "14px 16px", borderRadius: fr, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`, marginBottom: qg }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: FC.t1, marginBottom: (f as any).desc ? 6 : 0 }}>{f.label}</div>
+                {(f as any).desc && <div style={{ fontSize: 12.5, color: FC.t3, lineHeight: 1.7, whiteSpace: "pre-line" }}>{(f as any).desc}</div>}
+            </div>
+        }
+
+        const val = vals[f.id] || ""
+        const fieldErr = errors[f.id]
+
+        // Helpers
+        const rawH: any[] = (f.helpers && f.helpers.length) ? f.helpers : (f.helper ? [{ text: f.helper, callout: false }] : [])
+        const helpers: HelperItem[] = rawH.map(h => typeof h === "string" ? { text: h, callout: false } : h).filter(h => h.text?.trim())
+
+        const opts: Opt[] = getFieldOpts(f)
+        const cols = f.cols || 1
+
+        return <div key={f.id} style={{ marginBottom: qg }}>
+            {f.type !== "info" && <div style={{ fontSize: 13.5, fontWeight: 600, color: FC.t1, marginBottom: lg, lineHeight: 1.3, whiteSpace: "pre-line" }}>
+                {f.label}{f.required && <span style={{ color: accentBg, marginLeft: 3 }}>*</span>}
+            </div>}
+            {helpers.map((h, hi) => h.callout
+                ? <div key={hi} style={{ display: "flex", gap: 8, padding: "9px 12px", borderRadius: fr, background: accentBg + "0d", border: `1px solid ${accentBg}33`, marginBottom: 6 }}>
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, marginTop: 1 }}><circle cx="8" cy="8" r="6" stroke={accentBg} strokeWidth="1.4" /><path d="M8 7v4M8 5.5v.5" stroke={accentBg} strokeWidth="1.4" strokeLinecap="round" /></svg>
+                    <div style={{ fontSize: 12, color: accentBg, lineHeight: 1.6, fontWeight: 500 }} dangerouslySetInnerHTML={{ __html: mdToHtml(h.text) }} />
+                </div>
+                : <div key={hi} style={{ fontSize: 12, color: FC.t3, marginBottom: 4, lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: mdToHtml(h.text) }} />
+            )}
+
+            {/* Text */}
+            {(f.type === "text" || f.type === "name") && <input value={val} onChange={e => { setVal(f.id, e.target.value); clearErr(f.id) }} placeholder={f.placeholder || ""} style={{ ...inp, borderColor: fieldErr ? FC.red : FC.fieldBorder }}
+                onFocus={e => { trackFieldTouch(f); e.target.style.borderColor = accentBg }} onBlur={e => e.target.style.borderColor = fieldErr ? FC.red : FC.fieldBorder} />}
+
+            {/* Email */}
+            {f.type === "email" && <input value={val} onChange={e => { setVal(f.id, e.target.value); clearErr(f.id) }} placeholder={f.placeholder || "예) example@email.com"} style={{ ...inp, borderColor: fieldErr ? FC.red : FC.fieldBorder }}
+                onFocus={e => { trackFieldTouch(f); e.target.style.borderColor = accentBg }} onBlur={e => { e.target.style.borderColor = fieldErr ? FC.red : FC.fieldBorder; if (val && !isValidEmail(val)) setErr(f.id, "올바른 이메일 형식을 입력해주세요."); else clearErr(f.id) }} />}
+
+            {/* Phone */}
+            {(f.type as any) === "phone" && <input value={val} onChange={e => { const v = fmtPhone(e.target.value); setVal(f.id, v); clearErr(f.id) }} placeholder={f.placeholder || "예) 010-1234-5678"} inputMode="numeric" style={{ ...inp, borderColor: fieldErr ? FC.red : FC.fieldBorder }}
+                onFocus={e => { trackFieldTouch(f); e.target.style.borderColor = accentBg }} onBlur={e => { e.target.style.borderColor = fieldErr ? FC.red : FC.fieldBorder; if (val && !isValidPhone(val)) setErr(f.id, "올바른 휴대폰 번호를 입력해주세요."); else clearErr(f.id) }} />}
+
+            {/* Textarea */}
+            {f.type === "textarea" && <textarea value={val} onChange={e => { setVal(f.id, e.target.value); clearErr(f.id) }} placeholder={f.placeholder || ""}
+                style={{ width: "100%", minHeight: 90, background: FC.fieldBg, border: `1px solid ${fieldErr ? FC.red : FC.fieldBorder}`, borderRadius: fr, color: FC.t1, fontFamily: FONT, fontSize: 13, padding: "10px 13px", outline: "none", resize: "vertical", boxSizing: "border-box", lineHeight: 1.6, transition: "border .15s" }}
+                onFocus={e => { trackFieldTouch(f); e.target.style.borderColor = accentBg }} onBlur={e => e.target.style.borderColor = fieldErr ? FC.red : FC.fieldBorder} />}
+
+            {/* Info */}
+            {f.type === "info" && <div style={{ borderRadius: fr, background: FC.fieldBg, overflow: "hidden" }}>
+                {(f as any).imageUrl && <div style={imageBoxStyle(f, 260, 0, FC.fieldBg)}>
+                    <img src={(f as any).imageUrl} alt={(f as any).imageCaption || ""} style={imageImgStyle(f)} />
+                </div>}
+                {(f.placeholder || !(f as any).imageUrl) && <div style={{ padding: (f as any).imageUrl ? "10px 14px" : "0", fontSize: 13, color: FC.t1, opacity: 0.75, lineHeight: 1.7, fontFamily: FONT }} dangerouslySetInnerHTML={{ __html: mdToHtml(f.placeholder || "") }} />}
+                {(f as any).imageCaption && (f as any).imageUrl && <div style={{ fontSize: 11.5, color: FC.t3, padding: "0 14px 10px", fontFamily: FONT }}>{(f as any).imageCaption}</div>}
+            </div>}
+
+            {/* Date */}
+            {f.type === "date" && (() => {
+                const today = new Date()
+                const parsed = val ? new Date(val) : null
+                const dy = dpY[f.id] ?? (parsed ? parsed.getFullYear() : today.getFullYear())
+                const dm = dpM[f.id] ?? (parsed ? parsed.getMonth() : today.getMonth())
+                const open = dpOpen[f.id] || false
+                const displayVal = parsed ? `${parsed.getFullYear()}년 ${parsed.getMonth() + 1}월 ${parsed.getDate()}일` : ""
+                const DAYS = ["일", "월", "화", "수", "목", "금", "토"]
+                const MONTHS = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
+                const firstDay = new Date(dy, dm, 1).getDay()
+                const daysInMonth = new Date(dy, dm + 1, 0).getDate()
+                const cells: Array<number | null> = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)]
+                const selectDate = (d: number) => {
+                    const dt = new Date(dy, dm, d)
+                    setVal(f.id, `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`)
+                    setDpOpen(p => ({ ...p, [f.id]: false }))
+                    clearErr(f.id)
+                }
+                const prevM = () => { if (dm === 0) { setDpY(p => ({ ...p, [f.id]: dy - 1 })); setDpM(p => ({ ...p, [f.id]: 11 })) } else setDpM(p => ({ ...p, [f.id]: dm - 1 })) }
+                const nextM = () => { if (dm === 11) { setDpY(p => ({ ...p, [f.id]: dy + 1 })); setDpM(p => ({ ...p, [f.id]: 0 })) } else setDpM(p => ({ ...p, [f.id]: dm + 1 })) }
+                return <div style={{ position: "relative", display: "inline-block" }}>
+                    <div onClick={() => setDpOpen(p => ({ ...p, [f.id]: !p[f.id] }))} style={{ height: fh, display: "inline-flex", alignItems: "center", gap: 10, padding: "0 14px", borderRadius: fr, border: `1px solid ${open ? accentBg : fieldErr ? FC.red : FC.fieldBorder}`, background: FC.fieldBg, cursor: "pointer", userSelect: "none", transition: "border .15s" }}>
+                        <span style={{ fontSize: 13, color: displayVal ? FC.t1 : FC.t3, fontFamily: FONT }}>{displayVal || "날짜를 선택해주세요"}</span>
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ color: FC.t3, flexShrink: 0 }}><rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.4" /><path d="M5 2v2M11 2v2M2 7h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+                    </div>
+                    {open && <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 200, background: FC.bg || "#fff", border: `1px solid ${FC.fieldBorder}`, borderRadius: 12, padding: 16, boxShadow: "0 8px 32px rgba(0,0,0,0.16)", minWidth: 280 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                            <button onClick={prevM} style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: FC.t2 }}>
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M10 4l-4 4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            </button>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: FC.t1, fontFamily: FONT }}>{dy}년 {MONTHS[dm]}</span>
+                            <button onClick={nextM} style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: FC.t2 }}>
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            </button>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", marginBottom: 4 }}>
+                            {DAYS.map((d, di) => <div key={d} style={{ textAlign: "center", fontSize: 11, fontWeight: 600, color: di === 0 ? "#FF5C5C" : di === 6 ? accentBg : FC.t3, padding: "4px 0", fontFamily: FONT }}>{d}</div>)}
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2 }}>
+                            {cells.map((d, ci) => {
+                                if (!d) return <div key={"e" + ci} />
+                                const dateStr = `${dy}-${String(dm + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`
+                                const isSel = val === dateStr
+                                const isToday = today.getFullYear() === dy && today.getMonth() === dm && today.getDate() === d
+                                const dow = (firstDay + d - 1) % 7
+                                return <button key={d} onClick={() => selectDate(d)} style={{ aspectRatio: "1", borderRadius: 8, border: isToday && !isSel ? `1.5px solid ${accentBg}` : "none", background: isSel ? accentBg : "transparent", color: isSel ? "#fff" : dow === 0 ? "#FF5C5C" : dow === 6 ? accentBg : FC.t1, fontFamily: FONT, fontSize: 12.5, fontWeight: isSel ? 700 : 400, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    {d}
+                                </button>
+                            })}
+                        </div>
+                        <div style={{ marginTop: 10, borderTop: `1px solid ${FC.fieldBorder}`, paddingTop: 10, display: "flex", justifyContent: "center", gap: 8 }}>
+                            <button onClick={() => { const t = today; setVal(f.id, `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`); setDpOpen(p => ({ ...p, [f.id]: false })) }}
+                                style={{ padding: "5px 20px", borderRadius: 8, border: `1px solid ${accentBg}44`, background: accentBg + "0f", color: accentBg, fontFamily: FONT, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>오늘</button>
+                            {val && <button onClick={() => { setVal(f.id, ""); setDpOpen(p => ({ ...p, [f.id]: false })) }}
+                                style={{ padding: "5px 14px", borderRadius: 8, border: `1px solid ${FC.fieldBorder}`, background: "transparent", color: FC.t3, fontFamily: FONT, fontSize: 12.5, cursor: "pointer" }}>초기화</button>}
+                        </div>
+                    </div>}
+                </div>
+            })()}
+
+            {/* Time */}
+            {f.type === "time" && (() => {
+                const ampm = vals[f.id + "_ampm"] || "오전"
+                const hh = vals[f.id + "_h"] || ""
+                const mm = vals[f.id + "_m"] || ""
+                const hours = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0"))
+                const mins = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"))
+                const boxS: React.CSSProperties = { position: "relative", width: 80, flexShrink: 0 }
+                const inpT: React.CSSProperties = { width: "100%", height: fh, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`, borderRadius: fr, color: FC.t1, fontFamily: FONT, fontSize: 14, padding: "0 28px 0 12px", outline: "none", cursor: "text", boxSizing: "border-box", transition: "border .15s" }
+                return <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <div style={{ display: "flex", borderRadius: fr, border: `1px solid ${FC.fieldBorder}`, overflow: "hidden", flexShrink: 0 }}>
+                        {["오전", "오후"].map(v => <button key={v} onClick={() => setVal(f.id + "_ampm", v)} style={{ height: fh, padding: "0 12px", border: "none", background: ampm === v ? accentBg : FC.fieldBg, color: ampm === v ? "#fff" : FC.t2, fontFamily: FONT, fontSize: 13, fontWeight: ampm === v ? 700 : 400, cursor: "pointer" }}>{v}</button>)}
+                    </div>
+                    <div style={boxS}>
+                        <input value={hh} onChange={e => { const v = e.target.value.replace(/\D/g, ""); if (v === "" || Number(v) <= 12) setVal(f.id + "_h", v) }} onBlur={e => { if (hh && Number(hh) >= 1) setVal(f.id + "_h", String(Number(hh)).padStart(2, "0")) }} placeholder="시" maxLength={2} style={inpT} inputMode="numeric" />
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: FC.t3 }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        <select value={hh} onChange={e => setVal(f.id + "_h", e.target.value)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }}>
+                            <option value="">시</option>{hours.map(h => <option key={h} value={h}>{h}</option>)}
+                        </select>
+                    </div>
+                    <span style={{ color: FC.t3, fontWeight: 700, fontSize: 16, flexShrink: 0 }}>:</span>
+                    <div style={boxS}>
+                        <input value={mm} onChange={e => { const v = e.target.value.replace(/\D/g, ""); if (v === "" || Number(v) <= 59) setVal(f.id + "_m", v) }} onBlur={e => { if (mm !== "") setVal(f.id + "_m", String(Number(mm)).padStart(2, "0")) }} placeholder="분" maxLength={2} style={inpT} inputMode="numeric" />
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: FC.t3 }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        <select value={mm} onChange={e => setVal(f.id + "_m", e.target.value)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }}>
+                            <option value="">분</option>{mins.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                    </div>
+                </div>
+            })()}
+
+            {/* Dropdown */}
+            {f.type === "dropdown" && (() => {
+                const open = dropOpen[f.id] || false
+                const ddOpts: Opt[] = opts
+                const sel = ddOpts.find(o => o.value === val)
+                return <div style={{ position: "relative" }}>
+                    <div onClick={() => { trackFieldTouch(f); setDropOpen(p => ({ ...p, [f.id]: !p[f.id] })) }} style={{ ...inp, height: fh, display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", border: `1px solid ${open ? accentBg : fieldErr ? FC.red : FC.fieldBorder}` }}>
+                        <span style={{ fontSize: 13, color: sel ? FC.t1 : FC.t3, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sel?.label || f.placeholder || "선택해주세요."}</span>
+                        <span style={{ fontSize: 11, color: FC.t3, flexShrink: 0 }}>{open ? "▴" : "▾"}</span>
+                    </div>
+                    {open && <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: FC.bg || FC.fieldBg, border: `1px solid ${FC.fieldBorder}`, borderRadius: fr, maxHeight: 200, overflowY: "auto", zIndex: 50, boxShadow: "0 4px 16px rgba(0,0,0,0.12)" }}>
+                        {ddOpts.map(opt => {
+                            const s = opt.value === val
+                            return <div key={opt.value}
+                                onClick={() => { setVal(f.id, opt.value); setDropOpen(p => ({ ...p, [f.id]: false })); clearErr(f.id) }}
+                                onMouseEnter={e => { if (!s) (e.currentTarget as HTMLElement).style.background = accentBg + "0f" }}
+                                onMouseLeave={e => { if (!s) (e.currentTarget as HTMLElement).style.background = "transparent" }}
+                                style={{ padding: "9px 13px", cursor: "pointer", fontSize: 13, fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "space-between", background: s ? accentBg + "14" : "transparent", color: s ? accentBg : FC.t1, transition: "background .12s" }}>
+                                <span style={{ fontWeight: s ? 600 : 400 }}>{opt.label}</span>
+                                {s && <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8l4 4 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                            </div>
+                        })}
+                    </div>}
+                </div>
+            })()}
+
+            {/* Button Select */}
+            {f.type === "button_select" && (() => {
+                const selOpt = opts.find(o => o.value === val)
+                return <div>
+                    <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>
+                        {opts.map(opt => {
+                            const s = opt.value === val
+                            return <button key={opt.value} onClick={() => {
+                                trackFieldTouch(f)
+                                setVal(f.id, s ? "" : opt.value)
+                                clearErr(f.id)
+                                if (!s && opt.nextPage) {
+                                    if (opt.nextPage === 9999) setTimeout(() => { setShareCopied(false); setShowModal(true) }, 300)
+                                    else setTimeout(() => setPage(opt.nextPage!), 300)
+                                }
+                            }} style={{ padding: "10px 8px", borderRadius: fr, border: `1px solid ${s ? accentBg : FC.fieldBorder}`, background: s ? accentBg + "14" : "transparent", color: s ? accentBg : FC.t2, fontFamily: FONT, fontSize: 13, cursor: "pointer", fontWeight: s ? 700 : 400, textAlign: "center", whiteSpace: "pre-wrap", wordBreak: "keep-all" }}>
+                                {opt.label}
+                            </button>
+                        })}
+                    </div>
+                    {selOpt?.isEtc && <div style={{ marginTop: 8 }}>
+                        <input value={vals[f.id + "_etc"] || ""} onChange={e => setVal(f.id + "_etc", e.target.value)} placeholder={f.etcPh || "직접 입력해주세요."} style={inp} onFocus={e => e.target.style.borderColor = accentBg} onBlur={e => e.target.style.borderColor = FC.fieldBorder} />
+                    </div>}
+                </div>
+            })()}
+
+            {/* Checkbox */}
+            {f.type === "checkbox" && (() => {
+                const checkedVals = checked[f.id] || []
+                const etcOpt = opts.find(opt => opt.isEtc && checkedVals.includes(opt.value))
+                return <div>
+                    <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>
+                        {opts.map(opt => {
+                            const isChk = checkedVals.includes(opt.value)
+                            return <div key={opt.value} onClick={() => { trackFieldTouch(f); setChecked(p => { const cur = p[f.id] || []; return { ...p, [f.id]: isChk ? cur.filter(v => v !== opt.value) : [...cur, opt.value] } }); clearErr(f.id) }} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                                <div style={{ width: 18, height: 18, borderRadius: 4, border: `1px solid ${isChk ? accentBg : FC.fieldBorder}`, background: isChk ? accentBg : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .15s" }}>
+                                    {isChk && <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                                </div>
+                                <span style={{ fontSize: 13, color: FC.t1, fontFamily: FONT }}>{opt.label}</span>
+                            </div>
+                        })}
+                    </div>
+                    {etcOpt && <div style={{ marginTop: 8 }}>
+                        <input value={vals[f.id + "_etc"] || ""} onChange={e => { setVal(f.id + "_etc", e.target.value); clearErr(f.id) }} placeholder={f.etcPh || "직접 입력해주세요."} style={inp} onFocus={e => e.target.style.borderColor = accentBg} onBlur={e => e.target.style.borderColor = FC.fieldBorder} />
+                    </div>}
+                </div>
+            })()}
+
+            {/* File */}
+            {f.type === "file" && (() => {
+                const rawNames:any = fileNames[f.id] || []
+                const names = Array.isArray(rawNames) ? rawNames : rawNames ? [rawNames] : []
+                const hasFiles = names.length > 0
+                return <div>
+                    <label htmlFor={`file_${f.id}`} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, height: fh, borderRadius: fr, border: `1.5px dashed ${hasFiles ? accentBg : FC.fieldBorder}`, background: hasFiles ? accentBg + "0a" : FC.fieldBg, cursor: "pointer", fontFamily: FONT, fontSize: 13, color: hasFiles ? accentBg : FC.t3, fontWeight: 500 }}>
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 11V5M5.5 7.5L8 5l2.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /><path d="M3 11.5A2.5 2.5 0 0 0 5.5 14h5A2.5 2.5 0 0 0 13 11.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                        {hasFiles ? `${names.length}개 파일 선택됨` : f.placeholder || "파일 업로드"}
+                    </label>
+                    <div style={{fontSize:11.5,color:FC.t3,marginTop:6,fontFamily:FONT}}>{FILE_LIMIT_TEXT}</div>
+                    <input id={`file_${f.id}`} type="file" multiple style={{ display: "none" }} onChange={e => {
+                        const picked = Array.from(e.target.files || [])
+                        if (picked.length) {
+                            const rawCurrent:any = fileObjects[f.id] || []
+                            const current:File[] = Array.isArray(rawCurrent) ? rawCurrent : rawCurrent ? [rawCurrent] : []
+                            const tooLarge = picked.find(file => file.size > FILE_MAX_SIZE)
+                            if (tooLarge) {
+                                setErr(f.id, `${tooLarge.name} 파일이 ${FILE_MAX_SIZE_MB}MB를 초과했어요.`)
+                                e.target.value = ""
+                                return
+                            }
+                            if (current.length + picked.length > FILE_MAX_COUNT) {
+                                setErr(f.id, `파일은 최대 ${FILE_MAX_COUNT}개까지 업로드할 수 있어요.`)
+                                e.target.value = ""
+                                return
+                            }
+                            const next = [...current, ...picked]
+                            trackFieldTouch(f)
+                            setFileNames(p => ({ ...p, [f.id]: next.map(file => file.name) }))
+                            setFileObjects(p => ({ ...p, [f.id]: next }))
+                            clearErr(f.id)
+                        }
+                        e.target.value = ""
+                    }} />
+                    {hasFiles && <div style={{display:"flex",flexDirection:"column",gap:5,marginTop:7}}>
+                        {names.map((name, fileIdx) => <div key={`${name}_${fileIdx}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", borderRadius: fr, background: accentBg + "10", border: `1px solid ${accentBg}33` }}>
+                            <span style={{ fontSize: 12, color: accentBg, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                            <button onClick={() => {
+                                setFileNames(p => { const cur:any = p[f.id] || []; const arr = Array.isArray(cur) ? cur : cur ? [cur] : []; return { ...p, [f.id]: arr.filter((_, i) => i !== fileIdx) } })
+                                setFileObjects(p => { const cur:any = p[f.id] || []; const arr = Array.isArray(cur) ? cur : cur ? [cur] : []; return { ...p, [f.id]: arr.filter((_, i) => i !== fileIdx) } })
+                            }} style={{ fontSize: 13, color: accentBg, border: "none", background: "none", cursor: "pointer", padding: "0 0 0 8px", flexShrink: 0, lineHeight: 1 }}>×</button>
+                        </div>)}
+                    </div>}
+                </div>
+            })()}
+
+            {fieldErr && <div style={{ fontSize: 12, color: FC.red, marginTop: 5, fontFamily: FONT }}>{fieldErr}</div>}
+        </div>
+    }
+
+    const enabledConsents = cfg.consents.filter(c => c.enabled)
+
+    // Apply background to entire page
+    React.useEffect(() => {
+        document.body.style.background = FC.bg
+        document.body.style.margin = "0"
+        document.documentElement.style.background = FC.bg
+        return () => {
+            document.body.style.background = ""
+            document.documentElement.style.background = ""
+        }
+    }, [FC.bg])
+
+    React.useEffect(() => {
+        if (!cfg.auth?.enabled || !supa) return
+        supa.auth.getUser().then(({ data }) => {
+            if (data?.user) setAuthUser(data.user)
+            else setShowAuthModal(true)
+        })
+    }, [cfg.auth?.enabled, supa])
+
+    return (
+        <div style={{ width: "100%", minHeight: "100vh", background: FC.bg, color: FC.t1, "--link-color": accentBg } as React.CSSProperties}>
+            <style>{`@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css'); body,html{background:${FC.bg}!important;margin:0;}`}</style>
+            <button onClick={() => setShareMenuOpen(v => !v)} title="폼 공유하기"
+                style={{ position: "fixed", right: 20, bottom: 20, zIndex: 900, height: 44, padding: "0 15px", borderRadius: 999, border: `1px solid ${accentBg}33`, background: accentBg, color: cfg.cta.color || "#fff", boxShadow: "0 10px 28px rgba(0,0,0,0.18)", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontFamily: FONT, fontSize: 13.5, fontWeight: 800 }}>
+                <svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M8 10V2.8M5.3 5.5 8 2.8l2.7 2.7M3 7.5v4.8c0 .7.5 1.2 1.2 1.2h7.6c.7 0 1.2-.5 1.2-1.2V7.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                공유
+            </button>
+            {shareMenuOpen && <div style={{ position: "fixed", right: 20, bottom: 72, zIndex: 901, width: 190, padding: 8, borderRadius: 16, border: `1px solid ${FC.fieldBorder}`, background: FC.bg, boxShadow: "0 14px 36px rgba(0,0,0,0.2)" }}>
+                <button onClick={shareKakao} style={shareMenuButtonStyle}><ShareIcon type="kakao" />카카오톡</button>
+                <button onClick={shareInstagramStory} style={shareMenuButtonStyle}><ShareIcon type="instagram" />인스타그램 스토리</button>
+                <button onClick={shareThreads} style={shareMenuButtonStyle}><ShareIcon type="threads" />스레드</button>
+                <button onClick={shareToX} style={shareMenuButtonStyle}><ShareIcon type="x" />X</button>
+                <div style={{height:1,background:FC.fieldBorder,margin:"6px 2px"}} />
+                <button onClick={() => copyShareUrl()} style={shareMenuButtonStyle}><ShareIcon type="link" />{shareCopied ? "복사 완료" : "URL 복사"}</button>
+            </div>}
+            {/* Auth modal */}
+            {cfg.auth?.enabled && showAuthModal && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 }}>
+                <div style={{ background: FC.bg || "#fff", borderRadius: 16, padding: "32px 28px", width: "min(360px,90%)", boxShadow: "0 8px 40px rgba(0,0,0,0.3)" }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: FC.t1, marginBottom: 6, fontFamily: FONT }}>로그인이 필요해요</div>
+                    <div style={{ fontSize: 13, color: FC.t3, marginBottom: 24, fontFamily: FONT }}>{cfg.auth.errText || "이 폼은 로그인 후 작성할 수 있어요."}</div>
+                    <div style={{ marginBottom: 12 }}>
+                        <input value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="이메일" type="email"
+                            style={{ width: "100%", height: 44, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`, borderRadius: fr, color: FC.t1, fontFamily: FONT, fontSize: 13, padding: "0 13px", outline: "none", boxSizing: "border-box" as const }} />
+                    </div>
+                    <div style={{ marginBottom: 16 }}>
+                        <input value={authPw} onChange={e => setAuthPw(e.target.value)} placeholder="비밀번호" type="password"
+                            onKeyDown={e => { if (e.key === "Enter") handleAuthLogin() }}
+                            style={{ width: "100%", height: 44, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`, borderRadius: fr, color: FC.t1, fontFamily: FONT, fontSize: 13, padding: "0 13px", outline: "none", boxSizing: "border-box" as const }} />
+                    </div>
+                    {authErr && <div style={{ fontSize: 12, color: FC.red, marginBottom: 12, fontFamily: FONT }}>{authErr}</div>}
+                    <button onClick={handleAuthLogin} disabled={authLoading}
+                        style={{ width: "100%", height: 48, borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight: 700, cursor: authLoading ? "not-allowed" : "pointer", opacity: authLoading ? 0.7 : 1 }}>
+                        {authLoading ? "로그인 중..." : "로그인"}
+                    </button>
+                    {cfg.auth.loginUrl && <div style={{ marginTop: 12, textAlign: "center" as const }}>
+                        <a href={cfg.auth.loginUrl} style={{ fontSize: 12, color: FC.t3, fontFamily: FONT }}>다른 방법으로 로그인</a>
+                    </div>}
+                </div>
+            </div>}
+            <div style={{ width: "100%", maxWidth: cfg.styles.maxW, margin: "0 auto", fontFamily: FONT, padding: "40px 20px 80px", boxSizing: "border-box" as const }}>
+
+            {/* Header image */}
+            {cfg.header.imageUrl && <div style={{ ...imageBoxStyle(cfg.header, 200, fr, FC.fieldBg), marginBottom: 22 }}>
+                <img src={cfg.header.imageUrl} alt="" style={imageImgStyle(cfg.header)} />
+            </div>}
+
+            {/* Header text */}
+            {(cfg.header.overline || cfg.header.title) && <div style={{ marginBottom: 24, textAlign: "center" as const }}>
+                {cfg.header.overline && <div style={{ fontSize: 12, fontWeight: 600, color: accentBg, marginBottom: 6, letterSpacing: "0.5px" }}>{cfg.header.overline}</div>}
+                {cfg.header.title && <div style={{ fontSize: 22, fontWeight: 600, color: FC.t1, lineHeight: 1.3, letterSpacing: "-0.5px" }}>{cfg.header.title}</div>}
+                {(cfg.header.educationStart || cfg.header.educationEnd) && <div style={{ fontSize: 13, color: FC.t2, marginTop: 8 }}>
+                    {fmtDateKo(cfg.header.educationStart)}{cfg.header.educationStart && cfg.header.educationEnd && " ~ "}{fmtDateKo(cfg.header.educationEnd)}
+                    {(cfg.header.tuitionFree || cfg.header.tuitionAmount) && <span style={{ margin: "0 8px", color: FC.t3 }}>|</span>}
+                    {cfg.header.tuitionFree ? cfg.header.tuitionFreeText || "수강료 전액 무료" : cfg.header.tuitionAmount ? `${cfg.header.tuitionAmount}원` : ""}
+                    {cfg.header.stipend && <><span style={{ margin: "0 8px", color: FC.t3 }}>|</span>{cfg.header.stipend}</>}
+                </div>}
+            </div>}
+
+            {/* Notice */}
+            {page === 1 && cfg.header.noticeEnabled && cfg.header.noticeText && <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 16px", borderRadius: (cfg.header.noticeShape || "pill") === "pill" ? 999 : 10, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`, fontSize: 12.5, color: FC.t2, lineHeight: 1.5 }}>
+                    {cfg.header.noticeIconEnabled && <span style={{ width: 17, height: 17, borderRadius: "50%", border: `1px solid ${FC.fieldBorder}`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, flexShrink: 0 }}>{cfg.header.noticeIconText}</span>}
+                    <span dangerouslySetInnerHTML={{ __html: mdToHtml(cfg.header.noticeText) }} />
+                </div>
+            </div>}
+
+            {/* Multi-page progress */}
+            {isMultiPage && <div style={{ marginBottom: qg }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <div style={{ flex: 1, height: 3, borderRadius: 2, background: FC.fieldBorder, overflow: "hidden" }}>
+                        <div style={{ height: "100%", borderRadius: 2, background: accentBg, width: `${(page / formPages) * 100}%`, transition: "width .35s" }} />
+                    </div>
+                    <span style={{ fontSize: 11, color: FC.t3, flexShrink: 0 }}>{page}/{formPages}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ width: 4, height: 18, borderRadius: 2, background: accentBg, flexShrink: 0 }} />
+                    <span style={{ fontSize: 15, fontWeight: 700, color: FC.t1, letterSpacing: "-0.2px" }}>{getPageLabel(page)}</span>
+                </div>
+            </div>}
+
+            {/* Fields */}
+            {currentFields.map((field, i) => renderField(field, i))}
+
+            {/* Consents (last page or single page) */}
+            {(!isMultiPage || isLastPage) && enabledConsents.map((cs, idx) => {
+                const lines = cs.body.split("\n")
+                const LIMIT = 3
+                const open = consentOpen[idx] || false
+                const needsAccordion = lines.length > LIMIT
+                const visible = needsAccordion && !open ? cs.body : cs.body
+                return <div key={idx} style={{ marginBottom: qg }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                        <div style={{ fontSize: 14, fontWeight: 900, color: FC.t1, display: "flex", alignItems: "center", gap: 3 }}>
+                            {cs.title}{cs.required && <span style={{ color: accentBg, fontSize: 14, fontWeight: 900 }}>*</span>}
+                        </div>
+                        {cs.policyUrl && <a href={cs.policyUrl} target="_blank" rel="noopener" style={{ fontSize: 12, fontWeight: 700, color: accentBg, textDecoration: "none", padding: "2px 9px", borderRadius: 5, border: `1px solid ${accentBg}44`, flexShrink: 0 }}>보기</a>}
+                    </div>
+                    <div style={{ borderTop: `1px solid ${FC.fieldBorder}`, paddingTop: 10, marginBottom: 10 }}>
+                        <div style={{ fontSize: 12, color: FC.t2, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: mdToHtml(visible) }} />
+                        {needsAccordion && <button onClick={() => setConsentOpen(p => { const n = [...p]; n[idx] = !n[idx]; return n })} style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4, background: "none", border: "none", cursor: "pointer", color: accentBg, fontFamily: FONT, fontSize: 11.5, fontWeight: 600, padding: 0 }}>
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .2s" }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            {open ? "접기" : "전체 보기"}
+                        </button>}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer" }} onClick={() => setConsentOk(p => { const n = [...p]; n[idx] = !n[idx]; return n })}>
+                        <div style={{ width: 16, height: 16, borderRadius: 4, border: `1px solid ${consentOk[idx] ? accentBg + "cc" : FC.fieldBorder}`, background: consentOk[idx] ? accentBg + "d9" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .15s" }}>
+                            {consentOk[idx] && <span style={{ color: "#fff", fontSize: 11, fontWeight: 900 }}>✓</span>}
+                        </div>
+                        <span style={{ fontSize: 13, color: FC.t2 }}>{cs.checkLabel}</span>
+                    </div>
+                    {errors[`consent_${idx}`] && <div style={{ fontSize: 12, color: FC.red, marginTop: 5, fontFamily: FONT }}>{errors[`consent_${idx}`]}</div>}
+                </div>
+            })}
+
+            {dupErr && !showDupModal && <div style={{ fontSize: 13, color: FC.red, textAlign: "center", marginBottom: 12, fontFamily: FONT }}>{dupErr}</div>}
+
+            {/* Navigation buttons */}
+            <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+                {isMultiPage && page > 1 && <button onClick={() => setPage(p => p - 1)} style={{ flex: 1, height: cfg.cta.height, borderRadius: fr, border: "none", background: FC.fieldBg || "#F2F4F6", color: FC.t2, fontFamily: FONT, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>이전</button>}
+                {isMultiPage && page < formPages
+                    ? <button
+                        disabled={!isPageComplete}
+                        onClick={() => setPage(p => p + 1)}
+                        style={{ flex: 2, height: cfg.cta.height, borderRadius: fr, border: "none", background: isPageComplete ? accentBg : accentBg + "55", color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight: 800, cursor: isPageComplete ? "pointer" : "not-allowed" }}>
+                        다음
+                      </button>
+                    : <button
+                        disabled={submitting || !isPageComplete}
+                        onClick={handleSubmit}
+                        style={{ flex: 2, height: cfg.cta.height, borderRadius: fr, border: "none", background: isPageComplete ? accentBg : accentBg + "55", color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight: 800, cursor: (submitting || !isPageComplete) ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1 }}>
+                        {submitting ? (cfg.cta.loadLabel || "제출 중...") : cfg.cta.label}
+                      </button>}
+            </div>
+
+            {/* Dup Modal */}
+            {showDupModal && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+                <div style={{ background: FC.bg || "#fff", borderRadius: 16, padding: "32px 28px", width: "min(340px,90%)", boxShadow: "0 8px 40px rgba(0,0,0,0.3)", textAlign: "center" as const }}>
+                    <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#FFF1F1", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </div>
+                    <div style={{ fontSize: 17, fontWeight: 700, color: FC.t1, marginBottom: 10, letterSpacing: "-0.3px", fontFamily: FONT }}>중복 신청 안내</div>
+                    <div style={{ fontSize: 13.5, color: FC.t2, lineHeight: 1.6, marginBottom: 24, fontFamily: FONT, whiteSpace: "pre-line" as const }}>
+                        {dupErr || "이미 신청 내역이 있어요."}
+                    </div>
+                    <button onClick={() => window.open("https://insideout.or.kr/program", "_blank")}
+                        style={{ width: "100%", height: 48, borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight: 700, cursor: "pointer", marginBottom: 10 }}>
+                        프로그램 더 보러가기
+                    </button>
+                    <button onClick={() => setShowDupModal(false)}
+                        style={{ width: "100%", height: 40, borderRadius: fr, border: `1px solid ${FC.fieldBorder}`, background: "transparent", color: FC.t2, fontFamily: FONT, fontSize: 13.5, cursor: "pointer" }}>
+                        닫기
+                    </button>
+                </div>
+            </div>}
+            {/* Modal */}
+            {showModal && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+                <div style={{ background: FC.bg || "#fff", borderRadius: 16, padding: "32px 28px", width: "min(320px,85%)", boxShadow: "0 8px 32px rgba(0,0,0,0.3)", textAlign: "center" }}>
+                    <div style={{ width: 48, height: 48, borderRadius: "50%", background: accentBg + "22", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke={accentBg} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    </div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: FC.t1, marginBottom: 8, letterSpacing: "-0.3px" }}>{cfg.modal.title}</div>
+                    {cfg.modal.body && <div style={{ fontSize: 13.5, color: FC.t2, lineHeight: 1.6, marginBottom: 16 }}>{cfg.modal.body}</div>}
+                    <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 18 }}>
+                        <button onClick={shareKakao} title="카카오톡 공유" style={shareButtonStyle}>
+                            <ShareIcon type="kakao" />
+                        </button>
+                        <button onClick={shareInstagramStory} title="인스타그램 스토리로 이동" style={shareButtonStyle}>
+                            <ShareIcon type="instagram" />
+                        </button>
+                        <button onClick={shareThreads} title="스레드 공유" style={shareButtonStyle}>
+                            <ShareIcon type="threads" />
+                        </button>
+                        <button onClick={shareToX} title="X 공유" style={shareButtonStyle}>
+                            <ShareIcon type="x" />
+                        </button>
+                        <button onClick={() => copyShareUrl(false)} title="URL 복사" style={shareButtonStyle}>
+                            <ShareIcon type="link" />
+                        </button>
+                    </div>
+                    {shareCopied && <div style={{fontSize:12,color:accentBg,fontWeight:700,marginTop:-10,marginBottom:12}}>URL이 복사됐어요.</div>}
+                    <button onClick={() => { if (cfg.modal.btnUrl) { if (cfg.modal.btnReplace) window.location.replace(cfg.modal.btnUrl); else window.location.href = cfg.modal.btnUrl } else setShowModal(false) }}
+                        style={{ width: "100%", height: 44, borderRadius: 8, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                        {cfg.modal.btnLabel || "확인"}
+                    </button>
+                </div>
+            </div>}
+        </div>
+        </div>
+    )
+}
