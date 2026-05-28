@@ -912,24 +912,27 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 setSubmitting(false)
                 return
             }
-            await sendGoogleSheetsIntegration(payload, form_data, formConfigId)
-
-            // Update sms_consent in users table if marketing was agreed
-            if (cfg.auth?.enabled && marketingAgreed) {
-                const { data: sessionData } = await supa.auth.getUser()
-                const uid = sessionData?.user?.id || authUser?.id
-                if (uid) {
-                    const { data: userRow } = await supa.from("users").select("metadata").eq("id", uid).single()
-                    const currentMeta = (userRow as any)?.metadata || {}
-                    await supa.from("users").update({
-                        metadata: { ...currentMeta, sms_consent: true }
-                    }).eq("id", uid)
-                }
-            }
 
             trackEvent("completed", { page: formPages })
             setShareCopied(false)
             setShowModal(true)
+
+            void (async () => {
+                await sendGoogleSheetsIntegration(payload, form_data, formConfigId)
+
+                // Update sms_consent in users table if marketing was agreed
+                if (cfg.auth?.enabled && marketingAgreed) {
+                    const { data: sessionData } = await supa.auth.getUser()
+                    const uid = sessionData?.user?.id || authUser?.id
+                    if (uid) {
+                        const { data: userRow } = await supa.from("users").select("metadata").eq("id", uid).single()
+                        const currentMeta = (userRow as any)?.metadata || {}
+                        await supa.from("users").update({
+                            metadata: { ...currentMeta, sms_consent: true }
+                        }).eq("id", uid)
+                    }
+                }
+            })().catch(() => {})
         } catch (submitErr) {
             const msg = (submitErr as any)?.message || "알 수 없는 오류가 발생했어요."
             setDupErr("제출 중 오류가 발생했어요. (" + msg + ")")

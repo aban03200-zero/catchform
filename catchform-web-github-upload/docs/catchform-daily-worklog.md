@@ -10,6 +10,7 @@
 - Google Apps Script 시트 전송을 브라우저 직접 호출에서 Next.js 서버 API(`/api/google-sheets`) 경유 방식으로 변경
 - 폼 제출 후 `script.google.com` JSON 응답 화면이 새 창/현재 창에 노출될 수 있는 경로를 제거
 - Framer처럼 Next API가 없는 환경에서는 숨은 iframe/form 제출 대신 `no-cors` fetch로만 전송하도록 fallback 변경
+- 폼 제출 성공 모달은 응답 저장 직후 바로 띄우고, Google Sheets 전송/마케팅 동의 메타데이터 업데이트는 백그라운드 처리로 전환
 
 ### 확인 필요
 
