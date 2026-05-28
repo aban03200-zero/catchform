@@ -454,14 +454,28 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         trackEvent("share", { metadata: { channel: "Twitter", href: url } })
     }
 
-    const shareButtonStyle: React.CSSProperties = { width: 40, height: 40, borderRadius: 12, border: `1px solid ${FC.fieldBorder}`, background: FC.fieldBg, color: FC.t1, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontWeight:600, fontSize: 13 }
+    const shareButtonStyle: React.CSSProperties = { width: "clamp(48px, 13vw, 76px)", aspectRatio: "1 / 1", borderRadius: "50%", border: "none", background: "#F2F4F7", color: "#000", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontWeight:600, fontSize: 13, flexShrink: 0 }
     const shareMenuButtonStyle: React.CSSProperties = { width: "100%", height: 38, border: "none", background: "transparent", color: FC.t1, display: "flex", alignItems: "center", gap: 10, padding: "0 10px", borderRadius: 10, cursor: "pointer", fontFamily: FONT, fontSize: 13, fontWeight:600, textAlign: "left" as const }
-    const ShareIcon = ({type}:{type:"kakao"|"instagram"|"threads"|"x"|"link"}) => {
-        if(type==="kakao")return <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 3C5.3 3 2.3 5.3 2.3 8.1c0 1.8 1.2 3.3 3 4.2l-.5 2.1 2.3-1.4c.6.1 1.2.2 1.9.2 3.7 0 6.7-2.3 6.7-5.1S12.7 3 9 3z" stroke="currentColor" strokeWidth="1.55" strokeLinejoin="round"/></svg>
-        if(type==="instagram")return <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="3" y="3" width="12" height="12" rx="4" stroke="currentColor" strokeWidth="1.6"/><circle cx="9" cy="9" r="2.6" stroke="currentColor" strokeWidth="1.6"/><circle cx="12.7" cy="5.4" r=".8" fill="currentColor"/></svg>
-        if(type==="threads")return <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M12.7 8.1c-.4-2-1.9-3.1-4-3.1-2.5 0-4.1 1.8-4.1 4s1.6 4 4.4 4c2.3 0 3.9-1.2 3.9-3 0-1.5-1.1-2.4-3-2.4-1.5 0-2.6.7-2.6 1.8 0 .9.7 1.5 1.8 1.5 1.6 0 2.5-1 2.5-2.8" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round"/></svg>
-        if(type==="link")return <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M7.6 10.4a3 3 0 0 0 4.2 0l1.6-1.6a3 3 0 0 0-4.2-4.2l-.7.7M10.4 7.6a3 3 0 0 0-4.2 0L4.6 9.2a3 3 0 0 0 4.2 4.2l.7-.7" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3 3 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+    const ShareIcon = ({type,size=18}:{type:"kakao"|"instagram"|"threads"|"x"|"link";size?:number}) => {
+        if(type==="kakao")return <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <path d="M24 9C13.5 9 5.5 15.2 5.5 23c0 5 3.5 9.4 8.8 11.9l-1.7 7 7.6-4.4c1.2.2 2.5.3 3.8.3 10.5 0 18.5-6.2 18.5-14.8S34.5 9 24 9z" fill="currentColor"/>
+            <text x="24" y="27.5" textAnchor="middle" fontFamily="Arial, Helvetica, sans-serif" fontSize="11.5" fontWeight="800" fill="#fff" letterSpacing="-0.7">TALK</text>
+        </svg>
+        if(type==="instagram")return <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <rect x="9" y="9" width="30" height="30" rx="9" fill="currentColor"/>
+            <circle cx="24" cy="24" r="7.1" stroke="#fff" strokeWidth="4.2"/>
+            <circle cx="32.3" cy="15.9" r="2.8" fill="#fff"/>
+        </svg>
+        if(type==="threads")return <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <path d="M32.5 21.4c-.9-7.1-6-11.5-13.4-11.5C10.7 9.9 5 15.8 5 23.7 5 31.9 11 38 20.5 38c7.8 0 13-4 13-10.2 0-5.4-4.2-8.7-11.2-8.7-5.6 0-9.1 2.5-9.1 6.1 0 3.1 2.5 5.1 6.1 5.1 5.1 0 7.9-3.3 7.9-8.4" stroke="currentColor" strokeWidth="4.6" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M30.6 12.4c6.7 2.1 10.8 7.8 11 15.3" stroke="currentColor" strokeWidth="4.6" strokeLinecap="round"/>
+        </svg>
+        if(type==="link")return <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <path d="M19.6 28.4a8 8 0 0 0 11.3 0l6.2-6.2A8 8 0 0 0 25.8 10.9l-3.4 3.4M28.4 19.6a8 8 0 0 0-11.3 0l-6.2 6.2a8 8 0 0 0 11.3 11.3l3.4-3.4" stroke="currentColor" strokeWidth="5.2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        return <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <path d="M8 8l32 32M40 8 8 40" stroke="currentColor" strokeWidth="5.8" strokeLinecap="square"/>
+        </svg>
     }
 
     const trackFieldTouch = (field: any) => {
@@ -1402,27 +1416,27 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             </div>}
             {/* Modal */}
             {showModal && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-                <div style={{ background: FC.bg || "#fff", borderRadius: 16, padding: "32px 28px", width: "min(320px,85%)", boxShadow: "0 8px 32px rgba(0,0,0,0.3)", textAlign: "center" }}>
+                <div style={{ background: FC.bg || "#fff", borderRadius: 16, padding: "32px 28px", width: "min(560px,calc(100% - 32px))", boxShadow: "0 8px 32px rgba(0,0,0,0.3)", textAlign: "center" }}>
                     <div style={{ width: 48, height: 48, borderRadius: "50%", background: accentBg + "22", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke={accentBg} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </div>
                     <div style={{ fontSize: 18, fontWeight:600, color: FC.t1, marginBottom: 8, letterSpacing: "-0.3px" }}>{cfg.modal.title}</div>
                     {cfg.modal.body && <div style={{ fontSize: 13.5, color: FC.t2, lineHeight: 1.6, marginBottom: 16 }}>{cfg.modal.body}</div>}
-                    <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 18 }}>
+                    <div style={{ display: "flex", justifyContent: "center", gap: "clamp(8px, 2.2vw, 18px)", marginBottom: 22 }}>
                         <button onClick={shareKakao} title="카카오톡 공유" style={shareButtonStyle}>
-                            <ShareIcon type="kakao" />
+                            <ShareIcon type="kakao" size={40} />
                         </button>
                         <button onClick={shareInstagramStory} title="인스타그램 스토리로 이동" style={shareButtonStyle}>
-                            <ShareIcon type="instagram" />
+                            <ShareIcon type="instagram" size={40} />
                         </button>
                         <button onClick={shareThreads} title="스레드 공유" style={shareButtonStyle}>
-                            <ShareIcon type="threads" />
+                            <ShareIcon type="threads" size={42} />
                         </button>
                         <button onClick={shareToX} title="X 공유" style={shareButtonStyle}>
-                            <ShareIcon type="x" />
+                            <ShareIcon type="x" size={38} />
                         </button>
                         <button onClick={() => copyShareUrl(false)} title="URL 복사" style={shareButtonStyle}>
-                            <ShareIcon type="link" />
+                            <ShareIcon type="link" size={39} />
                         </button>
                     </div>
                     {shareCopied && <div style={{fontSize:12,color:accentBg,fontWeight:600,marginTop:-10,marginBottom:12}}>URL이 복사됐어요.</div>}
