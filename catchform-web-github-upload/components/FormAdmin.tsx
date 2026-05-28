@@ -78,13 +78,14 @@ const FILE_LIMIT_TEXT = `최대 ${FILE_MAX_COUNT}개, 파일당 ${FILE_MAX_SIZE_
 const FORM_SUMMARY_SELECT = "id,name,slug,updated_at,brand,config_brand:config->>brand,header_title:config->header->>title,program_id:config->header->>programId"
 const DEFAULT_GOOGLE_SHEETS = {enabled:false,mode:"existing" as const,accountEmail:"",sheetUrl:"",sheetName:"",webhookUrl:"",lastSyncStatus:"idle" as const,lastSyncAt:"",lastSyncMessage:""}
 function postAppsScriptPayload(url:string,payload:any){
+  const directPost=()=>fetch(url,{method:"POST",mode:"no-cors",body:new URLSearchParams({payload:JSON.stringify(payload)}).toString(),headers:{"content-type":"application/x-www-form-urlencoded;charset=UTF-8"}}).then(()=>{})
   return fetch("/api/google-sheets",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({webhookUrl:url,payload})}).then(async(res)=>{
-    if(!res.ok){
-      let message="Google Sheets 전송 요청에 실패했어요."
-      try{const data=await res.json(); if(data?.error) message=data.error}catch{}
-      throw new Error(message)
-    }
-  })
+    if(res.ok)return
+    if(res.status===404)return directPost()
+    let message="Google Sheets 전송 요청에 실패했어요."
+    try{const data=await res.json(); if(data?.error) message=data.error}catch{}
+    throw new Error(message)
+  }).catch(err=>{if(typeof window!=="undefined")return directPost();throw err})
 }
 
 // ─── Static data ──────────────────────────────────────────────────────────

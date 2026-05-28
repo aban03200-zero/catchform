@@ -68,19 +68,29 @@ const imageFit = (img: any) => img?.imageFit === "cover" ? "cover" : "contain"
 const imagePos = (img: any) => `${img?.imagePosX ?? 50}% ${img?.imagePosY ?? 50}%`
 const cropNumber = (v: any, d: number, min: number, max: number) => Math.max(min, Math.min(max, Number.isFinite(Number(v)) ? Number(v) : d))
 function postAppsScriptPayload(url: string, payload: any) {
+    const directPost = () => fetch(url, {
+        method: "POST",
+        mode: "no-cors",
+        body: new URLSearchParams({ payload: JSON.stringify(payload) }).toString(),
+        headers: { "content-type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    }).then(() => {})
+
     return fetch("/api/google-sheets", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ webhookUrl: url, payload }),
     }).then(async (res) => {
-        if (!res.ok) {
-            let message = "Google Sheets 전송 요청에 실패했어요."
-            try {
-                const data = await res.json()
-                if (data?.error) message = data.error
-            } catch {}
-            throw new Error(message)
-        }
+        if (res.ok) return
+        if (res.status === 404) return directPost()
+        let message = "Google Sheets 전송 요청에 실패했어요."
+        try {
+            const data = await res.json()
+            if (data?.error) message = data.error
+        } catch {}
+        throw new Error(message)
+    }).catch((err) => {
+        if (typeof window !== "undefined") return directPost()
+        throw err
     })
 }
 function imageCropBox(img: any) {
