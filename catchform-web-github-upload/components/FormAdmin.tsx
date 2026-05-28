@@ -4519,46 +4519,44 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>}
           {activeAnalyticsTab==="questions"&&<div>
             <div style={{fontSize:22,fontWeight:600,color:A.t1,marginBottom:16}}>질문별 인사이트</div>
-            <div style={{display:"grid",gridTemplateColumns:"220px minmax(0,1fr)",background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,overflow:"hidden",boxShadow:A.shadow,marginBottom:18}}>
-              <div style={{background:A.card2,borderRight:`1px solid ${A.border}`,padding:12}}>
-                <div style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.6px",margin:"0 0 9px 2px"}}>섹션</div>
-                <div style={{display:"flex",flexDirection:"column" as const,gap:7}}>
-                  {analyticsPages.map(p=>{const on=selectedAnalyticsPage===p;const first=(fieldsByPage[p]||[])[0];return <button key={p} onClick={()=>{setAnalyticsSection(p);setAnalyticsQuestionQuery("");if(first)setAnalyticsQuestionId(first.id);setAnalyticsHoverSlice(null)}} style={{width:"100%",minHeight:42,padding:"8px 10px",borderRadius:A.r,border:`1px solid ${on?A.blue+"55":A.border}`,background:on?A.blue2:A.card,color:on?A.blue:A.t1,fontFamily:FONT,cursor:"pointer",display:"flex",alignItems:"center",gap:9,textAlign:"left" as const}}>
-                    <span style={{width:4,alignSelf:"stretch",borderRadius:999,background:on?A.blue:A.border,flexShrink:0}}/>
-                    <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{pageName(p)}</span>
-                    <span style={{height:22,minWidth:26,padding:"0 7px",borderRadius:999,background:on?A.blue:A.card2,border:`1px solid ${on?A.blue:A.border}`,color:on?"#fff":A.t3,fontSize:11,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center"}}>{(fieldsByPage[p]||[]).length}</span>
-                  </button>})}
+            <div style={{display:"grid",gridTemplateColumns:width<980?"1fr":"320px minmax(0,1fr)",gap:16,alignItems:"start"}}>
+              <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,boxShadow:A.shadow,overflow:"hidden"}}>
+                <div style={{padding:"14px 14px 10px",borderBottom:`1px solid ${A.border}`,background:A.card2}}>
+                  <div style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.6px",marginBottom:4}}>섹션 / 질문</div>
+                  <div style={{fontSize:13,fontWeight:600,color:A.t1}}>섹션을 열어 질문을 선택하세요</div>
+                </div>
+                <div style={{padding:10,display:"flex",flexDirection:"column" as const,gap:8,maxHeight:620,overflow:"auto"}}>
+                  {analyticsPages.map(p=>{const open=selectedAnalyticsPage===p;const pageFields=fieldsByPage[p]||[];const first=pageFields[0];const pageVisible=open?visibleSectionQuestionFields:pageFields;return <div key={p} style={{border:`1px solid ${open?A.blue+"55":A.border}`,borderRadius:A.r,background:open?A.blue2:A.card2,overflow:"hidden"}}>
+                    <button onClick={()=>{setAnalyticsSection(p);setAnalyticsQuestionQuery("");if(first)setAnalyticsQuestionId(first.id);setAnalyticsHoverSlice(null)}} style={{width:"100%",minHeight:44,padding:"9px 10px",border:"none",background:"transparent",color:open?A.blue:A.t1,fontFamily:FONT,cursor:"pointer",display:"flex",alignItems:"center",gap:9,textAlign:"left" as const}}>
+                      <span style={{width:4,alignSelf:"stretch",borderRadius:999,background:open?A.blue:A.border,flexShrink:0}}/>
+                      <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{pageName(p)}</span>
+                      <span style={{height:22,minWidth:26,padding:"0 7px",borderRadius:999,background:open?A.blue:A.card,border:`1px solid ${open?A.blue:A.border}`,color:open?"#fff":A.t3,fontSize:11,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center"}}>{pageFields.length}</span>
+                      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style={{transform:open?"rotate(180deg)":"rotate(0deg)",transition:"transform .16s ease",color:open?A.blue:A.t3,flexShrink:0}}><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                    {open&&<div style={{padding:"0 10px 10px"}}>
+                      {pageFields.length>8&&<div style={{position:"relative" as const,margin:"2px 0 8px"}}>
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{position:"absolute",left:10,top:9,color:A.t3}}><circle cx="7" cy="7" r="4" stroke="currentColor" strokeWidth="1.6"/><path d="M10 10l3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                        <input value={analyticsQuestionQuery} onChange={e=>setAnalyticsQuestionQuery(e.target.value)} placeholder="질문 검색"
+                          style={{width:"100%",height:31,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t1,fontFamily:FONT,fontSize:12,fontWeight:600,padding:"0 10px 0 30px",outline:"none",boxSizing:"border-box" as const}}/>
+                      </div>}
+                      {pageFields.length===0
+                        ? <div style={{height:54,borderRadius:A.r,border:`1px dashed ${A.border2}`,display:"flex",alignItems:"center",justifyContent:"center",color:A.t3,fontSize:12.5}}>질문이 없습니다.</div>
+                        : pageVisible.length===0
+                        ? <div style={{height:54,borderRadius:A.r,border:`1px dashed ${A.border2}`,display:"flex",alignItems:"center",justifyContent:"center",color:A.t3,fontSize:12.5}}>검색 결과가 없습니다.</div>
+                        : <div style={{display:"flex",flexDirection:"column" as const,gap:6}}>
+                          {pageVisible.map((f:any)=>{const on=activeField?.id===f.id;const originalIdx=pageFields.findIndex((sf:any)=>sf.id===f.id);return <button key={f.id} onClick={()=>{setAnalyticsQuestionId(f.id);setAnalyticsHoverSlice(null)}} style={{minHeight:42,padding:"7px 8px",borderRadius:A.r,border:`1px solid ${on?A.blue+"66":A.border}`,background:on?A.card:A.card2,color:on?A.blue:A.t1,fontFamily:FONT,cursor:"pointer",textAlign:"left" as const,display:"flex",alignItems:"center",gap:9,transition:"all .14s ease",boxShadow:on?`0 0 0 3px ${A.blue}14`:"none"}}>
+                            <span style={{width:24,height:24,borderRadius:8,background:on?A.blue:A.card,border:`1px solid ${on?A.blue:A.border}`,color:on?"#fff":A.t3,fontSize:11.5,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{originalIdx+1}</span>
+                            <span style={{minWidth:0,flex:1}}>
+                              <span style={{display:"block",fontSize:12.5,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{f.label}</span>
+                              <span style={{display:"block",fontSize:11,color:on?A.blue:A.t3,marginTop:4,fontWeight:600}}>{fieldTypeName(f.type)}{f.required?" · 필수":""}</span>
+                            </span>
+                          </button>})}
+                        </div>}
+                    </div>}
+                  </div>})}
                 </div>
               </div>
-              <div style={{padding:14}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:12}}>
-                  <div style={{minWidth:0}}>
-                    <div style={{fontSize:14,fontWeight:600,color:A.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{pageName(selectedAnalyticsPage)}</div>
-                    <div style={{fontSize:12,color:A.t3,marginTop:3}}>{sectionQuestionFields.length}개 질문 중 선택</div>
-                  </div>
-                  <div style={{height:28,padding:"0 10px",borderRadius:999,background:A.card2,border:`1px solid ${A.border}`,color:A.t2,fontSize:12,fontWeight:600,display:"flex",alignItems:"center"}}>{activeField?.label||"질문 없음"}</div>
-                </div>
-                {sectionQuestionFields.length>8&&<div style={{position:"relative" as const,marginBottom:10}}>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{position:"absolute",left:11,top:10,color:A.t3}}><circle cx="7" cy="7" r="4" stroke="currentColor" strokeWidth="1.6"/><path d="M10 10l3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                  <input value={analyticsQuestionQuery} onChange={e=>setAnalyticsQuestionQuery(e.target.value)} placeholder="질문 검색"
-                    style={{width:"100%",height:34,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:600,padding:"0 12px 0 34px",outline:"none",boxSizing:"border-box" as const}}/>
-                </div>}
-                {sectionQuestionFields.length===0
-                  ? <div style={{height:92,borderRadius:A.r,border:`1px dashed ${A.border2}`,display:"flex",alignItems:"center",justifyContent:"center",color:A.t3,fontSize:13}}>이 섹션에는 질문이 없습니다.</div>
-                  : visibleSectionQuestionFields.length===0
-                  ? <div style={{height:92,borderRadius:A.r,border:`1px dashed ${A.border2}`,display:"flex",alignItems:"center",justifyContent:"center",color:A.t3,fontSize:13}}>검색 결과가 없습니다.</div>
-                  : <div style={{display:"flex",flexDirection:"column" as const,gap:6,maxHeight:300,overflow:"auto",paddingRight:3}}>
-                    {visibleSectionQuestionFields.map((f:any)=>{const on=activeField?.id===f.id;const originalIdx=sectionQuestionFields.findIndex((sf:any)=>sf.id===f.id);return <button key={f.id} onClick={()=>{setAnalyticsQuestionId(f.id);setAnalyticsHoverSlice(null)}} style={{minHeight:46,padding:"8px 10px",borderRadius:A.r,border:`1px solid ${on?A.blue+"66":A.border}`,background:on?A.blue2:A.card2,color:on?A.blue:A.t1,fontFamily:FONT,cursor:"pointer",textAlign:"left" as const,display:"flex",alignItems:"center",gap:10,transition:"all .14s ease",boxShadow:on?`0 0 0 3px ${A.blue}14`:"none"}}>
-                      <span style={{width:26,height:26,borderRadius:8,background:on?A.blue:A.card,border:`1px solid ${on?A.blue:A.border}`,color:on?"#fff":A.t3,fontSize:12,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{originalIdx+1}</span>
-                      <span style={{minWidth:0,flex:1}}>
-                        <span style={{display:"block",fontSize:13,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{f.label}</span>
-                        <span style={{display:"block",fontSize:11.5,color:on?A.blue:A.t3,marginTop:5,fontWeight:600}}>{fieldTypeName(f.type)}{f.required?" · 필수":""}</span>
-                      </span>
-                    </button>})}
-                  </div>}
-              </div>
-            </div>
-            {!activeField?emptyState("분석할 질문이 없습니다."):<div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:24,minHeight:440,boxShadow:A.shadow}}>
+            {!activeField?emptyState("분석할 질문이 없습니다."):<div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:24,minHeight:620,boxShadow:A.shadow}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:22}}>
                 <div style={{fontSize:18,fontWeight:600,color:A.t1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{activeField.label}</div>
                 {activeFileCount>0&&<button onClick={()=>downloadAnalyticsFilesZip(activeField,rows)} style={{height:34,padding:"0 12px",borderRadius:A.r,border:`1px solid ${A.blue}33`,background:A.blue2,color:A.blue,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
@@ -4594,6 +4592,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     </div>}
                   </div>}
             </div>}
+            </div>
           </div>}
           {activeAnalyticsTab==="period"&&<div>
             <div style={{fontSize:22,fontWeight:600,color:A.t1,marginBottom:16}}>기간별 인사이트</div>
