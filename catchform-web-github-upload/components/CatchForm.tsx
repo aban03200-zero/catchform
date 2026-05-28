@@ -67,6 +67,18 @@ const FILE_LIMIT_TEXT = `최대 ${FILE_MAX_COUNT}개, 파일당 ${FILE_MAX_SIZE_
 const imageFit = (img: any) => img?.imageFit === "cover" ? "cover" : "contain"
 const imagePos = (img: any) => `${img?.imagePosX ?? 50}% ${img?.imagePosY ?? 50}%`
 const cropNumber = (v: any, d: number, min: number, max: number) => Math.max(min, Math.min(max, Number.isFinite(Number(v)) ? Number(v) : d))
+function detectDeviceOS() {
+    if (typeof navigator === "undefined") return ""
+    const ua = navigator.userAgent || ""
+    const platform = navigator.platform || ""
+    if (/android/i.test(ua)) return "Android"
+    if (/iphone|ipad|ipod/i.test(ua) || (/Mac/i.test(platform) && (navigator as any).maxTouchPoints > 1)) return "iOS"
+    if (/windows/i.test(ua) || /Win/i.test(platform)) return "Windows"
+    if (/mac os|macintosh/i.test(ua) || /Mac/i.test(platform)) return "macOS"
+    if (/cros/i.test(ua)) return "Chrome OS"
+    if (/linux/i.test(ua) || /Linux/i.test(platform)) return "Linux"
+    return "기타"
+}
 function postAppsScriptPayload(url: string, payload: any) {
     const directPost = () => fetch(url, {
         method: "POST",
@@ -297,6 +309,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const touchedFieldRef = React.useRef<Record<string, boolean>>({})
     const lastTouchedFieldRef = React.useRef<any>(null)
     const startedTrackedRef = React.useRef(false)
+    const qrScanTrackedRef = React.useRef(false)
 
     const setVal = (id: string, v: string) => setVals(p => ({ ...p, [id]: v }))
     const setErr = (id: string, msg: string) => setErrors(p => ({ ...p, [id]: msg }))
@@ -328,16 +341,17 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         const sourceMap: Record<string, string> = {
             google: "Google", naver: "Naver", medium: "Medium", twitter: "Twitter", x: "Twitter",
             bing: "Bing", kakao: "KakaoTalk", kakaotalk: "KakaoTalk", facebook: "Facebook",
-            instagram: "Instagram", direct: "직접 유입"
+            instagram: "Instagram", qr: "QR", qrcode: "QR", direct: "직접 유입"
         }
         const sourceKey = sourceRaw.toLowerCase().replace(/\.(com|co\.kr|net|kr)$/g, "").split(".")[0]
         const locale = navigator.language || ""
         const localeCountry = locale.includes("-") ? locale.split("-").pop() || "" : ""
+        const isQr = params.get("cf_qr") === "1" || params.get("utm_medium") === "qrcode" || params.get("utm_source") === "qr"
         return {
             utm_source: params.get("utm_source") || "",
             utm_medium: params.get("utm_medium") || "",
             utm_campaign: params.get("utm_campaign") || "",
-            source: sourceMap[sourceKey] || sourceRaw,
+            source: isQr ? "QR" : (sourceMap[sourceKey] || sourceRaw),
             referrer: ref,
             referrer_host: refHost,
             country: params.get("country") || geoMeta.country || localeCountry || "",
@@ -346,6 +360,13 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             language: locale,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
             platform: navigator.platform || "",
+            device_os: detectDeviceOS(),
+            user_agent: navigator.userAgent || "",
+            cf_qr: params.get("cf_qr") || "",
+            cf_qr_redirected: params.get("cf_qr_redirected") || "",
+            qr_type: params.get("qr_type") || "",
+            qr_label: params.get("qr_label") || "",
+            qr_target: params.get("qr_target") || "",
         }
     }
 
@@ -514,6 +535,15 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
     React.useEffect(() => {
         if (!geoLoaded) return
+        if (typeof window !== "undefined" && !qrScanTrackedRef.current) {
+            const params = new URLSearchParams(window.location.search || "")
+            const isQr = params.get("cf_qr") === "1" || params.get("utm_medium") === "qrcode" || params.get("utm_source") === "qr"
+            const alreadyLoggedByRedirect = params.get("cf_qr_redirected") === "1"
+            if (isQr && !alreadyLoggedByRedirect) {
+                qrScanTrackedRef.current = true
+                trackEvent("qr_scan", { page: 1, metadata: { qr_logged_on: "form_page" } })
+            }
+        }
         if (startedTrackedRef.current) return
         startedTrackedRef.current = true
         trackEvent("started", { page: 1, metadata: { formType: cfg.formType || "" } })

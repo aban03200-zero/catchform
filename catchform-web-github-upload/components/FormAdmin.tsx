@@ -1154,7 +1154,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [filePreview,setFilePreview]=React.useState<null|{name:string;url:string;type?:string;size?:number;path?:string;bucket?:string}>(null)
 
   // ── Analytics state ───────────────────────────────────────────────────
-  const [analyticsTab,setAnalyticsTab]=React.useState<"questions"|"responses"|"period"|"dropoff">("responses")
+  const [analyticsTab,setAnalyticsTab]=React.useState<"questions"|"responses"|"period"|"dropoff"|"qr">("responses")
   const [analyticsRows,setAnalyticsRows]=React.useState<any[]>([])
   const [analyticsEvents,setAnalyticsEvents]=React.useState<any[]>([])
   const [analyticsLoading,setAnalyticsLoading]=React.useState(false)
@@ -3295,16 +3295,21 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         const formUrl=hasBase&&hasSaved?`${base}?slug=${savedSlug}`:""
         const activeQrUrl=qrMode==="form"?formUrl:qrCustomUrl.trim()
         const qrName=qrMode==="form"?`${loadedName||savedSlug||"catchform"}-form-qr`:"detail-page-qr"
+        const trackerBase=typeof window!=="undefined"?window.location.origin:""
+        const qrLabel=loadedName||savedSlug||(qrMode==="form"?"폼 QR":"상세페이지 QR")
+        const trackedQrUrl=activeQrUrl&&trackerBase
+          ? `${trackerBase}/qr?to=${encodeURIComponent(activeQrUrl)}&fid=${encodeURIComponent(loadedId||"")}&slug=${encodeURIComponent(savedSlug||"")}&type=${qrMode==="form"?"form":"detail"}&label=${encodeURIComponent(qrLabel)}`
+          : activeQrUrl
         let qrMatrix:boolean[][]|null=null
         let qrError=""
-        if(activeQrUrl){
-          try{qrMatrix=makeQrMatrix(activeQrUrl)}
+        if(trackedQrUrl){
+          try{qrMatrix=makeQrMatrix(trackedQrUrl)}
           catch(e){qrError=(e as Error).message||"QR을 만들 수 없어요."}
         }
         const onQrDownload=(format:QrFileFormat)=>{
           try{
             if(!activeQrUrl){showToast(qrMode==="form"?"폼 링크가 먼저 필요해요":"상세페이지 URL을 입력해주세요",false);return}
-            downloadQrFile(activeQrUrl,qrName,format)
+            downloadQrFile(trackedQrUrl,qrName,format)
             showToast(`${format.toUpperCase()} QR 다운로드를 시작했어요`)
           }catch(e){showToast((e as Error).message||"QR 다운로드에 실패했어요",false)}
         }
@@ -3331,6 +3336,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 <div style={{marginTop:6,fontSize:11.5,color:A.t3,lineHeight:1.5}}>
                   `https://`를 포함한 전체 URL을 입력하면 스캔 시 바로 열립니다.
                   </div>}
+              {activeQrUrl&&<div style={{marginTop:7,fontSize:11.5,color:A.t3,lineHeight:1.5}}>
+                QR 스캔은 응답 및 분석의 QR 데이터 탭에 기록됩니다.
+              </div>}
             </F>
           </FG>
 
@@ -4337,11 +4345,61 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     events.forEach((e:any)=>{const d=dayOf(e.created_at);activityMap[d]=activityMap[d]||{date:d,participation:0,complete:0,share:0,link:0};if(String(e.event_type).includes("share"))activityMap[d].share+=1;if(e.event_type==="link_click")activityMap[d].link+=1})
     const activityEntries=Object.keys(activityMap).map(k=>activityMap[k]).sort((a:any,b:any)=>String(a.date).localeCompare(String(b.date))).slice(-10)
     const maxActivity=Math.max(1,...activityEntries.flatMap((d:any)=>[d.participation,d.complete,d.share,d.link]))
+    const isQrEvent=(e:any)=>{
+      const m=eventMeta(e)
+      return e.event_type==="qr_scan"||m.cf_qr==="1"||m.utm_source==="qr"||m.utm_medium==="qrcode"||String(m.source||"").toLowerCase()==="qr"
+    }
+    const qrEvents=events.filter(isQrEvent)
+    const qrScanEvents=events.filter((e:any)=>e.event_type==="qr_scan"||(isQrEvent(e)&&e.event_type==="started"&&!eventMeta(e).cf_qr_redirected))
+    const qrVisitEvents=events.filter((e:any)=>isQrEvent(e)&&["started","page_view","completed"].includes(e.event_type))
+    const qrScanTotal=qrScanEvents.length
+    const qrUniqueScans=new Set(qrScanEvents.map((e:any)=>e.session_id||e.id)).size
+    const qrVisits=new Set(qrVisitEvents.map((e:any)=>e.session_id||e.id)).size||qrUniqueScans
+    const qrBaseEvents=qrScanEvents.length?qrScanEvents:qrEvents
+    const qrDateKeys=Array.from(new Set(qrBaseEvents.map((e:any)=>dayOf(e.created_at)))).sort().slice(-7)
+    const qrActivityRows=qrDateKeys.map((d:string)=>{
+      const scan=qrScanEvents.filter((e:any)=>dayOf(e.created_at)===d)
+      const visit=qrVisitEvents.filter((e:any)=>dayOf(e.created_at)===d)
+      return {date:d,total:scan.length,unique:new Set(scan.map((e:any)=>e.session_id||e.id)).size,visits:new Set(visit.map((e:any)=>e.session_id||e.id)).size}
+    })
+    const qrActivityMax=Math.max(1,...qrActivityRows.flatMap((d:any)=>[d.total,d.unique,d.visits]))
+    const qrCounterEntries=(items:any[],getLabel:(e:any)=>string)=>{
+      const map:any={}
+      items.forEach((e:any)=>{const label=getLabel(e)||"미확인";map[label]=(map[label]||0)+1})
+      return Object.keys(map).map(k=>({label:k,count:map[k],pct:qrBaseEvents.length?Math.round((map[k]/qrBaseEvents.length)*1000)/10:0})).sort((a:any,b:any)=>b.count-a.count)
+    }
+    const qrCountryEntries=qrCounterEntries(qrBaseEvents,(e:any)=>countryName(eventMeta(e).country||""))
+    const qrCityEntries=qrCounterEntries(qrBaseEvents,(e:any)=>{
+      const m=eventMeta(e)
+      return m.city||regionName(m.region||"")||countryName(m.country||"")
+    })
+    const qrOsName=(m:any)=>{
+      const raw=String(m.device_os||m.os||m.platform||m.user_agent||"")
+      if(/android/i.test(raw))return"Android"
+      if(/ios|iphone|ipad|ipod/i.test(raw))return"iOS"
+      if(/windows|win/i.test(raw))return"Windows"
+      if(/mac|os x|macos/i.test(raw))return"macOS"
+      if(/chrome os|cros/i.test(raw))return"Chrome OS"
+      if(/linux/i.test(raw))return"Linux"
+      return raw||"미확인"
+    }
+    const qrOsEntries=qrCounterEntries(qrBaseEvents,(e:any)=>qrOsName(eventMeta(e)))
+    const qrHourLabels=Array.from({length:24},(_,i)=>`${String(i).padStart(2,"0")}시`)
+    const qrDayLabels=["일","월","화","수","목","금","토"]
+    const qrHeat:any={}
+    qrBaseEvents.forEach((e:any)=>{
+      const dt=new Date(e.created_at)
+      if(Number.isNaN(dt.getTime()))return
+      const key=`${dt.getDay()}-${dt.getHours()}`
+      qrHeat[key]=(qrHeat[key]||0)+1
+    })
+    const qrHeatMax=Math.max(1,...Object.keys(qrHeat).map(k=>qrHeat[k]))
     const tabs=[
       {id:"questions",label:"질문별 인사이트",icon:<path d="M4 13V7M8 13V3M12 13V9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>},
       {id:"responses",label:"응답별 데이터",icon:<path d="M3 4h10M3 8h10M3 12h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>},
       {id:"period",label:"기간별 인사이트",icon:<><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v4l3 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></>},
 	      {id:"dropoff",label:"질문별 이탈률",icon:<path d="M4 3.5h5v9H4M9 8h5M12 5.8 14.2 8 12 10.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>},
+	      {id:"qr",label:"QR 데이터",dividerBefore:true,icon:<><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h4v4H3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/><path d="M10 10h1.5v1.5H13V13h-3z" fill="currentColor"/></>},
     ] as any[]
     const activeAnalyticsTab=tabs.some(t=>t.id===analyticsTab)?analyticsTab:"responses"
     const metric=(icon:any,value:string,label:string,color:string=accent)=><div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,display:"flex",alignItems:"center",gap:14,minHeight:88,boxShadow:A.shadow}}>
@@ -4411,10 +4469,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </button>
       </div>
       <div style={{height:50,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 20px",gap:6,flexShrink:0}}>
-        {tabs.map(t=>{const on=activeAnalyticsTab===t.id;return <button key={t.id} onClick={()=>setAnalyticsTab(t.id)}
+        {tabs.map(t=>{const on=activeAnalyticsTab===t.id;return <React.Fragment key={t.id}>
+          {t.dividerBefore&&<div style={{width:1,height:22,background:A.border,margin:"0 8px"}}/>}
+          <button onClick={()=>setAnalyticsTab(t.id)}
           style={{height:32,padding:"0 12px",borderRadius:A.r,border:`1px solid ${on?A.blue+"33":"transparent"}`,background:on?A.blue2:"transparent",color:on?A.blue:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:7}}>
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none">{t.icon}</svg>{t.label}
-        </button>})}
+        </button>
+        </React.Fragment>})}
       </div>
       <div style={{flex:1,overflow:"auto",padding:"24px 28px 36px"}}>
         <div style={{maxWidth:1280,margin:"0 auto"}}>
@@ -4644,6 +4705,84 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 <div style={{padding:"13px 14px",borderLeft:`1px solid ${A.border}`,textAlign:"right" as const,color:A.t1,fontWeight:600}}>{item.count}</div>
               </div>})}
             </div>}
+          </div>}
+          {activeAnalyticsTab==="qr"&&<div>
+            <div style={{fontSize:22,fontWeight:600,color:A.t1,marginBottom:16}}>QR 데이터</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14,marginBottom:16}}>
+              {metric(<><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h4v4H3z" stroke="currentColor" strokeWidth="1.4"/><path d="M10 10h3v3h-3z" fill="currentColor"/></>,String(qrScanTotal),"총 스캔",chartBlue)}
+              {metric(<path d="M8 2.5a3 3 0 1 1 0 6 3 3 0 0 1 0-6zM3 14c.8-2.5 2.6-3.8 5-3.8s4.2 1.3 5 3.8" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round"/>,String(qrUniqueScans),"고유 스캔",chartOrange)}
+              {metric(<><path d="M2.5 8s2-4 5.5-4 5.5 4 5.5 4-2 4-5.5 4-5.5-4-5.5-4z" stroke="currentColor" strokeWidth="1.5"/><circle cx="8" cy="8" r="1.8" fill="currentColor"/></>,String(qrVisits),"방문",chartGreen)}
+            </div>
+            {qrBaseEvents.length===0?emptyState("아직 QR 스캔 데이터가 없습니다. QR 메뉴에서 다운로드한 QR을 스캔하면 이곳에 기록됩니다."):<>
+              <div style={{display:"grid",gridTemplateColumns:"minmax(340px,1.2fr) minmax(300px,0.8fr)",gap:16,marginBottom:16}}>
+                <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
+                  {infoTitle("스캔 활동","QR 추적 링크를 통해 들어온 스캔 이벤트를 날짜별로 집계합니다. 총 스캔은 전체 스캔 횟수, 고유 스캔은 같은 사용자/기기를 중복 제외한 수, 방문은 QR을 통해 폼 페이지까지 들어온 세션 수입니다.")}
+                  {periodTip("qr-activity")}
+                  <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:12,fontSize:12.5,color:A.t2,fontWeight:600}}>
+                    <span style={{display:"flex",alignItems:"center",gap:6}}><i style={{width:10,height:10,borderRadius:3,background:chartBlue}}/>총 스캔</span>
+                    <span style={{display:"flex",alignItems:"center",gap:6}}><i style={{width:10,height:10,borderRadius:3,background:chartOrange}}/>고유 스캔</span>
+                    <span style={{display:"flex",alignItems:"center",gap:6}}><i style={{width:10,height:10,borderRadius:3,background:chartGreen}}/>방문</span>
+                  </div>
+                  <div style={{height:270,display:"flex",alignItems:"flex-end",gap:16,borderLeft:`1px solid ${A.border}`,borderBottom:`1px solid ${A.border}`,padding:"12px 12px 28px"}}>
+                    {qrActivityRows.map((d:any)=><div key={d.date} style={{flex:1,height:"100%",display:"flex",alignItems:"flex-end",gap:5,position:"relative" as const}}>
+                      {([["total",chartBlue,"총 스캔"],["unique",chartOrange,"고유 스캔"],["visits",chartGreen,"방문"]] as any[]).map(pair=><div key={pair[0]} onMouseMove={e=>movePeriodTip("qr-activity",e,{title:`${d.date} ${pair[2]}`,color:pair[1],lines:[`${pair[2]} : ${d[pair[0]]}`,`날짜 : ${d.date}`]})} onMouseLeave={()=>setPeriodHover(null)}
+                        style={{flex:1,height:`${Math.max(2,(d[pair[0]]/qrActivityMax)*100)}%`,borderRadius:"7px 7px 0 0",background:pair[1],cursor:"pointer",transform:periodHover?.scope==="qr-activity"&&periodHover.title===`${d.date} ${pair[2]}`?"scaleY(1.06)":"scaleY(1)",transformOrigin:"bottom",transition:"transform .16s ease"}}/>)}
+                      <div style={{position:"absolute" as const,left:"50%",bottom:-22,transform:"translateX(-50%)",fontSize:10.5,color:A.t3,whiteSpace:"nowrap" as const}}>{String(d.date).slice(5)}</div>
+                    </div>)}
+                  </div>
+                </div>
+                <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
+                  {infoTitle("운영체제별 스캔","QR 스캔 시 브라우저가 보내는 user agent와 폼 페이지 metadata의 device_os를 기준으로 Android, iOS, Windows, macOS 등 운영체제를 분류합니다.")}
+                  {periodTip("qr-os")}
+                  {qrOsEntries.length===0?emptyState("운영체제 데이터가 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:11}}>
+                    {qrOsEntries.slice(0,8).map((item:any,i:number)=>{const max=Math.max(1,qrOsEntries[0]?.count||1);const color=colors[i%colors.length];return <div key={item.label} onMouseMove={e=>movePeriodTip("qr-os",e,{title:item.label,color,lines:[`스캔 : ${item.count}`,`비율 : ${item.pct}%`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"88px 1fr 54px",gap:10,alignItems:"center",cursor:"default"}}>
+                      <div style={{fontSize:13,color:A.t1,fontWeight:600}}>{item.label}</div>
+                      <div style={{height:10,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${(item.count/max)*100}%`,background:color}}/></div>
+                      <div style={{fontSize:12.5,color:A.t2,textAlign:"right" as const,fontWeight:600}}>{item.count}</div>
+                    </div>})}
+                  </div>}
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"minmax(340px,1fr) minmax(340px,1fr)",gap:16,marginBottom:16}}>
+                <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
+                  {infoTitle("국가별 분석","QR 스캔 시 수집되는 국가 header와 폼 페이지 metadata의 country 값을 기준으로 어느 국가에서 스캔이 발생했는지 보여줍니다.")}
+                  {periodTip("qr-country")}
+                  {qrCountryEntries.length===0?emptyState("국가 데이터가 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:10}}>
+                    {qrCountryEntries.slice(0,10).map((item:any,i:number)=>{const max=Math.max(1,qrCountryEntries[0]?.count||1);const color=colors[i%colors.length];return <div key={item.label} onMouseMove={e=>movePeriodTip("qr-country",e,{title:item.label,color,lines:[`스캔 : ${item.count}`,`비율 : ${item.pct}%`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"120px 1fr 62px",gap:10,alignItems:"center",cursor:"default"}}>
+                      <div style={{fontSize:13,color:A.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.label}</div>
+                      <div style={{height:10,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${(item.count/max)*100}%`,background:color}}/></div>
+                      <div style={{fontSize:12.5,color:A.t2,textAlign:"right" as const,fontWeight:600}}>{item.count} · {item.pct}%</div>
+                    </div>})}
+                  </div>}
+                </div>
+                <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
+                  {infoTitle("도시/지역별 분석","QR 스캔 시 확인된 city, region metadata를 기준으로 도시나 지역별 스캔 수를 정렬해 보여줍니다. 국내 캠페인은 지역 반응을 비교하는 데 사용할 수 있습니다.")}
+                  {periodTip("qr-city")}
+                  {qrCityEntries.length===0?emptyState("도시/지역 데이터가 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:10}}>
+                    {qrCityEntries.slice(0,10).map((item:any,i:number)=>{const max=Math.max(1,qrCityEntries[0]?.count||1);const color=colors[(i+2)%colors.length];return <div key={item.label} onMouseMove={e=>movePeriodTip("qr-city",e,{title:item.label,color,lines:[`스캔 : ${item.count}`,`비율 : ${item.pct}%`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"120px 1fr 62px",gap:10,alignItems:"center",cursor:"default"}}>
+                      <div style={{fontSize:13,color:A.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.label}</div>
+                      <div style={{height:10,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${(item.count/max)*100}%`,background:color}}/></div>
+                      <div style={{fontSize:12.5,color:A.t2,textAlign:"right" as const,fontWeight:600}}>{item.count} · {item.pct}%</div>
+                    </div>})}
+                  </div>}
+                </div>
+              </div>
+              <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
+                {infoTitle("스캔 시간대 분석","QR 스캔 이벤트의 created_at을 요일과 시간대로 나눠 보여줍니다. 진한 칸일수록 해당 요일/시간에 스캔이 많이 발생했다는 뜻입니다.")}
+                {periodTip("qr-heat")}
+                <div style={{overflowX:"auto",paddingBottom:4}}>
+                  <div style={{display:"grid",gridTemplateColumns:"44px repeat(7, minmax(54px,1fr))",gap:5,minWidth:520}}>
+                    <div/>
+                    {qrDayLabels.map(day=><div key={day} style={{fontSize:11.5,color:A.t2,fontWeight:600,textAlign:"center" as const}}>{day}</div>)}
+                    {qrHourLabels.map((hour,h)=><React.Fragment key={hour}>
+                      <div style={{fontSize:10.5,color:A.t3,textAlign:"right" as const,paddingRight:5,lineHeight:"20px"}}>{hour}</div>
+                      {qrDayLabels.map((_,d)=>{const count=qrHeat[`${d}-${h}`]||0;const alpha=count?0.2+Math.min(0.72,count/qrHeatMax*0.72):0;return <div key={`${d}-${h}`} onMouseMove={e=>movePeriodTip("qr-heat",e,{title:`${qrDayLabels[d]}요일 ${hour}`,color:chartBlue,lines:[`스캔 : ${count}`]})} onMouseLeave={()=>setPeriodHover(null)}
+                        style={{height:20,borderRadius:5,background:count?chartBlue:A.card2,opacity:count?alpha:1,border:`1px solid ${count?chartBlue+"22":A.border}`,cursor:"pointer"}}/>})}
+                    </React.Fragment>)}
+                  </div>
+                </div>
+              </div>
+            </>}
           </div>}
         </>}
         </div>
