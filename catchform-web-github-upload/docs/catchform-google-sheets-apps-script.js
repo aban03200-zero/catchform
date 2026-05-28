@@ -6,7 +6,7 @@ function doPost(e) {
 
     var payload = JSON.parse(raw || "{}");
     var spreadsheet = getSpreadsheet_(payload);
-    var sheet = spreadsheet.getSheetByName("Responses") || spreadsheet.insertSheet("Responses");
+    var sheet = getTargetSheet_(spreadsheet, payload);
     appendPayload_(sheet, payload);
 
     return json_({
@@ -72,6 +72,28 @@ function getSpreadsheet_(payload) {
   var spreadsheet = SpreadsheetApp.create(payload.sheetName || payload.formTitle || "CatchForm Responses");
   if (key) props.setProperty(key, spreadsheet.getId());
   return spreadsheet;
+}
+
+function getTargetSheet_(spreadsheet, payload) {
+  var sheets = spreadsheet.getSheets();
+  var sheet = sheets && sheets.length ? sheets[0] : spreadsheet.insertSheet("Responses");
+  var desiredName = String(payload.sheetName || payload.formTitle || "").trim();
+
+  if (desiredName && sheet.getLastRow() === 0) {
+    try {
+      sheet.setName(safeSheetName_(desiredName));
+    } catch (err) {}
+  }
+
+  return sheet;
+}
+
+function safeSheetName_(name) {
+  var cleaned = String(name || "Responses")
+    .replace(/[\[\]\*\?\/\\:]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.slice(0, 90) || "Responses";
 }
 
 function getSheetPropertyKey_(payload) {

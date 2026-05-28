@@ -3816,7 +3816,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
   function renderAnalyticsPage(){
     try{
-	    const chartBlue="#8DBDFD", chartGreen="#8BE3B0", chartYellow="#F6D487", chartSlate="#AEB9C9", chartPurple="#B7A7F6", chartOrange="#F6B486", chartCyan="#8DDDE8", chartPink="#F3A6CB"
+	    const chartBlue="#5EA5F8", chartGreen="#49D38F", chartYellow="#F1C153", chartSlate="#8F9DB2", chartPurple="#9A86F4", chartOrange="#F39A62", chartCyan="#50C8D8", chartPink="#E879B3"
 	    const accent=chartBlue, accentSoft=A.blue2
 	    const rows=Array.isArray(analyticsRows)?analyticsRows:[]
 	    const events=Array.isArray(analyticsEvents)?analyticsEvents:[]
@@ -3910,8 +3910,53 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	    const regionName=(value:string)=>{
 	      const raw=String(value||"").trim()
 	      const key=raw.toUpperCase()
-	      const m:any={11:"서울",26:"부산",27:"대구",28:"인천",29:"광주",30:"대전",31:"울산",36:"세종",41:"경기",42:"강원",43:"충북",44:"충남",45:"전북",46:"전남",47:"경북",48:"경남",49:"제주",SEOUL:"서울",BUSAN:"부산",DAEGU:"대구",INCHEON:"인천",GWANGJU:"광주",DAEJEON:"대전",ULSAN:"울산",SEJONG:"세종",GYEONGGI:"경기",GANGWON:"강원",CHUNGBUK:"충북",CHUNGNAM:"충남",JEONBUK:"전북",JEONNAM:"전남",GYEONGBUK:"경북",GYEONGNAM:"경남",JEJU:"제주"}
+	      const m:any={11:"서울",26:"부산",27:"대구",28:"인천",29:"광주",30:"대전",31:"울산",36:"세종",41:"경기",42:"강원",43:"충북",44:"충남",45:"전북",46:"전남",47:"경북",48:"경남",49:"제주",SEOUL:"서울",BUSAN:"부산",DAEGU:"대구",INCHEON:"인천",GWANGJU:"광주",DAEJEON:"대전",ULSAN:"울산",SEJONG:"세종",GYEONGGI:"경기",GYEONGGI_DO:"경기",GANGWON:"강원",GANGWON_DO:"강원",CHUNGBUK:"충북",CHUNGNAM:"충남",JEONBUK:"전북",JEONNAM:"전남",GYEONGBUK:"경북",GYEONGNAM:"경남",JEJU:"제주"}
 	      return m[key]||raw
+	    }
+	    const koreaRegions=["서울","인천","경기","강원","충북","충남","세종","대전","전북","광주","전남","경북","대구","경남","울산","부산","제주"]
+	    const extractText=(value:any):string=>{
+	      if(value===undefined||value===null)return""
+	      if(Array.isArray(value))return value.map(extractText).join(" / ")
+	      if(typeof value==="object")return String(value.name||value.value||value.label||value.address||value.url||JSON.stringify(value))
+	      return String(value)
+	    }
+	    const extractKoreaRegion=(value:any)=>{
+	      const text=extractText(value).replace(/\s+/g," ").trim()
+	      if(!text)return""
+	      const aliases:[string,string[]][]=[
+	        ["서울",["서울","서울특별시","seoul"]],
+	        ["인천",["인천","인천광역시","incheon"]],
+	        ["경기",["경기","경기도","수원","성남","용인","고양","부천","안산","안양","남양주","화성","평택","gyeonggi"]],
+	        ["강원",["강원","강원도","춘천","원주","강릉","gangwon"]],
+	        ["충북",["충북","충청북도","청주","충주","제천","chungbuk"]],
+	        ["충남",["충남","충청남도","천안","아산","당진","서산","chungnam"]],
+	        ["세종",["세종","세종특별자치시","sejong"]],
+	        ["대전",["대전","대전광역시","daejeon"]],
+	        ["전북",["전북","전라북도","전북특별자치도","전주","군산","익산","jeonbuk"]],
+	        ["광주",["광주","광주광역시","gwangju"]],
+	        ["전남",["전남","전라남도","목포","여수","순천","나주","jeonnam"]],
+	        ["경북",["경북","경상북도","포항","구미","경주","안동","gyeongbuk"]],
+	        ["대구",["대구","대구광역시","daegu"]],
+	        ["경남",["경남","경상남도","창원","김해","진주","양산","gyeongnam"]],
+	        ["울산",["울산","울산광역시","ulsan"]],
+	        ["부산",["부산","부산광역시","busan"]],
+	        ["제주",["제주","제주도","제주특별자치도","제주시","서귀포","jeju"]],
+	      ]
+	      const lower=text.toLowerCase()
+	      const hit=aliases.find(([,keys])=>keys.some(k=>lower.includes(k.toLowerCase())))
+	      return hit?.[0]||""
+	    }
+	    const rowKoreaRegion=(row:any)=>{
+	      const directKeys=["region","city","address","location","residence","work_location","workplace","referral_region"]
+	      for(const key of directKeys){const r=extractKoreaRegion(row?.[key]);if(r)return r}
+	      const fd=Array.isArray(row?.form_data)?row.form_data:[]
+	      for(const item of fd){
+	        const keyText=`${item?.answerKey||""} ${item?.question||""}`
+	        const related=/(거주|지역|주소|소재|근무지|위치|시도|region|city|address|location)/i.test(keyText)
+	        const region=extractKoreaRegion(item?.answer)
+	        if(region&&(related||extractText(item?.answer).length<80))return region
+	      }
+	      return""
 	    }
 	    const sourceBySession:any={}
 	    const sessionSummaries=sessions.map((evs:any[])=>{
@@ -3963,15 +4008,36 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	      const large=end-start<=180?0:1
 	      return`M ${o2.x} ${o2.y} A ${ro} ${ro} 0 ${large} 1 ${o1.x} ${o1.y} L ${i2.x} ${i2.y} A ${ri} ${ri} 0 ${large} 0 ${i1.x} ${i1.y} Z`
 	    }
-	    const locMap:any={}
+	    const koreaRegionMap:any=koreaRegions.reduce((acc:any,r:string)=>({...acc,[r]:0}),{})
+	    rows.forEach((row:any)=>{const r=rowKoreaRegion(row);if(r)koreaRegionMap[r]=(koreaRegionMap[r]||0)+1})
+	    const rowRegionTotal=Object.keys(koreaRegionMap).reduce((a:any,k:any)=>a+(Number(koreaRegionMap[k])||0),0)
+	    const otherLocationMap:any={}
+	    let koreaUnknownCount=0
 	    sessionSummaries.forEach((s:any)=>{
-	      const label=s.country==="대한민국"&&s.region?`대한민국 · ${s.region}`:s.country
-	      locMap[label]=(locMap[label]||0)+1
+	      const country=s.country||"미확인"
+	      const r=extractKoreaRegion(s.region)||regionName(s.region)
+	      if(country==="대한민국"){
+	        if(rowRegionTotal===0){
+	          if(r)koreaRegionMap[r]=(koreaRegionMap[r]||0)+1
+	          else koreaUnknownCount+=1
+	        }
+	      }else{
+	        otherLocationMap[country]=(otherLocationMap[country]||0)+1
+	      }
 	    })
-	    const locationEntries=Object.keys(locMap).map(k=>[k,locMap[k]]).sort((a:any,b:any)=>b[1]-a[1])
-	    const koreaRegionEntries=locationEntries.filter((item:any)=>String(item[0]).startsWith("대한민국 · ")).map((item:any)=>[String(item[0]).replace("대한민국 · ",""),item[1]])
-	    const otherLocationEntries=locationEntries.filter((item:any)=>!String(item[0]).startsWith("대한민국 · "))
-	    const regionPointMap:any={서울:[54,27],경기:[51,34],인천:[43,31],강원:[66,31],충북:[56,43],충남:[45,48],대전:[53,52],세종:[50,47],전북:[50,63],광주:[45,73],전남:[47,79],대구:[66,62],경북:[71,53],부산:[75,75],울산:[78,68],경남:[66,74],제주:[35,92]}
+	    const koreaRegionEntries=koreaRegions.map(r=>[r,koreaRegionMap[r]||0])
+	    const activeKoreaRegionEntries=koreaRegionEntries.filter((item:any)=>Number(item[1])>0).sort((a:any,b:any)=>Number(b[1])-Number(a[1]))
+	    const otherLocationEntries=Object.keys(otherLocationMap).map(k=>[k,otherLocationMap[k]]).sort((a:any,b:any)=>b[1]-a[1])
+	    const unknownLocationEntry=koreaUnknownCount>0?[["대한민국 · 지역 미확인",koreaUnknownCount]]:[]
+	    const locationEntries=[...activeKoreaRegionEntries.map((item:any)=>[`대한민국 · ${item[0]}`,item[1]]),...otherLocationEntries,...unknownLocationEntry].sort((a:any,b:any)=>Number(b[1])-Number(a[1]))
+	    const locationTotal=locationEntries.reduce((a:any,b:any)=>a+Number(b[1]||0),0)
+	    const koreaMapTiles:any[]=[
+	      {k:"강원",x:118,y:16,w:74,h:52},{k:"경기",x:62,y:34,w:60,h:58},{k:"서울",x:78,y:52,w:28,h:20},{k:"인천",x:34,y:56,w:31,h:23},
+	      {k:"충북",x:110,y:88,w:48,h:42},{k:"충남",x:54,y:100,w:58,h:44},{k:"세종",x:91,y:101,w:25,h:19},{k:"대전",x:91,y:123,w:25,h:20},
+	      {k:"경북",x:142,y:127,w:58,h:70},{k:"대구",x:148,y:174,w:28,h:22},{k:"전북",x:66,y:150,w:62,h:40},{k:"광주",x:75,y:205,w:28,h:22},
+	      {k:"전남",x:48,y:190,w:82,h:58},{k:"경남",x:118,y:204,w:62,h:46},{k:"울산",x:177,y:198,w:29,h:22},{k:"부산",x:164,y:226,w:31,h:22},
+	      {k:"제주",x:72,y:270,w:54,h:20}
+	    ]
     const shareMap:any={}
     events.filter((e:any)=>String(e.event_type).includes("share")).forEach((e:any)=>{
       const m=eventMeta(e)
@@ -4194,26 +4260,45 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 </div>}
               </div>
               <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-	                {infoTitle("위치","form_response_events metadata의 country, region, city 값을 세션 단위로 집계합니다. 대한민국은 지역값이 들어오면 시/도 단위로 표시하고, 지역값이 없으면 미확인으로 표시됩니다.")}
+	                {infoTitle("위치","응답 row의 지역/거주지/주소 답변을 우선 사용해 대한민국 시/도 단위로 집계합니다. 지역 답변이 없는 경우 form_response_events metadata의 country, region, city 값을 보조로 사용하고, 해외 응답은 국가별로 표시합니다.")}
 	                {periodTip("location")}
-	                {locationEntries.length===0?emptyState("위치 데이터가 아직 없습니다."):<div style={{display:"grid",gridTemplateColumns:"minmax(180px,260px) 1fr",gap:18,alignItems:"center"}}>
-	                  <div style={{position:"relative" as const}}>
-	                    <svg viewBox="0 0 100 110" style={{width:"100%",maxHeight:260,overflow:"visible"}}>
-	                      <path d="M58 10C72 16 81 28 79 43c-1 10-8 17-7 27 1 12-9 24-23 24-12 0-22-8-24-20-2-11 5-18 2-29-4-15 7-30 20-35 4-2 7-2 11 0z" fill={A.card2} stroke={A.border2} strokeWidth="1.2"/>
-	                      {koreaRegionEntries.length===0
-	                        ? <circle cx="54" cy="50" r="9" fill={chartBlue} opacity="0.85" onMouseMove={e=>movePeriodTip("location",e,{title:"대한민국",color:chartBlue,lines:[`카운트 : ${locationEntries.find((item:any)=>item[0]==="대한민국")?.[1]||0}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{cursor:"pointer"}}/>
-	                        : koreaRegionEntries.slice(0,12).map((item:any,i:number)=>{const pt=regionPointMap[item[0]]||[50,52];const max=Math.max(1,koreaRegionEntries[0]?.[1]||1);const r=5+Math.min(10,(Number(item[1])/max)*9);const color=colors[i%colors.length];return <g key={item[0]} onMouseMove={e=>movePeriodTip("location",e,{title:`대한민국 · ${item[0]}`,color,lines:[`카운트 : ${item[1]}`,`전체 세션 대비 : ${sessionCount?Math.round((Number(item[1])/sessionCount)*1000)/10:0}%`]})} onMouseLeave={()=>setPeriodHover(null)} style={{cursor:"pointer"}}>
-	                          <circle cx={pt[0]} cy={pt[1]} r={r+4} fill={color} opacity="0.16"/>
-	                          <circle cx={pt[0]} cy={pt[1]} r={r} fill={color} opacity="0.9" stroke={A.card} strokeWidth="1.5"/>
-	                        </g>})}
+	                {locationTotal===0?emptyState("위치 데이터가 아직 없습니다."):<div style={{display:"grid",gridTemplateColumns:"minmax(220px,300px) 1fr",gap:18,alignItems:"start"}}>
+	                  <div style={{position:"relative" as const,border:`1px solid ${A.border}`,borderRadius:A.r2,background:A.card2,padding:10}}>
+	                    <svg viewBox="0 0 230 300" style={{width:"100%",maxHeight:330,overflow:"visible"}}>
+	                      <text x="14" y="18" fill={A.t2} fontSize="10.5" fontWeight="600">대한민국 지역</text>
+	                      {koreaMapTiles.map((tile:any,i:number)=>{
+	                        const count=Number(koreaRegionMap[tile.k]||0)
+	                        const max=Math.max(1,...koreaRegionEntries.map((item:any)=>Number(item[1])||0))
+	                        const intensity=count?0.38+Math.min(0.54,count/max*0.52):0
+	                        const color=count?colors[i%colors.length]:A.card
+	                        const stroke=count?colors[i%colors.length]:A.border2
+	                        const pct=locationTotal?Math.round((count/locationTotal)*1000)/10:0
+	                        return <g key={tile.k} onMouseMove={e=>movePeriodTip("location",e,{title:`대한민국 · ${tile.k}`,color:stroke,lines:[`카운트 : ${count}`,`전체 위치 데이터 대비 : ${pct}%`]})} onMouseLeave={()=>setPeriodHover(null)} style={{cursor:"pointer"}}>
+	                          <rect x={tile.x} y={tile.y} width={tile.w} height={tile.h} rx="9" fill={color} opacity={count?intensity:1} stroke={stroke} strokeWidth={count?1.8:1}/>
+	                          <text x={tile.x+tile.w/2} y={tile.y+tile.h/2-1} textAnchor="middle" dominantBaseline="middle" fill={count?A.t1:A.t3} fontSize={tile.w<32?"8.5":"9.5"} fontWeight="600">{tile.k}</text>
+	                          {count>0&&<text x={tile.x+tile.w/2} y={tile.y+tile.h/2+11} textAnchor="middle" dominantBaseline="middle" fill={A.t2} fontSize="8.5" fontWeight="600">{count}</text>}
+	                        </g>
+	                      })}
 	                    </svg>
 	                  </div>
-	                  <div style={{display:"flex",flexDirection:"column" as const,gap:8}}>
-	                    {[...koreaRegionEntries.map((item:any)=>[`대한민국 · ${item[0]}`,item[1]]),...otherLocationEntries].slice(0,8).map((item:any,i:number)=>{const max=Math.max(1,locationEntries[0]?.[1]||1);const pct=sessionCount?Math.round((item[1]/sessionCount)*1000)/10:0;const color=colors[i%colors.length];return <div key={item[0]} onMouseMove={e=>movePeriodTip("location",e,{title:item[0],color,lines:[`카운트 : ${item[1]}`,`전체 세션 대비 : ${pct}%`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"14px 1fr auto",gap:9,alignItems:"center",cursor:"default",borderBottom:`1px solid ${A.border}`,padding:"7px 0"}}>
-	                      <span style={{width:12,height:12,borderRadius:4,background:color}}/>
-	                      <span style={{fontSize:13,color:A.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item[0]}</span>
-	                      <span style={{fontSize:12.5,color:A.t2,fontWeight:600}}>{item[1]}</span>
-	                    </div>})}
+	                  <div style={{display:"flex",flexDirection:"column" as const,gap:14,minWidth:0}}>
+	                    <div>
+	                      <div style={{fontSize:12.5,fontWeight:600,color:A.t2,marginBottom:7}}>국내 지역</div>
+	                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(86px,1fr))",gap:7}}>
+	                        {koreaRegionEntries.map((item:any,i:number)=>{const region=item[0],count=Number(item[1])||0;const color=count?colors[i%colors.length]:A.border2;return <div key={region} onMouseMove={e=>movePeriodTip("location",e,{title:`대한민국 · ${region}`,color,lines:[`카운트 : ${count}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6,padding:"7px 8px",borderRadius:A.r,border:`1px solid ${count?color+"66":A.border}`,background:count?color+"16":A.card2,cursor:"default"}}>
+	                          <span style={{fontSize:12.5,color:A.t1,fontWeight:600,whiteSpace:"nowrap" as const}}>{region}</span>
+	                          <span style={{fontSize:12.5,color:count?A.t1:A.t3,fontWeight:600}}>{count}</span>
+	                        </div>})}
+	                      </div>
+	                    </div>
+	                    {(otherLocationEntries.length>0||unknownLocationEntry.length>0)&&<div>
+	                      <div style={{fontSize:12.5,fontWeight:600,color:A.t2,marginBottom:7}}>해외/기타</div>
+	                      {[...otherLocationEntries,...unknownLocationEntry].map((item:any,i:number)=>{const pct=locationTotal?Math.round((Number(item[1])/locationTotal)*1000)/10:0;const color=colors[(i+3)%colors.length];return <div key={item[0]} onMouseMove={e=>movePeriodTip("location",e,{title:item[0],color,lines:[`카운트 : ${item[1]}`,`전체 위치 데이터 대비 : ${pct}%`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"14px 1fr auto",gap:9,alignItems:"center",cursor:"default",borderBottom:`1px solid ${A.border}`,padding:"7px 0"}}>
+	                        <span style={{width:12,height:12,borderRadius:4,background:color}}/>
+	                        <span style={{fontSize:13,color:A.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item[0]}</span>
+	                        <span style={{fontSize:12.5,color:A.t2,fontWeight:600}}>{item[1]}</span>
+	                      </div>})}
+	                    </div>}
 	                  </div>
 	                </div>}
               </div>

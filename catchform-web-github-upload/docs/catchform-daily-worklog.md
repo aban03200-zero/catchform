@@ -12,10 +12,14 @@
 - Framer처럼 Next API가 없는 환경에서는 숨은 iframe/form 제출 대신 `no-cors` fetch로만 전송하도록 fallback 변경
 - 폼 제출 성공 모달은 응답 저장 직후 바로 띄우고, Google Sheets 전송/마케팅 동의 메타데이터 업데이트는 백그라운드 처리로 전환
 - SniperFactory `/apply` 핸드오프 문서에 디자인/모달이 달라지는 원인과 동일 렌더링 기준을 보강
+- Google Sheets Apps Script가 `Responses` 탭을 새로 만들지 않고 첫 번째 기본 탭에 응답을 쌓도록 변경
+- 응답/분석 그래프 팔레트를 기존 파스텔보다 한 단계 진한 색상으로 조정
+- 기간별 인사이트 위치 분석을 응답의 지역/거주지/주소 답변 기반 대한민국 시/도 지도형 UI로 변경하고 해외 응답도 국가별로 표시
 
 ### 확인 필요
 
 - Vercel 재배포 후 폼 제출 시 성공 모달만 뜨고 Apps Script JSON 화면이 열리지 않는지 확인
+- Google Apps Script 코드도 문서의 최신 버전으로 교체 후 새 배포/업데이트 필요
 
 ## 2026-05-27
 
