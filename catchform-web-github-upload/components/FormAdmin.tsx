@@ -87,6 +87,15 @@ function postAppsScriptPayload(url:string,payload:any){
     throw new Error(message)
   }).catch(err=>{if(typeof window!=="undefined")return directPost();throw err})
 }
+function withTimeout<T>(promise:PromiseLike<T>,ms:number,message:string):Promise<T>{
+  return new Promise((resolve,reject)=>{
+    const id=setTimeout(()=>reject(new Error(message)),ms)
+    Promise.resolve(promise).then(
+      value=>{clearTimeout(id);resolve(value)},
+      err=>{clearTimeout(id);reject(err)}
+    )
+  })
+}
 
 type QrFileFormat = "png"|"svg"|"jpg"
 type QrVersionInfo = { version:number; align:number[]; ecc:number; maxBytes:number; blocks:{count:number;data:number}[] }
@@ -1244,9 +1253,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     }
   }
   async function fetchFormSummaries(sb:any,limit=100){
-    const light=await sb.from("form_configs").select(FORM_SUMMARY_SELECT).order("updated_at",{ascending:false}).limit(limit)
+    const light:any=await withTimeout(
+      sb.from("form_configs").select(FORM_SUMMARY_SELECT).order("updated_at",{ascending:false}).limit(limit),
+      10000,
+      "폼 목록 조회 시간이 초과됐어요."
+    )
     if(!light.error)return (light.data||[]).map(normalizeFormSummary)
-    const full=await sb.from("form_configs").select("id,name,slug,updated_at,config,brand").order("updated_at",{ascending:false}).limit(limit)
+    const full:any=await withTimeout(
+      sb.from("form_configs").select("id,name,slug,updated_at,config,brand").order("updated_at",{ascending:false}).limit(limit),
+      10000,
+      "폼 목록 전체 조회 시간이 초과됐어요."
+    )
     return (full.data||[]).map(normalizeFormSummary)
   }
   async function getFullFormRow(item:any){
@@ -1280,11 +1297,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   React.useEffect(()=>{
     if(!supabaseUrl||!supabaseAnonKey)return
     const sb=getSB(supabaseUrl,supabaseAnonKey);if(!sb)return
-    sb.auth.getSession().then(({data})=>{
+    withTimeout(sb.auth.getSession(),8000,"세션 확인 시간이 초과됐어요.").then(({data})=>{
       if(data?.session){setAuthUser(data.session.user);setSbSt("ok");loadDashboard(sb);setView("dashboard")}
-    })
-    sb.from("programs").select("id,title,slug,category,is_hidden,is_archived").eq("is_archived",false).order("title").then(({data})=>{if(data)setProgs(data)})
-    sb.from("categories").select("id,name").then(({data})=>{if(data)setCats(data)})
+    }).catch(()=>{})
+    withTimeout(sb.from("programs").select("id,title,slug,category,is_hidden,is_archived").eq("is_archived",false).order("title"),8000,"프로그램 목록 확인 시간이 초과됐어요.").then(({data})=>{if(data)setProgs(data)}).catch(()=>{})
+    withTimeout(sb.from("categories").select("id,name"),8000,"카테고리 목록 확인 시간이 초과됐어요.").then(({data})=>{if(data)setCats(data)}).catch(()=>{})
   },[supabaseUrl,supabaseAnonKey])
 
   // ── Auth functions ────────────────────────────────────────────────────
@@ -1293,17 +1310,25 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(!loginEmail.trim()||!loginPw){setLoginErr("이메일과 비밀번호를 입력해주세요.");return}
     setLoginLoading(true);setLoginErr("")
     try{
-      const{data,error}=await supa.auth.signInWithPassword({email:loginEmail.trim(),password:loginPw})
+      const{data,error}=await withTimeout(
+        supa.auth.signInWithPassword({email:loginEmail.trim(),password:loginPw}),
+        12000,
+        "로그인 요청 시간이 초과됐어요. 인터넷 연결 또는 Supabase 설정을 확인해주세요."
+      )
       if(error)throw error
       // 권한 체크: users 테이블에서 role이 MASTER 또는 ADMIN인지 확인
-      const{data:userRow,error:roleErr}=await supa.from("users").select("role").eq("id",data.user.id).single()
-      if(roleErr||!userRow){await supa.auth.signOut();throw new Error("사용자 정보를 확인할 수 없어요.")}
-      if(userRow.role!=="MASTER"&&userRow.role!=="ADMIN"){await supa.auth.signOut();throw new Error("관리자 권한이 없어요. MASTER 또는 ADMIN 계정으로 로그인해주세요.")}
+      const{data:userRow,error:roleErr}=await withTimeout(
+        supa.from("users").select("role").eq("id",data.user.id).single(),
+        10000,
+        "관리자 권한 확인 시간이 초과됐어요. Supabase 연결 상태를 확인해주세요."
+      )
+      if(roleErr||!userRow){await withTimeout(supa.auth.signOut(),6000,"로그아웃 처리 시간이 초과됐어요.").catch(()=>{});throw new Error("사용자 정보를 확인할 수 없어요.")}
+      if(userRow.role!=="MASTER"&&userRow.role!=="ADMIN"){await withTimeout(supa.auth.signOut(),6000,"로그아웃 처리 시간이 초과됐어요.").catch(()=>{});throw new Error("관리자 권한이 없어요. MASTER 또는 ADMIN 계정으로 로그인해주세요.")}
       setAuthUser(data.user);setSbSt("ok")
-      await loadDashboard(supa)
       setView("dashboard")
-      supa.from("programs").select("id,title,slug,category,is_hidden,is_archived").eq("is_archived",false).order("title").then(({data:pd})=>{if(pd)setProgs(pd)})
-      supa.from("categories").select("id,name").then(({data:cd})=>{if(cd)setCats(cd)})
+      loadDashboard(supa)
+      withTimeout(supa.from("programs").select("id,title,slug,category,is_hidden,is_archived").eq("is_archived",false).order("title"),8000,"프로그램 목록 확인 시간이 초과됐어요.").then(({data:pd})=>{if(pd)setProgs(pd)}).catch(()=>{})
+      withTimeout(supa.from("categories").select("id,name"),8000,"카테고리 목록 확인 시간이 초과됐어요.").then(({data:cd})=>{if(cd)setCats(cd)}).catch(()=>{})
     } catch(e){const err=(e as any);setLoginErr(err.message==="Invalid login credentials"?"이메일 또는 비밀번호가 올바르지 않아요.":err.message||"로그인 실패")}
     finally {setLoginLoading(false)}
   }
@@ -1319,7 +1344,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const warm=()=>all.slice(0,16).forEach((item:any)=>prefetchFullFormRow(item))
       if(typeof window!=="undefined"&&"requestIdleCallback" in window)(window as any).requestIdleCallback(warm,{timeout:1200})
       else setTimeout(warm,350)
-    } finally {setDashLoading(false)}
+    } catch(e){showToast((e as any)?.message||"폼 목록을 불러오지 못했어요.",false)}
+    finally {setDashLoading(false)}
   }
 
   function startNewForm(brand:"SNIPERFACTORY"|"INSIDEOUT"){
