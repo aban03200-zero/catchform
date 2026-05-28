@@ -6,6 +6,7 @@
 
 import * as React from "react"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
+import { publicEnv } from "@/lib/env"
 
 // ─── Types ────────────────────────────────────────────────────────────────
 type Opt = { label: string; value: string; isEtc: boolean; nextPage?: number }
@@ -92,7 +93,10 @@ function postAppsScriptPayload(url: string, payload: any) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ webhookUrl: url, payload }),
     }).then(async (res) => {
-        if (res.ok) return
+        if (res.ok) {
+            const data = await res.json().catch(() => null)
+            return data?.appsScriptResponse || data
+        }
         if (res.status === 404) return directPost()
         let message = "Google Sheets 전송 요청에 실패했어요."
         try {
@@ -197,6 +201,7 @@ export function CatchForm(props: {
     slug?: string
     formId?: string
     configJson?: string
+    googleSheetsWebhookUrl?: string
 }) {
     const { supabaseUrl = "", supabaseAnonKey = "", slug: propSlug = "", formId: propFormId = "", configJson = "" } = props
     const supa = React.useMemo(() => getSB(supabaseUrl, supabaseAnonKey), [supabaseUrl, supabaseAnonKey])
@@ -686,7 +691,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         const raw: any[] = isKdt ? (cfg.kdtFields || []) as any[] : cfg.form.fields as any[]
         return raw.filter(field => field.type !== "info" && field.type !== "section_desc")
     }
-    const updateGoogleSheetsSyncStatus = async (formConfigId: string | null, status: "sent"|"error", message: string) => {
+    const updateGoogleSheetsSyncStatus = async (formConfigId: string | null, status: "sent"|"error", message: string, patch: Record<string, any> = {}) => {
         if (!supa || !formConfigId) return
         try {
             const { data } = await supa.from("form_configs").select("config").eq("id", formConfigId).single()
@@ -697,6 +702,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     ...(baseCfg.integrations || {}),
                     googleSheets: {
                         ...(baseCfg.integrations?.googleSheets || {}),
+                        ...patch,
                         lastSyncStatus: status,
                         lastSyncAt: new Date().toISOString(),
                         lastSyncMessage: message
@@ -709,7 +715,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
     const sendGoogleSheetsIntegration = async (payload: Record<string, any>, formData: Array<{question: string; answer: any; answerKey: string}>, formConfigId: string | null) => {
         const gs = cfg.integrations?.googleSheets
-        if (!gs?.enabled || !gs.webhookUrl) return
+        const webhookUrl = String(gs?.webhookUrl || publicEnv.googleSheetsWebhookUrl || "").trim()
+        if (!gs?.enabled || !webhookUrl) return
         const answerRow = formData.reduce((acc: Record<string, any>, item) => {
             acc[item.question || item.answerKey] = sheetAnswer(item.answer)
             if (item.answerKey) acc[item.answerKey] = sheetAnswer(item.answer)
@@ -735,7 +742,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             schema: "analytics_export_v1",
             mode: gs.mode || "existing",
             accountEmail: gs.accountEmail || "",
-            sheetUrl: gs.mode === "existing" ? (gs.sheetUrl || "") : "",
+            sheetUrl: gs.sheetUrl || "",
             sheetName: gs.sheetName || cfg.header?.title || "CatchForm Responses",
             formId: formConfigId || formId || "",
             formSlug: formSlug || "",
@@ -746,8 +753,17 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             answers: formData.map(item => ({ ...item, answer: sheetAnswer(item.answer) })),
         }
         try {
-            await postAppsScriptPayload(gs.webhookUrl, body)
-            await updateGoogleSheetsSyncStatus(formConfigId, "sent", "최근 제출 응답을 Apps Script Web App URL로 전송했어요.")
+            const result: any = await postAppsScriptPayload(webhookUrl, body)
+            const returnedSheetUrl = String(result?.spreadsheetUrl || "").trim()
+            await updateGoogleSheetsSyncStatus(
+                formConfigId,
+                "sent",
+                "최근 제출 응답을 Apps Script Web App URL로 전송했어요.",
+                {
+                    webhookUrl,
+                    ...(returnedSheetUrl ? { sheetUrl: returnedSheetUrl } : {}),
+                }
+            )
             trackEvent("sheet_sync", { metadata: { provider: "google_sheets", mode: gs.mode || "existing", status: "sent" } })
         } catch (err) {
             const message = (err as any)?.message || "Google Sheets 전송 요청에 실패했어요."

@@ -36,6 +36,7 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 NEXT_PUBLIC_FORM_BASE_URL=https://배포도메인/form
 NEXT_PUBLIC_SF_FORM_BASE_URL=https://배포도메인/form
+NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL=
 ```
 
 예시:
@@ -43,7 +44,10 @@ NEXT_PUBLIC_SF_FORM_BASE_URL=https://배포도메인/form
 ```env
 NEXT_PUBLIC_FORM_BASE_URL=https://catchform-web.vercel.app/form
 NEXT_PUBLIC_SF_FORM_BASE_URL=https://catchform-web.vercel.app/form
+NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL=https://script.google.com/macros/s/배포ID/exec
 ```
+
+`NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL`은 선택값입니다. 넣어두면 관리자 `응답 연동`에서 폼마다 Apps Script URL을 반복 입력하지 않고, 같은 Web App URL로 새 스프레드시트를 생성하거나 기존 스프레드시트에 응답을 기록할 수 있습니다.
 
 ## 5. 배포 후 확인할 주소
 

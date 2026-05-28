@@ -3,4 +3,5 @@ export const publicEnv = {
   supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
   formBaseUrl: process.env.NEXT_PUBLIC_FORM_BASE_URL || "",
   sfFormBaseUrl: process.env.NEXT_PUBLIC_SF_FORM_BASE_URL || "",
+  googleSheetsWebhookUrl: process.env.NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL || "",
 }

@@ -33,6 +33,7 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 NEXT_PUBLIC_FORM_BASE_URL=http://localhost:3000/form
 NEXT_PUBLIC_SF_FORM_BASE_URL=http://localhost:3000/form
+NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL=
 ```
 
 3. 개발 서버 실행
@@ -61,6 +62,7 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 NEXT_PUBLIC_FORM_BASE_URL=https://배포도메인/form
 NEXT_PUBLIC_SF_FORM_BASE_URL=https://배포도메인/form
+NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL=
 ```
 
 5. Deploy를 누릅니다.
@@ -75,7 +77,8 @@ Apps Script 코드는 아래 파일에 있습니다.
 docs/catchform-google-sheets-apps-script.js
 ```
 
-Apps Script에 붙여넣고 새 배포한 Web App URL을 관리자 화면의 `응답 연동` 메뉴에 넣으면 됩니다.
+Apps Script에 붙여넣고 새 배포한 Web App URL을 Vercel 환경변수 `NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL`에 한 번만 넣으면 됩니다.
+특정 폼만 다른 Apps Script를 써야 할 때는 관리자 화면의 `응답 연동` 메뉴에서 폼별 URL을 따로 입력할 수 있습니다.
 
 ## SniperFactory `/apply` 연동
 

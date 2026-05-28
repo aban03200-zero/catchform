@@ -31,6 +31,7 @@ export function FormAdminClient() {
       supabaseAnonKey={publicEnv.supabaseAnonKey}
       formBaseUrl={publicEnv.formBaseUrl}
       sfFormBaseUrl={publicEnv.sfFormBaseUrl}
+      googleSheetsWebhookUrl={publicEnv.googleSheetsWebhookUrl}
     />
   )
 }

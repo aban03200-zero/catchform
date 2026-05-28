@@ -29,6 +29,7 @@ function doGet(e) {
       mode: params.mode || "new",
       sheetUrl: params.sheetUrl || "",
       sheetName: params.sheetName || "",
+      accountEmail: params.accountEmail || "",
       formId: params.formId || "",
       formSlug: params.formSlug || "",
       formTitle: params.formTitle || "",
@@ -51,7 +52,9 @@ function doGet(e) {
 
 function getSpreadsheet_(payload) {
   if ((payload.mode || "existing") === "existing" && payload.sheetUrl) {
-    return SpreadsheetApp.openByUrl(payload.sheetUrl);
+    var existing = SpreadsheetApp.openByUrl(payload.sheetUrl);
+    ensureSpreadsheetAccess_(existing, payload);
+    return existing;
   }
 
   var key = getSheetPropertyKey_(payload);
@@ -60,18 +63,35 @@ function getSpreadsheet_(payload) {
     var savedId = props.getProperty(key);
     if (savedId) {
       try {
-        return SpreadsheetApp.openById(savedId);
+        var saved = SpreadsheetApp.openById(savedId);
+        ensureSpreadsheetAccess_(saved, payload);
+        return saved;
       } catch (err) {
         props.deleteProperty(key);
       }
     }
   }
 
-  if (payload.sheetUrl) return SpreadsheetApp.openByUrl(payload.sheetUrl);
+  if (payload.sheetUrl) {
+    var byUrl = SpreadsheetApp.openByUrl(payload.sheetUrl);
+    ensureSpreadsheetAccess_(byUrl, payload);
+    return byUrl;
+  }
 
   var spreadsheet = SpreadsheetApp.create(payload.sheetName || payload.formTitle || "CatchForm Responses");
   if (key) props.setProperty(key, spreadsheet.getId());
+  ensureSpreadsheetAccess_(spreadsheet, payload);
   return spreadsheet;
+}
+
+function ensureSpreadsheetAccess_(spreadsheet, payload) {
+  var email = String(payload.accountEmail || "").trim();
+  if (!email || email.indexOf("@") === -1) return;
+  try {
+    spreadsheet.addEditor(email);
+  } catch (err) {
+    // 공유 드라이브 정책이나 도메인 제한 때문에 공유가 막힌 경우에도 응답 기록 자체는 계속 진행합니다.
+  }
 }
 
 function getTargetSheet_(spreadsheet, payload) {

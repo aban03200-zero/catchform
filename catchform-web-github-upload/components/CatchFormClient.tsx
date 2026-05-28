@@ -24,6 +24,7 @@ export function CatchFormClient({
       configJson={configJson || ""}
       supabaseUrl={publicEnv.supabaseUrl}
       supabaseAnonKey={publicEnv.supabaseAnonKey}
+      googleSheetsWebhookUrl={publicEnv.googleSheetsWebhookUrl}
     />
   )
 }

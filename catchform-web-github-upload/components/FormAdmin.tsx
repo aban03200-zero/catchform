@@ -80,7 +80,10 @@ const DEFAULT_GOOGLE_SHEETS = {enabled:false,mode:"existing" as const,accountEma
 function postAppsScriptPayload(url:string,payload:any){
   const directPost=()=>fetch(url,{method:"POST",mode:"no-cors",body:new URLSearchParams({payload:JSON.stringify(payload)}).toString(),headers:{"content-type":"application/x-www-form-urlencoded;charset=UTF-8"}}).then(()=>{})
   return fetch("/api/google-sheets",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({webhookUrl:url,payload})}).then(async(res)=>{
-    if(res.ok)return
+    if(res.ok){
+      const data=await res.json().catch(()=>null)
+      return data?.appsScriptResponse||data
+    }
     if(res.status===404)return directPost()
     let message="Google Sheets 전송 요청에 실패했어요."
     try{const data=await res.json(); if(data?.error) message=data.error}catch{}
@@ -1073,8 +1076,8 @@ function ProgramPicker({progs,cats,brand,value,onChange,A}:{progs:Prog[];cats:Ca
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────
-export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:string;supabaseAnonKey?:string;formBaseUrl?:string;sfFormBaseUrl?:string}) {
-  const {width=1280,height=820,supabaseUrl="",supabaseAnonKey="",formBaseUrl="",sfFormBaseUrl=""}=props
+export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:string;supabaseAnonKey?:string;formBaseUrl?:string;sfFormBaseUrl?:string;googleSheetsWebhookUrl?:string}) {
+  const {width=1280,height=820,supabaseUrl="",supabaseAnonKey="",formBaseUrl="",sfFormBaseUrl="",googleSheetsWebhookUrl=""}=props
   const supa=React.useMemo(()=>getSB(supabaseUrl,supabaseAnonKey),[supabaseUrl,supabaseAnonKey])
 
   // ── Admin theme ────────────────────────────────────────────────────────
@@ -1651,7 +1654,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 		      .then(({error})=>{if(error)showToast("저장 중 오류가 발생했어요",false);else{loadList();loadDashboard(supa)}})
 		  }
 	  function onSaveClick(){if(loadedId)setShowUpdateModal(true);else setShowSave(true)}
-  async function setGoogleSheetsSyncStatus(status:"sent"|"error",message:string){
+  async function setGoogleSheetsSyncStatus(status:"sent"|"error",message:string,patch:Partial<NonNullable<NonNullable<Cfg["integrations"]>["googleSheets"]>>={}){
     const nextCfg={
       ...cfg,
       brand:currentBrand,
@@ -1660,6 +1663,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         googleSheets:{
           ...DEFAULT_GOOGLE_SHEETS,
           ...(cfg.integrations?.googleSheets||{}),
+          ...patch,
           lastSyncStatus:status,
           lastSyncAt:new Date().toISOString(),
           lastSyncMessage:message
@@ -1673,9 +1677,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   async function testGoogleSheetsIntegration(){
     const gs={...DEFAULT_GOOGLE_SHEETS,...(cfg.integrations?.googleSheets||{})}
+    const webhookUrl=String(gs.webhookUrl||googleSheetsWebhookUrl||"").trim()
     if(!loadedId){showToast("폼을 먼저 저장한 뒤 연동 테스트를 해주세요.",false);return}
     if(!gs.enabled){showToast("응답 자동 연동을 먼저 켜주세요.",false);return}
-    if(!String(gs.webhookUrl||"").trim()){showToast("Apps Script Web App URL을 입력해주세요.",false);return}
+    if(!webhookUrl){showToast("Apps Script Web App URL을 입력해주세요.",false);return}
     setActionLoading("구글 시트 연동을 테스트하는 중이에요.")
     try{
       const payload={
@@ -1684,7 +1689,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         schema:"analytics_export_v1",
         mode:gs.mode||"existing",
         accountEmail:gs.accountEmail||"",
-        sheetUrl:gs.mode==="existing"?(gs.sheetUrl||""):"",
+        sheetUrl:gs.sheetUrl||"",
         sheetName:gs.sheetName||cfg.header?.title||"CatchForm Responses",
         formId:loadedId,
         formSlug:savedSlug||saveSlug||"",
@@ -1701,8 +1706,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         },
         answers:[{question:"테스트",answer:"CatchForm 연동 테스트",answerKey:"test"}]
       }
-      await postAppsScriptPayload(gs.webhookUrl.trim(),payload)
-      await setGoogleSheetsSyncStatus("sent","테스트 전송 요청을 보냈어요. 시트에 'CatchForm 연동 테스트' 행이 생겼는지 확인해주세요.")
+      const result:any=await postAppsScriptPayload(webhookUrl,payload)
+      const returnedSheetUrl=String(result?.spreadsheetUrl||"").trim()
+      await setGoogleSheetsSyncStatus(
+        "sent",
+        "테스트 전송 요청을 보냈어요. 시트에 'CatchForm 연동 테스트' 행이 생겼는지 확인해주세요.",
+        {
+          webhookUrl,
+          ...(returnedSheetUrl?{sheetUrl:returnedSheetUrl}:{}),
+        }
+      )
       showToast("테스트 전송 요청 완료! 시트를 확인해주세요.")
       loadList()
     }catch(e){
@@ -1712,8 +1725,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     }finally{setActionLoading("")}
   }
   function googleSheetOpenUrl(gs:any){
-    if((gs.mode||"existing")==="existing")return String(gs.sheetUrl||"").trim()
-    const webhook=String(gs.webhookUrl||"").trim()
+    const savedSheetUrl=String(gs.sheetUrl||"").trim()
+    if(savedSheetUrl)return savedSheetUrl
+    if((gs.mode||"existing")==="existing")return ""
+    const webhook=String(gs.webhookUrl||googleSheetsWebhookUrl||"").trim()
     if(!webhook)return ""
     const params=new URLSearchParams({
       action:"open",
@@ -1721,7 +1736,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       formId:loadedId||"",
       formSlug:savedSlug||saveSlug||"",
       formTitle:cfg.header?.title||loadedName||"CatchForm",
-      sheetName:gs.sheetName||cfg.header?.title||"CatchForm Responses"
+      sheetName:gs.sheetName||cfg.header?.title||"CatchForm Responses",
+      accountEmail:gs.accountEmail||""
     })
     return `${webhook}${webhook.includes("?")?"&":"?"}${params.toString()}`
   }
@@ -3234,9 +3250,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
       case "integrations": {
         const gs={...DEFAULT_GOOGLE_SHEETS,...(cfg.integrations?.googleSheets||{})}
-        const ready=!!gs.enabled&&!!String(gs.webhookUrl||"").trim()
-        const statusLabel=!gs.enabled?"연동 꺼짐":!String(gs.webhookUrl||"").trim()?"설정 필요":gs.lastSyncStatus==="sent"?"전송 요청 완료":gs.lastSyncStatus==="error"?"최근 전송 실패":"연동 대기"
-        const statusColor=!gs.enabled?A.t3:!String(gs.webhookUrl||"").trim()?A.red:gs.lastSyncStatus==="error"?A.red:A.green
+        const effectiveWebhookUrl=String(gs.webhookUrl||googleSheetsWebhookUrl||"").trim()
+        const usingGlobalWebhook=!String(gs.webhookUrl||"").trim()&&!!googleSheetsWebhookUrl
+        const ready=!!gs.enabled&&!!effectiveWebhookUrl
+        const statusLabel=!gs.enabled?"연동 꺼짐":!effectiveWebhookUrl?"설정 필요":gs.lastSyncStatus==="sent"?"전송 요청 완료":gs.lastSyncStatus==="error"?"최근 전송 실패":"연동 대기"
+        const statusColor=!gs.enabled?A.t3:!effectiveWebhookUrl?A.red:gs.lastSyncStatus==="error"?A.red:A.green
         const lastSyncText=gs.lastSyncAt?new Date(gs.lastSyncAt).toLocaleString("ko-KR"):"아직 제출 전송 기록이 없어요."
         const sheetOpenUrl=googleSheetOpenUrl(gs)
         return <div style={pd}>
@@ -3259,6 +3277,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </F>
             <F label="Apps Script Web App URL" A={A}>
               <TIn value={gs.webhookUrl} onChange={v=>ug("webhookUrl",v)} placeholder="https://script.google.com/macros/s/..." A={A}/>
+              {usingGlobalWebhook&&<div style={{fontSize:11.5,color:A.green,lineHeight:1.55,marginTop:6}}>
+                Vercel 공통 URL이 자동 적용 중이에요. 이 칸은 폼별로 다른 URL을 써야 할 때만 입력하면 됩니다.
+              </div>}
             </F>
             <F label="연동 상태" A={A}>
               <div style={{padding:"12px",borderRadius:A.r,border:`1px solid ${statusColor}44`,background:statusColor+"10",display:"grid",gap:8}}>
@@ -3273,7 +3294,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   </button>
                 </div>
                 <div style={{fontSize:11.5,color:A.t2,lineHeight:1.6}}>
-                  {ready?`마지막 상태: ${lastSyncText}`:"계정 이메일만으로는 연동되지 않아요. Apps Script Web App URL까지 입력해야 제출 응답이 시트로 전송됩니다."}
+                  {ready?`마지막 상태: ${lastSyncText}`:"계정 이메일만으로는 연동되지 않아요. 공통 Apps Script URL을 Vercel 환경변수에 넣거나, 이 폼에 직접 URL을 입력해야 제출 응답이 시트로 전송됩니다."}
                   {gs.lastSyncMessage&&<div style={{marginTop:4,color:gs.lastSyncStatus==="error"?A.red:A.t2}}>{gs.lastSyncMessage}</div>}
                 </div>
               </div>
@@ -3293,7 +3314,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             이 설정은 <b>설정 저장</b> 또는 우측 상단 <b>저장</b>을 눌러야 실제 배포된 폼에 반영돼요. 저장 후 <b>테스트 전송</b>을 눌러 시트에 테스트 행이 생기는지 먼저 확인해주세요.
           </div>
           <div style={{padding:"12px 14px",borderRadius:A.r,background:A.green+"12",border:`1px solid ${A.green}44`,color:A.green,fontSize:12.5,lineHeight:1.7}}>
-            Google 계정 목록/시트 목록을 직접 띄우려면 Google OAuth 백엔드가 필요해요. 현재 코드는 Apps Script Web App URL의 <b>doPost(e)</b>로 <b>e.parameter.payload</b> JSON을 보내는 방식으로 연동됩니다.
+            매번 URL을 넣지 않으려면 Vercel 환경변수 <b>NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL</b>에 공통 Apps Script Web App URL을 한 번만 저장하세요. Google 계정/시트 목록을 직접 선택하는 완전 자동 방식은 Google OAuth 백엔드가 필요합니다.
           </div>
         </div>
       }
