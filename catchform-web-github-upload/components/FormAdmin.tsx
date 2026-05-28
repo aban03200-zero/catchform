@@ -1130,6 +1130,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [newLbl,setNewLbl]=React.useState("")
   const [newVal,setNewVal]=React.useState("")
   const [slugDraft,setSlugDraft]=React.useState("")
+  const [qrMode,setQrMode]=React.useState<"form"|"custom">("form")
+  const [qrCustomUrl,setQrCustomUrl]=React.useState("")
   const [showAnalyticsTip,setShowAnalyticsTip]=React.useState(false)
   const [actionLoading,setActionLoading]=React.useState("")
   const [analyticsInfoTip,setAnalyticsInfoTip]=React.useState("")
@@ -3291,38 +3293,43 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         const hasBase=base.length>0
         const hasSaved=savedSlug.length>0
         const formUrl=hasBase&&hasSaved?`${base}?slug=${savedSlug}`:""
-        const brandLabel=isSF?"스나이퍼팩토리":"인사이드아웃"
-        const qrName=`${loadedName||savedSlug||"catchform"}-qr`
+        const activeQrUrl=qrMode==="form"?formUrl:qrCustomUrl.trim()
+        const qrName=qrMode==="form"?`${loadedName||savedSlug||"catchform"}-form-qr`:"detail-page-qr"
         let qrMatrix:boolean[][]|null=null
         let qrError=""
-        if(formUrl){
-          try{qrMatrix=makeQrMatrix(formUrl)}
+        if(activeQrUrl){
+          try{qrMatrix=makeQrMatrix(activeQrUrl)}
           catch(e){qrError=(e as Error).message||"QR을 만들 수 없어요."}
         }
         const onQrDownload=(format:QrFileFormat)=>{
           try{
-            if(!formUrl){showToast("폼 링크가 먼저 필요해요",false);return}
-            downloadQrFile(formUrl,qrName,format)
+            if(!activeQrUrl){showToast(qrMode==="form"?"폼 링크가 먼저 필요해요":"상세페이지 URL을 입력해주세요",false);return}
+            downloadQrFile(activeQrUrl,qrName,format)
             showToast(`${format.toUpperCase()} QR 다운로드를 시작했어요`)
           }catch(e){showToast((e as Error).message||"QR 다운로드에 실패했어요",false)}
         }
         return <div style={pd}>
-          <FG title="QR 자동 생성" A={A}>
-            <div style={{padding:"12px 14px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12.5,color:A.t2,lineHeight:1.6,marginBottom:12}}>
-              저장된 폼 링크를 기준으로 QR을 자동 생성합니다. 포스터, 상세페이지, 오프라인 안내물에 바로 사용할 수 있어요.
+          <FG title="QR 만들기" A={A}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+              {([{id:"form",label:"폼 QR"},{id:"custom",label:"상세페이지 QR"}] as const).map(item=>{
+                const active=qrMode===item.id
+                return <button key={item.id} onClick={()=>setQrMode(item.id)}
+                  style={{height:38,borderRadius:A.r,border:`1.5px solid ${active?A.blue:A.border}`,background:active?A.blue2:A.card,color:active?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
+                  {item.label}
+                </button>
+              })}
             </div>
-            <F label="대상 폼" A={A}>
-              <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 11px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`}}>
-                <span style={{width:8,height:8,borderRadius:"50%",background:isSF?"#6366F1":A.red,flexShrink:0}}/>
-                <span style={{fontSize:12.5,fontWeight:600,color:A.t1}}>{brandLabel}</span>
-                <span style={{fontSize:11.5,color:A.t3,marginLeft:"auto"}}>{savedSlug||"저장 전"}</span>
-              </div>
-            </F>
-            <F label="QR URL" A={A}>
-              {formUrl
-                ? <textarea readOnly value={formUrl} style={{width:"100%",height:56,background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t2,fontFamily:"Courier New,monospace",fontSize:11.5,padding:"8px",outline:"none",resize:"none" as const,boxSizing:"border-box" as const,wordBreak:"break-all" as const}}/>
-                : <div style={{padding:"10px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12.5,color:A.t3,lineHeight:1.5}}>
-                    {!hasBase&&!hasSaved?"배포 페이지 URL과 저장된 슬러그가 필요해요.":!hasBase?"브랜드별 배포 페이지 URL이 필요해요.":"폼을 먼저 저장하면 QR을 만들 수 있어요."}
+            <F label={qrMode==="form"?"폼 URL":"상세페이지 URL"} A={A}>
+              {qrMode==="form"
+                ? formUrl
+                  ? <textarea readOnly value={formUrl} style={{width:"100%",height:56,background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t2,fontFamily:"Courier New,monospace",fontSize:11.5,padding:"8px",outline:"none",resize:"none" as const,boxSizing:"border-box" as const,wordBreak:"break-all" as const}}/>
+                  : <div style={{padding:"10px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12.5,color:A.t3,lineHeight:1.5}}>
+                      {!hasBase&&!hasSaved?"배포 페이지 URL과 저장된 슬러그가 필요해요.":!hasBase?"브랜드별 배포 페이지 URL이 필요해요.":"폼을 먼저 저장하면 QR을 만들 수 있어요."}
+                    </div>
+                : <TIn value={qrCustomUrl} onChange={setQrCustomUrl} placeholder="https://example.com/detail" A={A}/>}
+              {qrMode==="custom"&&qrCustomUrl.trim()&&!/^https?:\/\//i.test(qrCustomUrl.trim())&&
+                <div style={{marginTop:6,fontSize:11.5,color:A.t3,lineHeight:1.5}}>
+                  `https://`를 포함한 전체 URL을 입력하면 스캔 시 바로 열립니다.
                   </div>}
             </F>
           </FG>
@@ -3346,13 +3353,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 ))}
               </div>
               <div style={{display:"flex",gap:8,width:"100%"}}>
-                <button onClick={()=>{if(formUrl){navigator.clipboard.writeText(formUrl);showToast("폼 링크 복사 완료!")}}} disabled={!formUrl}
-                  style={{flex:1,height:36,borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:formUrl?A.t2:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:formUrl?"pointer":"not-allowed"}}>
+                <button onClick={()=>{if(activeQrUrl){navigator.clipboard.writeText(activeQrUrl);showToast("QR URL 복사 완료!")}}} disabled={!activeQrUrl}
+                  style={{flex:1,height:36,borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:activeQrUrl?A.t2:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:activeQrUrl?"pointer":"not-allowed"}}>
                   URL 복사
                 </button>
-                <button onClick={()=>formUrl&&window.open(formUrl,"_blank")} disabled={!formUrl}
-                  style={{flex:1,height:36,borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:formUrl?A.t2:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:formUrl?"pointer":"not-allowed"}}>
-                  폼 열기
+                <button onClick={()=>activeQrUrl&&window.open(activeQrUrl,"_blank")} disabled={!activeQrUrl}
+                  style={{flex:1,height:36,borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:activeQrUrl?A.t2:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:activeQrUrl?"pointer":"not-allowed"}}>
+                  URL 열기
                 </button>
               </div>
             </div>
