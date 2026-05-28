@@ -33,6 +33,9 @@
 - 스나이퍼팩토리 브랜드로 새 폼/템플릿/복사본/편집 폼을 열 때 완료 모달의 기본 버튼 URL이 `https://sniperfactory.com/program`이 되도록 보정
 - 기간별 인사이트의 위치 분석을 응답자가 직접 입력한 주소/거주지 답변이 아니라 폼 진입/참여 이벤트의 `country`, `region`, `city` metadata 기준으로 집계하도록 변경
 - 임시로 구성했던 대한민국 타일형 지도를 제거하고, 도시/지역별 카운트를 많은 순서대로 정렬한 위치 랭킹 UI로 정리
+- Google Sheets 테스트 전송에서 `/api/google-sheets` 또는 Apps Script가 실패해도 `no-cors` 직접 전송 성공처럼 처리되던 문제를 수정
+- 새 스프레드시트 생성 테스트는 Apps Script 응답에서 실제 `spreadsheetUrl`을 받아야 성공으로 처리하고, 받은 URL을 저장해 `시트로 이동` 버튼이 활성화되도록 보강
+- Apps Script 응답에 실제 추가된 행 번호를 포함하고 `SpreadsheetApp.flush()`를 호출해 테스트 행 생성 여부를 더 명확히 확인할 수 있도록 변경
 
 ### 확인 필요
 

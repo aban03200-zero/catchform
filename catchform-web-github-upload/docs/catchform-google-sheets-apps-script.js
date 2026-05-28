@@ -7,12 +7,14 @@ function doPost(e) {
     var payload = JSON.parse(raw || "{}");
     var spreadsheet = getSpreadsheet_(payload);
     var sheet = getTargetSheet_(spreadsheet, payload);
-    appendPayload_(sheet, payload);
+    var appendedRow = appendPayload_(sheet, payload);
+    SpreadsheetApp.flush();
 
     return json_({
       ok: true,
       spreadsheetUrl: spreadsheet.getUrl(),
       sheetName: sheet.getName(),
+      appendedRow: appendedRow,
     });
   } catch (err) {
     return json_({
@@ -148,6 +150,7 @@ function appendPayload_(sheet, payload) {
   });
 
   sheet.appendRow(values);
+  return sheet.getLastRow();
 }
 
 function stringifyValue_(value) {

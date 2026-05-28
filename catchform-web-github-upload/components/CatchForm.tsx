@@ -80,7 +80,8 @@ function detectDeviceOS() {
     if (/linux/i.test(ua) || /Linux/i.test(platform)) return "Linux"
     return "기타"
 }
-function postAppsScriptPayload(url: string, payload: any) {
+function postAppsScriptPayload(url: string, payload: any, opts: { allowDirectFallback?: boolean } = {}) {
+    const allowDirectFallback = opts.allowDirectFallback !== false
     const directPost = () => fetch(url, {
         method: "POST",
         mode: "no-cors",
@@ -95,17 +96,21 @@ function postAppsScriptPayload(url: string, payload: any) {
     }).then(async (res) => {
         if (res.ok) {
             const data = await res.json().catch(() => null)
-            return data?.appsScriptResponse || data
+            const result = data?.appsScriptResponse || data
+            if (result?.ok === false) {
+                throw Object.assign(new Error(result?.message || result?.error || "Apps Script 전송 실패"), { noDirectFallback: true })
+            }
+            return result
         }
-        if (res.status === 404) return directPost()
+        if (res.status === 404 && allowDirectFallback) return directPost()
         let message = "Google Sheets 전송 요청에 실패했어요."
         try {
             const data = await res.json()
             if (data?.error) message = data.error
         } catch {}
-        throw new Error(message)
+        throw Object.assign(new Error(message), { noDirectFallback: true })
     }).catch((err) => {
-        if (typeof window !== "undefined") return directPost()
+        if (allowDirectFallback && !(err as any)?.noDirectFallback && typeof window !== "undefined") return directPost()
         throw err
     })
 }

@@ -40,7 +40,27 @@ export async function POST(req: NextRequest) {
       appsScriptResponse = text ? JSON.parse(text) : undefined
     } catch {}
 
-    return NextResponse.json({ ok: true, appsScriptResponse })
+    if (appsScriptResponse && appsScriptResponse.ok === false) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            appsScriptResponse.message ||
+            appsScriptResponse.error ||
+            "Apps Script에서 전송 실패 응답을 받았어요.",
+          appsScriptResponse,
+        },
+        { status: 502 },
+      )
+    }
+
+    return NextResponse.json({
+      ok: true,
+      ...(appsScriptResponse && typeof appsScriptResponse === "object"
+        ? appsScriptResponse
+        : {}),
+      appsScriptResponse,
+    })
   } catch (error: any) {
     return NextResponse.json(
       {

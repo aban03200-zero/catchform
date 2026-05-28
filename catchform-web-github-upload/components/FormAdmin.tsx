@@ -77,18 +77,21 @@ const FILE_MAX_SIZE_MB = 10
 const FILE_LIMIT_TEXT = `최대 ${FILE_MAX_COUNT}개, 파일당 ${FILE_MAX_SIZE_MB}MB`
 const FORM_SUMMARY_SELECT = "id,name,slug,updated_at,brand,config_brand:config->>brand,header_title:config->header->>title,program_id:config->header->>programId"
 const DEFAULT_GOOGLE_SHEETS = {enabled:false,mode:"existing" as const,accountEmail:"",sheetUrl:"",sheetName:"",webhookUrl:"",lastSyncStatus:"idle" as const,lastSyncAt:"",lastSyncMessage:""}
-function postAppsScriptPayload(url:string,payload:any){
+function postAppsScriptPayload(url:string,payload:any,opts:{allowDirectFallback?:boolean}={}){
+  const allowDirectFallback=opts.allowDirectFallback!==false
   const directPost=()=>fetch(url,{method:"POST",mode:"no-cors",body:new URLSearchParams({payload:JSON.stringify(payload)}).toString(),headers:{"content-type":"application/x-www-form-urlencoded;charset=UTF-8"}}).then(()=>{})
   return fetch("/api/google-sheets",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({webhookUrl:url,payload})}).then(async(res)=>{
     if(res.ok){
       const data=await res.json().catch(()=>null)
-      return data?.appsScriptResponse||data
+      const result=data?.appsScriptResponse||data
+      if(result?.ok===false)throw Object.assign(new Error(result?.message||result?.error||"Apps Script 전송 실패"),{noDirectFallback:true})
+      return result
     }
-    if(res.status===404)return directPost()
+    if(res.status===404&&allowDirectFallback)return directPost()
     let message="Google Sheets 전송 요청에 실패했어요."
     try{const data=await res.json(); if(data?.error) message=data.error}catch{}
-    throw new Error(message)
-  }).catch(err=>{if(typeof window!=="undefined")return directPost();throw err})
+    throw Object.assign(new Error(message),{noDirectFallback:true})
+  }).catch(err=>{if(allowDirectFallback&&!err?.noDirectFallback&&typeof window!=="undefined")return directPost();throw err})
 }
 function withTimeout<T>(promise:PromiseLike<T>,ms:number,message:string):Promise<T>{
   return new Promise((resolve,reject)=>{
@@ -1731,11 +1734,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         },
         answers:[{question:"테스트",answer:"CatchForm 연동 테스트",answerKey:"test"}]
       }
-      const result:any=await postAppsScriptPayload(webhookUrl,payload)
+      const result:any=await postAppsScriptPayload(webhookUrl,payload,{allowDirectFallback:false})
       const returnedSheetUrl=String(result?.spreadsheetUrl||"").trim()
+      if(gs.mode==="new"&&!returnedSheetUrl)throw new Error("새 스프레드시트 URL을 받지 못했어요. Apps Script Web App URL이 최신 코드로 배포되어 있는지 확인해주세요.")
       await setGoogleSheetsSyncStatus(
         "sent",
-        "테스트 전송 요청을 보냈어요. 시트에 'CatchForm 연동 테스트' 행이 생겼는지 확인해주세요.",
+        returnedSheetUrl
+          ? "테스트 전송 완료. 생성/연결된 시트 URL을 저장했어요."
+          : "테스트 전송 완료. 시트에 'CatchForm 연동 테스트' 행이 생겼는지 확인해주세요.",
         {
           webhookUrl,
           ...(returnedSheetUrl?{sheetUrl:returnedSheetUrl}:{}),
