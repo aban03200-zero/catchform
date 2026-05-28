@@ -26,6 +26,10 @@
 - Vercel 환경변수 `NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL`로 공통 Apps Script URL을 한 번만 설정할 수 있도록 변경
 - 새 스프레드시트 생성/테스트 전송 후 Apps Script가 돌려준 실제 스프레드시트 URL을 폼 설정에 저장해 `시트로 이동`이 실제 시트로 열리도록 변경
 - Apps Script가 새로 생성하거나 여는 스프레드시트를 `연동할 계정` 이메일에 편집자로 공유하도록 보강
+- `시트로 이동`이 저장된 실제 시트 URL 없이 Apps Script 경유 URL을 열지 않도록 변경해 Google Drive의 "현재 파일을 열 수 없습니다" 화면이 뜨는 경로를 차단
+- 응답 연동 패널 하단의 Google OAuth/환경변수 안내 박스를 제거
+- 폼 QR은 긴 `to=` URL을 QR 안에 직접 넣지 않고 `/qr?slug=...` 짧은 추적 URL로 생성하도록 변경해 QR 밀도를 낮춤
+- QR 생성 엔진을 v10에서 v20까지 확장해 더 긴 상세페이지 URL도 생성할 수 있도록 보강
 
 ### 확인 필요
 

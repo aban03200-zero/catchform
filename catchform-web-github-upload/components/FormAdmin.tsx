@@ -113,6 +113,16 @@ const QR_VERSION_INFO:QrVersionInfo[]=[
   {version:8,align:[6,24,42],ecc:24,maxBytes:192,blocks:[{count:2,data:97}]},
   {version:9,align:[6,26,46],ecc:30,maxBytes:230,blocks:[{count:2,data:116}]},
   {version:10,align:[6,28,50],ecc:18,maxBytes:271,blocks:[{count:2,data:68},{count:2,data:69}]},
+  {version:11,align:[6,30,54],ecc:20,maxBytes:321,blocks:[{count:4,data:81}]},
+  {version:12,align:[6,32,58],ecc:24,maxBytes:367,blocks:[{count:2,data:92},{count:2,data:93}]},
+  {version:13,align:[6,34,62],ecc:26,maxBytes:425,blocks:[{count:4,data:107}]},
+  {version:14,align:[6,26,46,66],ecc:30,maxBytes:458,blocks:[{count:3,data:115},{count:1,data:116}]},
+  {version:15,align:[6,26,48,70],ecc:22,maxBytes:520,blocks:[{count:5,data:87},{count:1,data:88}]},
+  {version:16,align:[6,26,50,74],ecc:24,maxBytes:586,blocks:[{count:5,data:98},{count:1,data:99}]},
+  {version:17,align:[6,30,54,78],ecc:28,maxBytes:644,blocks:[{count:1,data:107},{count:5,data:108}]},
+  {version:18,align:[6,30,56,82],ecc:30,maxBytes:718,blocks:[{count:5,data:120},{count:1,data:121}]},
+  {version:19,align:[6,30,58,86],ecc:28,maxBytes:792,blocks:[{count:3,data:113},{count:4,data:114}]},
+  {version:20,align:[6,34,62,90],ecc:28,maxBytes:858,blocks:[{count:3,data:107},{count:5,data:108}]},
 ]
 const QR_GF_EXP=(()=>{const exp=new Array<number>(512).fill(0);let x=1;for(let i=0;i<255;i++){exp[i]=x;x<<=1;if(x&0x100)x^=0x11D}for(let i=255;i<512;i++)exp[i]=exp[i-255];return exp})()
 const QR_GF_LOG=(()=>{const log=new Array<number>(256).fill(0);for(let i=0;i<255;i++)log[QR_GF_EXP[i]]=i;return log})()
@@ -203,7 +213,7 @@ function makeQrMatrix(text:string){
   const totalData=info.blocks.reduce((sum,b)=>sum+b.count*b.data,0)
   const bits:number[]=[]
   qrAppendBits(bits,0b0100,4)
-  qrAppendBits(bits,bytes.length,8)
+  qrAppendBits(bits,bytes.length,info.version>=10?16:8)
   for(const byte of bytes)qrAppendBits(bits,byte,8)
   const maxBits=totalData*8
   qrAppendBits(bits,0,Math.min(4,Math.max(0,maxBits-bits.length)))
@@ -1727,19 +1737,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   function googleSheetOpenUrl(gs:any){
     const savedSheetUrl=String(gs.sheetUrl||"").trim()
     if(savedSheetUrl)return savedSheetUrl
-    if((gs.mode||"existing")==="existing")return ""
-    const webhook=String(gs.webhookUrl||googleSheetsWebhookUrl||"").trim()
-    if(!webhook)return ""
-    const params=new URLSearchParams({
-      action:"open",
-      mode:"new",
-      formId:loadedId||"",
-      formSlug:savedSlug||saveSlug||"",
-      formTitle:cfg.header?.title||loadedName||"CatchForm",
-      sheetName:gs.sheetName||cfg.header?.title||"CatchForm Responses",
-      accountEmail:gs.accountEmail||""
-    })
-    return `${webhook}${webhook.includes("?")?"&":"?"}${params.toString()}`
+    return ""
   }
 
 	  function getAnalyticsFields(){
@@ -3287,7 +3285,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   <div style={{display:"flex",alignItems:"center",gap:8,color:statusColor,fontSize:13,fontWeight:600}}>
                     <span style={{width:8,height:8,borderRadius:999,background:statusColor,display:"inline-block"}} />{statusLabel}
                   </div>
-                  <button onClick={()=>sheetOpenUrl?window.open(sheetOpenUrl,"_blank","noopener,noreferrer"):showToast(gs.mode==="new"?"Apps Script Web App URL을 입력하면 생성된 시트로 이동할 수 있어요.":"연결할 시트 링크를 입력하면 바로 이동할 수 있어요.",false)}
+                  <button onClick={()=>sheetOpenUrl?window.open(sheetOpenUrl,"_blank","noopener,noreferrer"):showToast(gs.mode==="new"?"테스트 전송 후 생성된 시트 링크가 저장되면 이동할 수 있어요.":"연결할 시트 링크를 입력하면 바로 이동할 수 있어요.",false)}
                     disabled={!sheetOpenUrl}
                     style={{height:30,padding:"0 10px",borderRadius:A.r,border:`1px solid ${sheetOpenUrl?A.border2:A.border}`,background:sheetOpenUrl?A.card:A.card2,color:sheetOpenUrl?A.t1:A.t3,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:sheetOpenUrl?"pointer":"not-allowed"}}>
                     시트로 이동
@@ -3312,9 +3310,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </FG>
           <div style={{padding:"12px 14px",borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,color:A.blue,fontSize:12.5,lineHeight:1.7,marginBottom:10}}>
             이 설정은 <b>설정 저장</b> 또는 우측 상단 <b>저장</b>을 눌러야 실제 배포된 폼에 반영돼요. 저장 후 <b>테스트 전송</b>을 눌러 시트에 테스트 행이 생기는지 먼저 확인해주세요.
-          </div>
-          <div style={{padding:"12px 14px",borderRadius:A.r,background:A.green+"12",border:`1px solid ${A.green}44`,color:A.green,fontSize:12.5,lineHeight:1.7}}>
-            매번 URL을 넣지 않으려면 Vercel 환경변수 <b>NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL</b>에 공통 Apps Script Web App URL을 한 번만 저장하세요. Google 계정/시트 목록을 직접 선택하는 완전 자동 방식은 Google OAuth 백엔드가 필요합니다.
           </div>
         </div>
       }
@@ -3345,7 +3340,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         const trackerBase=typeof window!=="undefined"?window.location.origin:""
         const qrLabel=loadedName||savedSlug||(qrMode==="form"?"폼 QR":"상세페이지 QR")
         const trackedQrUrl=activeQrUrl&&trackerBase
-          ? `${trackerBase}/qr?to=${encodeURIComponent(activeQrUrl)}&fid=${encodeURIComponent(loadedId||"")}&slug=${encodeURIComponent(savedSlug||"")}&type=${qrMode==="form"?"form":"detail"}&label=${encodeURIComponent(qrLabel)}`
+          ? qrMode==="form"
+            ? `${trackerBase}/qr?fid=${encodeURIComponent(loadedId||"")}&slug=${encodeURIComponent(savedSlug||"")}&brand=${encodeURIComponent(currentBrand||"")}&type=form`
+            : `${trackerBase}/qr?to=${encodeURIComponent(activeQrUrl)}&fid=${encodeURIComponent(loadedId||"")}&slug=${encodeURIComponent(savedSlug||"")}&type=detail&label=${encodeURIComponent(qrLabel)}`
           : activeQrUrl
         let qrMatrix:boolean[][]|null=null
         let qrError=""

@@ -33,6 +33,23 @@ function appendQrParams(target: string, params: Record<string, string>) {
   return url.toString()
 }
 
+function formUrlFromSlug(req: NextRequest, slug: string) {
+  const brand = (req.nextUrl.searchParams.get("brand") || "").toUpperCase()
+  const base = (
+    brand === "SNIPERFACTORY"
+      ? process.env.NEXT_PUBLIC_SF_FORM_BASE_URL
+      : process.env.NEXT_PUBLIC_FORM_BASE_URL
+  ) || ""
+
+  if (base) {
+    const url = new URL(base)
+    url.searchParams.set("slug", slug)
+    return url
+  }
+
+  return new URL(`/form/${encodeURIComponent(slug)}`, req.url)
+}
+
 async function recordQrScan(req: NextRequest, targetUrl: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
@@ -98,9 +115,10 @@ async function recordQrScan(req: NextRequest, targetUrl: string) {
 
 export async function GET(req: NextRequest) {
   const target = req.nextUrl.searchParams.get("to") || ""
+  const slug = req.nextUrl.searchParams.get("slug") || ""
   let targetUrl: URL
   try {
-    targetUrl = new URL(target)
+    targetUrl = target ? new URL(target) : formUrlFromSlug(req, slug)
     if (!["http:", "https:"].includes(targetUrl.protocol)) throw new Error("invalid protocol")
   } catch {
     targetUrl = new URL("/", req.url)
