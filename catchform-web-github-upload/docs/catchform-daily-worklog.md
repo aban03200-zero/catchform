@@ -37,6 +37,7 @@
 - 새 스프레드시트 생성 테스트는 Apps Script 응답에서 실제 `spreadsheetUrl`을 받아야 성공으로 처리하고, 받은 URL을 저장해 `시트로 이동` 버튼이 활성화되도록 보강
 - Apps Script 응답에 실제 추가된 행 번호를 포함하고 `SpreadsheetApp.flush()`를 호출해 테스트 행 생성 여부를 더 명확히 확인할 수 있도록 변경
 - 질문별 인사이트를 좌측 섹션/질문 선택 패널과 우측 결과 패널의 2단 레이아웃으로 변경하고, 섹션 클릭 시 질문 목록이 아래로 펼쳐지는 아코디언 UI로 정리
+- Google Sheets 연동 중 Google Drive/Docs HTML 오류 페이지가 응답될 경우 긴 HTML을 그대로 표시하지 않고, Apps Script Web App `/exec` URL 확인 안내로 바꿔 보여주도록 수정
 
 ### 확인 필요
 

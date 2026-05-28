@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 
+function readableGoogleHtmlError(text: string) {
+  const body = String(text || "")
+  if (!/^\s*<!doctype html|<html[\s>]/i.test(body)) return ""
+  if (/Google Drive|unable to open the file|Page Not Found|docs\.google\.com/i.test(body)) {
+    return "Google Drive/Docs 오류 페이지가 응답했어요. Apps Script Web App URL에 스프레드시트 주소가 아니라 `https://script.google.com/macros/s/.../exec` 형식의 웹앱 배포 URL을 넣어주세요."
+  }
+  return "Apps Script가 JSON이 아니라 HTML 페이지를 응답했어요. Web App 배포 URL(`/exec`)이 맞는지 확인해주세요."
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { webhookUrl, payload } = await req.json()
@@ -25,6 +34,17 @@ export async function POST(req: NextRequest) {
     })
 
     const text = await response.text().catch(() => "")
+    const htmlError = readableGoogleHtmlError(text)
+    if (htmlError) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: htmlError,
+        },
+        { status: 502 },
+      )
+    }
+
     if (!response.ok) {
       return NextResponse.json(
         {

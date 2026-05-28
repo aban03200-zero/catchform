@@ -3276,6 +3276,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         const statusColor=!gs.enabled?A.t3:!effectiveWebhookUrl?A.red:gs.lastSyncStatus==="error"?A.red:A.green
         const lastSyncText=gs.lastSyncAt?new Date(gs.lastSyncAt).toLocaleString("ko-KR"):"아직 제출 전송 기록이 없어요."
         const sheetOpenUrl=googleSheetOpenUrl(gs)
+        const syncMessageRaw=String(gs.lastSyncMessage||"")
+        const syncMessage=/<!doctype html|<html[\s>]|Google Drive|unable to open the file|Page Not Found/i.test(syncMessageRaw)
+          ?"Google Drive/Docs 오류 페이지가 응답했어요. Apps Script Web App URL이 `https://script.google.com/macros/s/.../exec` 형식인지 확인해주세요."
+          :syncMessageRaw
         return <div style={pd}>
           <FG title="구글 스프레드시트" A={A}>
             <TRow label="응답 자동 연동" on={!!gs.enabled} toggle={()=>ug("enabled",!gs.enabled)} A={A}/>
@@ -3314,7 +3318,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 </div>
                 <div style={{fontSize:11.5,color:A.t2,lineHeight:1.6}}>
                   {ready?`마지막 상태: ${lastSyncText}`:"계정 이메일만으로는 연동되지 않아요. 공통 Apps Script URL을 Vercel 환경변수에 넣거나, 이 폼에 직접 URL을 입력해야 제출 응답이 시트로 전송됩니다."}
-                  {gs.lastSyncMessage&&<div style={{marginTop:4,color:gs.lastSyncStatus==="error"?A.red:A.t2}}>{gs.lastSyncMessage}</div>}
+                  {syncMessage&&<div style={{marginTop:4,color:gs.lastSyncStatus==="error"?A.red:A.t2}}>{syncMessage}</div>}
                 </div>
               </div>
             </F>
