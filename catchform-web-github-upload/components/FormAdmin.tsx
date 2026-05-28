@@ -88,6 +88,208 @@ function postAppsScriptPayload(url:string,payload:any){
   }).catch(err=>{if(typeof window!=="undefined")return directPost();throw err})
 }
 
+type QrFileFormat = "png"|"svg"|"jpg"
+type QrVersionInfo = { version:number; align:number[]; ecc:number; maxBytes:number; blocks:{count:number;data:number}[] }
+const QR_VERSION_INFO:QrVersionInfo[]=[
+  {version:1,align:[],ecc:7,maxBytes:17,blocks:[{count:1,data:19}]},
+  {version:2,align:[6,18],ecc:10,maxBytes:32,blocks:[{count:1,data:34}]},
+  {version:3,align:[6,22],ecc:15,maxBytes:53,blocks:[{count:1,data:55}]},
+  {version:4,align:[6,26],ecc:20,maxBytes:78,blocks:[{count:1,data:80}]},
+  {version:5,align:[6,30],ecc:26,maxBytes:106,blocks:[{count:1,data:108}]},
+  {version:6,align:[6,34],ecc:18,maxBytes:134,blocks:[{count:2,data:68}]},
+  {version:7,align:[6,22,38],ecc:20,maxBytes:154,blocks:[{count:2,data:78}]},
+  {version:8,align:[6,24,42],ecc:24,maxBytes:192,blocks:[{count:2,data:97}]},
+  {version:9,align:[6,26,46],ecc:30,maxBytes:230,blocks:[{count:2,data:116}]},
+  {version:10,align:[6,28,50],ecc:18,maxBytes:271,blocks:[{count:2,data:68},{count:2,data:69}]},
+]
+const QR_GF_EXP=(()=>{const exp=new Array<number>(512).fill(0);let x=1;for(let i=0;i<255;i++){exp[i]=x;x<<=1;if(x&0x100)x^=0x11D}for(let i=255;i<512;i++)exp[i]=exp[i-255];return exp})()
+const QR_GF_LOG=(()=>{const log=new Array<number>(256).fill(0);for(let i=0;i<255;i++)log[QR_GF_EXP[i]]=i;return log})()
+const qrRsGeneratorCache:Record<number,number[]>={}
+function qrGfMul(a:number,b:number){return a===0||b===0?0:QR_GF_EXP[QR_GF_LOG[a]+QR_GF_LOG[b]]}
+function qrAppendBits(bits:number[],value:number,len:number){for(let i=len-1;i>=0;i--)bits.push((value>>>i)&1)}
+function qrRsGenerator(degree:number){
+  if(qrRsGeneratorCache[degree])return qrRsGeneratorCache[degree]
+  let poly=[1]
+  for(let i=0;i<degree;i++){
+    const next=new Array<number>(poly.length+1).fill(0)
+    for(let j=0;j<poly.length;j++){
+      next[j]^=poly[j]
+      next[j+1]^=qrGfMul(poly[j],QR_GF_EXP[i])
+    }
+    poly=next
+  }
+  qrRsGeneratorCache[degree]=poly
+  return poly
+}
+function qrRsRemainder(data:number[],degree:number){
+  const gen=qrRsGenerator(degree)
+  const rem=new Array<number>(degree).fill(0)
+  for(const byte of data){
+    const factor=byte^rem.shift()!
+    rem.push(0)
+    for(let i=0;i<degree;i++)rem[i]^=qrGfMul(gen[i+1],factor)
+  }
+  return rem
+}
+function qrFormatBits(mask:number){
+  const levelBits=1 // L
+  const data=(levelBits<<3)|mask
+  let rem=data
+  for(let i=0;i<10;i++)rem=(rem<<1)^(((rem>>>9)&1)*0x537)
+  return ((data<<10)|rem)^0x5412
+}
+function qrVersionBits(version:number){
+  let rem=version
+  for(let i=0;i<12;i++)rem=(rem<<1)^(((rem>>>11)&1)*0x1F25)
+  return (version<<12)|rem
+}
+function qrMask(mask:number,x:number,y:number){
+  if(mask===0)return ((x+y)&1)===0
+  return false
+}
+function makeQrMatrix(text:string){
+  const bytes=Array.from(new TextEncoder().encode(text))
+  const info=QR_VERSION_INFO.find(v=>bytes.length<=v.maxBytes)
+  if(!info)throw new Error("QR로 만들 URL이 너무 길어요. 슬러그나 배포 URL을 조금 짧게 줄여주세요.")
+  const size=17+info.version*4
+  const modules=Array.from({length:size},()=>Array<boolean>(size).fill(false))
+  const reserved=Array.from({length:size},()=>Array<boolean>(size).fill(false))
+  const set=(x:number,y:number,dark:boolean,lock=true)=>{if(x>=0&&x<size&&y>=0&&y<size){modules[y][x]=dark;if(lock)reserved[y][x]=true}}
+  const reserve=(x:number,y:number)=>{if(x>=0&&x<size&&y>=0&&y<size)reserved[y][x]=true}
+  const bit=(value:number,i:number)=>((value>>>i)&1)!==0
+
+  const drawFinder=(x:number,y:number)=>{
+    for(let dy=-1;dy<=7;dy++)for(let dx=-1;dx<=7;dx++){
+      const xx=x+dx,yy=y+dy
+      const border=dx===-1||dx===7||dy===-1||dy===7
+      const dark=!border&&(dx===0||dx===6||dy===0||dy===6||(dx>=2&&dx<=4&&dy>=2&&dy<=4))
+      set(xx,yy,dark,true)
+    }
+  }
+  const drawAlignment=(cx:number,cy:number)=>{
+    for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
+      const dist=Math.max(Math.abs(dx),Math.abs(dy))
+      set(cx+dx,cy+dy,dist===2||dist===0,true)
+    }
+  }
+  drawFinder(0,0);drawFinder(size-7,0);drawFinder(0,size-7)
+  for(let i=8;i<size-8;i++){set(i,6,i%2===0,true);set(6,i,i%2===0,true)}
+  for(const y of info.align)for(const x of info.align){
+    const nearFinder=(x===6&&y===6)||(x===6&&y===size-7)||(x===size-7&&y===6)
+    if(!nearFinder)drawAlignment(x,y)
+  }
+  for(let i=0;i<9;i++){if(i!==6){reserve(8,i);reserve(i,8)}}
+  for(let i=0;i<8;i++){reserve(size-1-i,8);reserve(8,size-1-i)}
+  if(info.version>=7){
+    for(let i=0;i<18;i++){
+      const a=size-11+(i%3),b=Math.floor(i/3)
+      reserve(a,b);reserve(b,a)
+    }
+  }
+  set(8,size-8,true,true)
+
+  const totalData=info.blocks.reduce((sum,b)=>sum+b.count*b.data,0)
+  const bits:number[]=[]
+  qrAppendBits(bits,0b0100,4)
+  qrAppendBits(bits,bytes.length,8)
+  for(const byte of bytes)qrAppendBits(bits,byte,8)
+  const maxBits=totalData*8
+  qrAppendBits(bits,0,Math.min(4,Math.max(0,maxBits-bits.length)))
+  while(bits.length%8!==0)bits.push(0)
+  const data:number[]=[]
+  for(let i=0;i<bits.length;i+=8)data.push(bits.slice(i,i+8).reduce((v,b)=>(v<<1)|b,0))
+  for(let pad=0;data.length<totalData;pad++)data.push(pad%2===0?0xEC:0x11)
+
+  const blocks:{data:number[];ecc:number[]}[]=[]
+  let offset=0
+  for(const group of info.blocks){
+    for(let i=0;i<group.count;i++){
+      const chunk=data.slice(offset,offset+group.data)
+      offset+=group.data
+      blocks.push({data:chunk,ecc:qrRsRemainder(chunk,info.ecc)})
+    }
+  }
+  const codewords:number[]=[]
+  const maxDataLen=Math.max(...blocks.map(b=>b.data.length))
+  for(let i=0;i<maxDataLen;i++)for(const block of blocks)if(i<block.data.length)codewords.push(block.data[i])
+  for(let i=0;i<info.ecc;i++)for(const block of blocks)codewords.push(block.ecc[i])
+  const allBits:number[]=[]
+  for(const cw of codewords)qrAppendBits(allBits,cw,8)
+
+  let bitIndex=0
+  let upward=true
+  for(let right=size-1;right>=1;right-=2){
+    if(right===6)right--
+    for(let vert=0;vert<size;vert++){
+      const y=upward?size-1-vert:vert
+      for(let dx=0;dx<2;dx++){
+        const x=right-dx
+        if(!reserved[y][x]){
+          let dark=bitIndex<allBits.length?allBits[bitIndex++]===1:false
+          if(qrMask(0,x,y))dark=!dark
+          set(x,y,dark,true)
+        }
+      }
+    }
+    upward=!upward
+  }
+
+  const format=qrFormatBits(0)
+  for(let i=0;i<=5;i++)set(8,i,bit(format,i),true)
+  set(8,7,bit(format,6),true)
+  set(8,8,bit(format,7),true)
+  set(7,8,bit(format,8),true)
+  for(let i=9;i<15;i++)set(14-i,8,bit(format,i),true)
+  for(let i=0;i<8;i++)set(size-1-i,8,bit(format,i),true)
+  for(let i=8;i<15;i++)set(8,size-15+i,bit(format,i),true)
+  set(8,size-8,true,true)
+  if(info.version>=7){
+    const ver=qrVersionBits(info.version)
+    for(let i=0;i<18;i++){
+      const a=size-11+(i%3),b=Math.floor(i/3)
+      set(a,b,bit(ver,i),true);set(b,a,bit(ver,i),true)
+    }
+  }
+  return modules
+}
+function qrMatrixToSvgMarkup(matrix:boolean[][],px=1024){
+  const margin=4
+  const n=matrix.length+margin*2
+  const path:string[]=[]
+  matrix.forEach((row,y)=>row.forEach((dark,x)=>{if(dark)path.push(`M${x+margin} ${y+margin}h1v1h-1z`)}))
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges"><rect width="${n}" height="${n}" fill="#fff"/><path d="${path.join("")}" fill="#111827"/></svg>`
+}
+function safeDownloadName(name:string){
+  return (name||"catchform").trim().replace(/[\\/:*?"<>|\s]+/g,"-").replace(/-+/g,"-").replace(/^-|-$/g,"")||"catchform"
+}
+function downloadBlobFile(blob:Blob,fileName:string){
+  const url=URL.createObjectURL(blob)
+  const a=document.createElement("a")
+  a.href=url
+  a.download=fileName
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(()=>URL.revokeObjectURL(url),1000)
+}
+function downloadQrFile(text:string,baseName:string,format:QrFileFormat){
+  const matrix=makeQrMatrix(text)
+  const fileBase=safeDownloadName(baseName)
+  if(format==="svg"){
+    downloadBlobFile(new Blob([qrMatrixToSvgMarkup(matrix)],{type:"image/svg+xml;charset=utf-8"}),`${fileBase}.svg`)
+    return
+  }
+  const size=1024,margin=4,n=matrix.length+margin*2,cell=size/n
+  const canvas=document.createElement("canvas")
+  canvas.width=size;canvas.height=size
+  const ctx=canvas.getContext("2d")
+  if(!ctx)throw new Error("QR 이미지를 만들 수 없어요.")
+  ctx.fillStyle="#fff";ctx.fillRect(0,0,size,size)
+  ctx.fillStyle="#111827"
+  matrix.forEach((row,y)=>row.forEach((dark,x)=>{if(dark)ctx.fillRect((x+margin)*cell,(y+margin)*cell,Math.ceil(cell),Math.ceil(cell))}))
+  canvas.toBlob(blob=>{if(blob)downloadBlobFile(blob,`${fileBase}.${format}`)},format==="jpg"?"image/jpeg":"image/png",0.94)
+}
+
 // ─── Static data ──────────────────────────────────────────────────────────
 const POLICIES = [
   {label:"개인정보처리방침", url:"https://insideout.or.kr/signup/privacy-policy"},
@@ -2559,6 +2761,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     {group:"설정",items:[
       {id:"integrations",label:"응답 연동",badge:cfg.integrations?.googleSheets?.enabled?"ON":"OFF"},
       {id:"slug",label:"슬러그"},
+      {id:"qr",label:"QR"},
     ]},
     {group:"UI",items:[
       {id:"cta",label:"CTA 버튼"},
@@ -3078,6 +3281,81 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <button onClick={updateFormSlug} style={{width:"100%",height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>
               {loadedId?"슬러그 저장":"저장 전 슬러그 적용"}
             </button>
+          </FG>
+        </div>
+      }
+
+      case "qr": {
+        const isSF=currentBrand==="SNIPERFACTORY"
+        const base=isSF?(sfFormBaseUrl||"").replace(/\/+$/,""):(formBaseUrl||"").replace(/\/+$/,"")
+        const hasBase=base.length>0
+        const hasSaved=savedSlug.length>0
+        const formUrl=hasBase&&hasSaved?`${base}?slug=${savedSlug}`:""
+        const brandLabel=isSF?"스나이퍼팩토리":"인사이드아웃"
+        const qrName=`${loadedName||savedSlug||"catchform"}-qr`
+        let qrMatrix:boolean[][]|null=null
+        let qrError=""
+        if(formUrl){
+          try{qrMatrix=makeQrMatrix(formUrl)}
+          catch(e){qrError=(e as Error).message||"QR을 만들 수 없어요."}
+        }
+        const onQrDownload=(format:QrFileFormat)=>{
+          try{
+            if(!formUrl){showToast("폼 링크가 먼저 필요해요",false);return}
+            downloadQrFile(formUrl,qrName,format)
+            showToast(`${format.toUpperCase()} QR 다운로드를 시작했어요`)
+          }catch(e){showToast((e as Error).message||"QR 다운로드에 실패했어요",false)}
+        }
+        return <div style={pd}>
+          <FG title="QR 자동 생성" A={A}>
+            <div style={{padding:"12px 14px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12.5,color:A.t2,lineHeight:1.6,marginBottom:12}}>
+              저장된 폼 링크를 기준으로 QR을 자동 생성합니다. 포스터, 상세페이지, 오프라인 안내물에 바로 사용할 수 있어요.
+            </div>
+            <F label="대상 폼" A={A}>
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 11px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`}}>
+                <span style={{width:8,height:8,borderRadius:"50%",background:isSF?"#6366F1":A.red,flexShrink:0}}/>
+                <span style={{fontSize:12.5,fontWeight:600,color:A.t1}}>{brandLabel}</span>
+                <span style={{fontSize:11.5,color:A.t3,marginLeft:"auto"}}>{savedSlug||"저장 전"}</span>
+              </div>
+            </F>
+            <F label="QR URL" A={A}>
+              {formUrl
+                ? <textarea readOnly value={formUrl} style={{width:"100%",height:56,background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t2,fontFamily:"Courier New,monospace",fontSize:11.5,padding:"8px",outline:"none",resize:"none" as const,boxSizing:"border-box" as const,wordBreak:"break-all" as const}}/>
+                : <div style={{padding:"10px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12.5,color:A.t3,lineHeight:1.5}}>
+                    {!hasBase&&!hasSaved?"배포 페이지 URL과 저장된 슬러그가 필요해요.":!hasBase?"브랜드별 배포 페이지 URL이 필요해요.":"폼을 먼저 저장하면 QR을 만들 수 있어요."}
+                  </div>}
+            </F>
+          </FG>
+
+          <FG title="미리보기 / 다운로드" A={A} last>
+            <div style={{display:"flex",flexDirection:"column" as const,alignItems:"center",gap:14}}>
+              <div style={{width:236,height:236,borderRadius:A.r2,background:"#fff",border:`1px solid ${A.border}`,boxShadow:A.shadow,display:"flex",alignItems:"center",justifyContent:"center",padding:10,boxSizing:"border-box" as const}}>
+                {qrMatrix
+                  ? <div style={{width:212,height:212}} dangerouslySetInnerHTML={{__html:qrMatrixToSvgMarkup(qrMatrix,212)}}/>
+                  : <div style={{textAlign:"center" as const,color:A.t3,fontSize:12.5,lineHeight:1.6,padding:16}}>
+                      {qrError||"폼 링크가 준비되면 QR 미리보기가 표시됩니다."}
+                    </div>}
+              </div>
+              {qrError&&<div style={{fontSize:12,color:A.red,lineHeight:1.5,textAlign:"center" as const}}>{qrError}</div>}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,width:"100%"}}>
+                {(["png","svg","jpg"] as QrFileFormat[]).map(format=>(
+                  <button key={format} onClick={()=>onQrDownload(format)} disabled={!qrMatrix}
+                    style={{height:38,borderRadius:A.r,border:`1px solid ${qrMatrix?A.border2:A.border}`,background:qrMatrix?A.card:A.card2,color:qrMatrix?A.t1:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:qrMatrix?"pointer":"not-allowed",textTransform:"uppercase" as const}}>
+                    {format}
+                  </button>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:8,width:"100%"}}>
+                <button onClick={()=>{if(formUrl){navigator.clipboard.writeText(formUrl);showToast("폼 링크 복사 완료!")}}} disabled={!formUrl}
+                  style={{flex:1,height:36,borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:formUrl?A.t2:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:formUrl?"pointer":"not-allowed"}}>
+                  URL 복사
+                </button>
+                <button onClick={()=>formUrl&&window.open(formUrl,"_blank")} disabled={!formUrl}
+                  style={{flex:1,height:36,borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:formUrl?A.t2:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:formUrl?"pointer":"not-allowed"}}>
+                  폼 열기
+                </button>
+              </div>
+            </div>
           </FG>
         </div>
       }
