@@ -278,11 +278,11 @@ function makeQrMatrix(text:string){
   return modules
 }
 function qrMatrixToSvgMarkup(matrix:boolean[][],px=1024){
-  const margin=4
+  const margin=8
   const n=matrix.length+margin*2
   const path:string[]=[]
   matrix.forEach((row,y)=>row.forEach((dark,x)=>{if(dark)path.push(`M${x+margin} ${y+margin}h1v1h-1z`)}))
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges"><rect width="${n}" height="${n}" fill="#fff"/><path d="${path.join("")}" fill="#111827"/></svg>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges"><rect width="${n}" height="${n}" fill="#fff"/><path d="${path.join("")}" fill="#000"/></svg>`
 }
 function safeDownloadName(name:string){
   return (name||"catchform").trim().replace(/[\\/:*?"<>|\s]+/g,"-").replace(/-+/g,"-").replace(/^-|-$/g,"")||"catchform"
@@ -304,15 +304,15 @@ function downloadQrFile(text:string,baseName:string,format:QrFileFormat){
     downloadBlobFile(new Blob([qrMatrixToSvgMarkup(matrix)],{type:"image/svg+xml;charset=utf-8"}),`${fileBase}.svg`)
     return
   }
-  const size=1024,margin=4,n=matrix.length+margin*2,cell=size/n
+  const margin=8,n=matrix.length+margin*2,modulePx=36,size=n*modulePx
   const canvas=document.createElement("canvas")
   canvas.width=size;canvas.height=size
   const ctx=canvas.getContext("2d")
   if(!ctx)throw new Error("QR 이미지를 만들 수 없어요.")
   ctx.fillStyle="#fff";ctx.fillRect(0,0,size,size)
-  ctx.fillStyle="#111827"
-  matrix.forEach((row,y)=>row.forEach((dark,x)=>{if(dark)ctx.fillRect((x+margin)*cell,(y+margin)*cell,Math.ceil(cell),Math.ceil(cell))}))
-  canvas.toBlob(blob=>{if(blob)downloadBlobFile(blob,`${fileBase}.${format}`)},format==="jpg"?"image/jpeg":"image/png",0.94)
+  ctx.fillStyle="#000"
+  matrix.forEach((row,y)=>row.forEach((dark,x)=>{if(dark)ctx.fillRect((x+margin)*modulePx,(y+margin)*modulePx,modulePx,modulePx)}))
+  canvas.toBlob(blob=>{if(blob)downloadBlobFile(blob,`${fileBase}.${format}`)},format==="jpg"?"image/jpeg":"image/png",1)
 }
 
 // ─── Static data ──────────────────────────────────────────────────────────
@@ -3364,10 +3364,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         const qrName=qrMode==="form"?`${loadedName||savedSlug||"catchform"}-form-qr`:"detail-page-qr"
         const trackerBase=typeof window!=="undefined"?window.location.origin:""
         const qrLabel=loadedName||savedSlug||(qrMode==="form"?"폼 QR":"상세페이지 QR")
+        const qrBrand=currentBrand==="SNIPERFACTORY"?"sf":currentBrand==="INSIDEOUT"?"io":""
         const trackedQrUrl=activeQrUrl&&trackerBase
           ? qrMode==="form"
-            ? `${trackerBase}/qr?fid=${encodeURIComponent(loadedId||"")}&slug=${encodeURIComponent(savedSlug||"")}&brand=${encodeURIComponent(currentBrand||"")}&type=form`
-            : `${trackerBase}/qr?to=${encodeURIComponent(activeQrUrl)}&fid=${encodeURIComponent(loadedId||"")}&slug=${encodeURIComponent(savedSlug||"")}&type=detail&label=${encodeURIComponent(qrLabel)}`
+            ? `${trackerBase}/qr?s=${encodeURIComponent(savedSlug||"")}${qrBrand?`&b=${qrBrand}`:""}`
+            : `${trackerBase}/qr?u=${encodeURIComponent(activeQrUrl)}${savedSlug?`&s=${encodeURIComponent(savedSlug)}`:""}${qrBrand?`&b=${qrBrand}`:""}&d=1`
           : activeQrUrl
         let qrMatrix:boolean[][]|null=null
         let qrError=""

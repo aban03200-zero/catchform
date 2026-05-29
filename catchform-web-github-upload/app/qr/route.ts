@@ -34,7 +34,8 @@ function appendQrParams(target: string, params: Record<string, string>) {
 }
 
 function formUrlFromSlug(req: NextRequest, slug: string) {
-  const brand = (req.nextUrl.searchParams.get("brand") || "").toUpperCase()
+  const rawBrand = (req.nextUrl.searchParams.get("brand") || req.nextUrl.searchParams.get("b") || "").toUpperCase()
+  const brand = rawBrand === "SF" ? "SNIPERFACTORY" : rawBrand === "IO" ? "INSIDEOUT" : rawBrand
   const base = (
     brand === "SNIPERFACTORY"
       ? process.env.NEXT_PUBLIC_SF_FORM_BASE_URL
@@ -50,6 +51,30 @@ function formUrlFromSlug(req: NextRequest, slug: string) {
   return new URL(`/form/${encodeURIComponent(slug)}`, req.url)
 }
 
+async function findFormIdBySlug(slug: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+  if (!supabaseUrl || !supabaseAnonKey || !slug) return null
+
+  try {
+    const response = await fetch(
+      `${supabaseUrl.replace(/\/+$/, "")}/rest/v1/form_configs?select=id&slug=eq.${encodeURIComponent(slug)}&limit=1`,
+      {
+        headers: {
+          apikey: supabaseAnonKey,
+          authorization: `Bearer ${supabaseAnonKey}`,
+        },
+        cache: "no-store",
+      },
+    )
+    if (!response.ok) return null
+    const rows = (await response.json()) as Array<{ id?: string }>
+    return rows[0]?.id || null
+  } catch {
+    return null
+  }
+}
+
 async function recordQrScan(req: NextRequest, targetUrl: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
@@ -62,10 +87,10 @@ async function recordQrScan(req: NextRequest, targetUrl: string) {
   const country = readHeader(headers, ["x-vercel-ip-country", "cf-ipcountry", "x-country"])
   const region = readHeader(headers, ["x-vercel-ip-country-region", "x-vercel-ip-region", "x-region"])
   const city = readHeader(headers, ["x-vercel-ip-city", "x-city"])
-  const formId = search.get("fid") || null
-  const formSlug = search.get("slug") || ""
-  const qrType = search.get("type") || "form"
-  const qrLabel = search.get("label") || ""
+  const formSlug = search.get("slug") || search.get("s") || ""
+  const formId = search.get("fid") || search.get("f") || (await findFormIdBySlug(formSlug))
+  const qrType = search.get("type") || (search.get("d") ? "detail" : "form")
+  const qrLabel = search.get("label") || search.get("l") || ""
   const fingerprint = createHash("sha256")
     .update([formId || "", formSlug, qrType, targetUrl, ip, userAgent].join("|"))
     .digest("hex")
@@ -114,8 +139,8 @@ async function recordQrScan(req: NextRequest, targetUrl: string) {
 }
 
 export async function GET(req: NextRequest) {
-  const target = req.nextUrl.searchParams.get("to") || ""
-  const slug = req.nextUrl.searchParams.get("slug") || ""
+  const target = req.nextUrl.searchParams.get("to") || req.nextUrl.searchParams.get("u") || ""
+  const slug = req.nextUrl.searchParams.get("slug") || req.nextUrl.searchParams.get("s") || ""
   let targetUrl: URL
   try {
     targetUrl = target ? new URL(target) : formUrlFromSlug(req, slug)
@@ -124,8 +149,8 @@ export async function GET(req: NextRequest) {
     targetUrl = new URL("/", req.url)
   }
 
-  const qrType = req.nextUrl.searchParams.get("type") || "form"
-  const qrLabel = req.nextUrl.searchParams.get("label") || req.nextUrl.searchParams.get("slug") || qrType
+  const qrType = req.nextUrl.searchParams.get("type") || (req.nextUrl.searchParams.get("d") ? "detail" : "form")
+  const qrLabel = req.nextUrl.searchParams.get("label") || req.nextUrl.searchParams.get("l") || req.nextUrl.searchParams.get("slug") || req.nextUrl.searchParams.get("s") || qrType
   const redirectUrl = appendQrParams(targetUrl.toString(), {
     cf_qr: "1",
     cf_qr_redirected: "1",
