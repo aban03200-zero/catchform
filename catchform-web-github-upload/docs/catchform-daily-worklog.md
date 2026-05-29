@@ -17,6 +17,9 @@
 - 응답 및 분석의 `응답별 데이터` 표에 응답 수정 버튼을 추가하고, 모달에서 제출 응답 값을 수정해 `form_data`와 주요 직접 컬럼에 저장되도록 구현
 - 위치 분석이 접속 metadata만 보던 문제를 보강해, `현 거주지/주소/지역` 성격의 응답 질문이 있으면 해당 제출 답변을 우선 기준으로 집계하도록 변경
 - 폼 페이지의 `/api/geo` 호출과 응답을 캐시하지 않도록 변경해 이전 사용자의 빈 위치값이 재사용될 가능성을 줄임
+- `CatchForm.tsx`에서 Next.js 전용 `@/lib/env` import 의존을 제거하고, `props`, Vercel public env, Framer 전역값 순서로 Supabase/Google Sheets 설정을 읽도록 변경
+- Framer에서 Supabase URL/Anon Key가 비어 있을 때 원인을 바로 알 수 있도록 오류 문구를 구체화
+- Framer 임시 운영용 `docs/CatchForm.framer.tsx` 파일을 추가하고, Supabase URL, Anon Key, slug 등을 Framer 오른쪽 패널에서 입력할 수 있도록 Property Controls 추가
 
 ### 확인 필요
 
@@ -24,6 +27,7 @@
 - 상세페이지 QR은 새로 다운로드할 때 해당 URL 매핑이 폼 설정에 저장되므로, Vercel 재배포 후 다시 내려받아 사용 필요
 - 응답 수정은 DB의 응답 데이터와 분석/CSV 기준에 반영되며, 이미 외부 Google Sheet로 전송된 과거 행은 자동 수정되지 않음
 - 위치 metadata는 Vercel/IP 헤더가 제공되지 않는 네트워크에서는 여전히 비어 있을 수 있으므로, 국내 지역 분석이 중요한 폼은 거주지/지역 질문을 두는 것이 가장 정확함
+- Framer에서 `docs/CatchForm.framer.tsx` 내용을 코드 컴포넌트에 붙여넣은 뒤 오른쪽 패널의 `Supabase URL`, `Anon Key`, `Slug` 값을 입력해야 폼이 정상 로드됨
 
 ## 2026-05-28
 

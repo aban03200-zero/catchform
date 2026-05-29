@@ -1,10 +1,11 @@
 "use client"
 
-// CatchForm.tsx — CatchForm 배포용 폼 컴포넌트
-// Next.js Client Component — FormAdmin_v3 config 구조 완전 호환
+// CatchForm.framer.tsx — Framer 임시 운영용 폼 컴포넌트
+// Framer Code Component — FormAdmin_v3 config 구조 완전 호환
 // URL ?slug=xxx 로 form_configs 테이블에서 config 자동 로드
 
 import * as React from "react"
+import { addPropertyControls, ControlType } from "framer"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 
 const runtimeEnv = (key: string) => {
@@ -1534,3 +1535,36 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         </div>
     )
 }
+
+addPropertyControls(CatchForm, {
+    supabaseUrl: {
+        type: ControlType.String,
+        title: "Supabase URL",
+        placeholder: "https://xxxx.supabase.co",
+    },
+    supabaseAnonKey: {
+        type: ControlType.String,
+        title: "Anon Key",
+        placeholder: "eyJ...",
+    },
+    slug: {
+        type: ControlType.String,
+        title: "Slug",
+        placeholder: "insideout",
+    },
+    formId: {
+        type: ControlType.String,
+        title: "Form ID",
+        placeholder: "선택값",
+    },
+    configJson: {
+        type: ControlType.String,
+        title: "Config JSON",
+        placeholder: "테스트용. 보통 비워둬도 됩니다.",
+    },
+    googleSheetsWebhookUrl: {
+        type: ControlType.String,
+        title: "Sheets URL",
+        placeholder: "선택값",
+    },
+})
