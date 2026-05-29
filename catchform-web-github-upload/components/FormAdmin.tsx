@@ -1197,6 +1197,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [analyticsInfoTip,setAnalyticsInfoTip]=React.useState("")
   const [analyticsTopTip,setAnalyticsTopTip]=React.useState("")
   const [showDeleteAllAnalytics,setShowDeleteAllAnalytics]=React.useState(false)
+  const [editResponse,setEditResponse]=React.useState<null|{row:any;values:Record<string,string> }>(null)
+  const [editResponseSaving,setEditResponseSaving]=React.useState(false)
   const [imageCropModal,setImageCropModal]=React.useState<null|{
     target:"header"|"field"
     fieldId?:string
@@ -1841,6 +1843,60 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(ans===undefined||ans===null||ans==="")return "없음"
     if(typeof ans==="object")return ans.name||ans.url||JSON.stringify(ans)
     return String(ans)
+  }
+  function editableAnalyticsValue(row:any,field:any){
+    const ans=analyticsRawAnswer(row,field)
+    const files=analyticsFileItems(ans)
+    if(files.length)return files.map((f:any)=>f.name).join("\n")
+    if(Array.isArray(ans))return ans.map((v:any)=>String(v??"")).join("\n")
+    if(ans===undefined||ans===null)return ""
+    if(typeof ans==="object")return ans.name||ans.url||JSON.stringify(ans,null,2)
+    return String(ans)
+  }
+  function parseEditedAnalyticsValue(field:any,value:string){
+    if(field.type==="checkbox"){
+      return String(value||"").split(/\n|\/|,/).map(v=>v.trim()).filter(Boolean)
+    }
+    return String(value??"").trim()
+  }
+  function openEditAnalyticsRow(row:any){
+    const values:Record<string,string>={}
+    getAnalyticsFields().forEach((field:any)=>{values[field.id]=editableAnalyticsValue(row,field)})
+    setEditResponse({row,values})
+  }
+  async function saveEditedAnalyticsRow(fields:any[]){
+    if(!supa||!editResponse?.row?.id)return
+    setEditResponseSaving(true)
+    try{
+      const tableName=analyticsTableName()
+      const existing=Array.isArray(editResponse.row.form_data)?editResponse.row.form_data.map((item:any)=>({...item})):[]
+      const patch:any={form_data:existing}
+      const upsertFormAnswer=(field:any,answer:any)=>{
+        const idx=patch.form_data.findIndex((item:any)=>item.answerKey===field.id||(item.question||"")===field.label)
+        const next={question:field.label||field.id,answer,answerKey:field.id}
+        if(idx>=0)patch.form_data[idx]={...patch.form_data[idx],...next}
+        else patch.form_data.push(next)
+      }
+      const referralIds=["referral","referral_source","referral_route"]
+      fields.forEach((field:any)=>{
+        if(field.type==="file")return
+        const answer=parseEditedAnalyticsValue(field,editResponse.values[field.id]||"")
+        upsertFormAnswer(field,answer)
+        if(["name","phone","email"].includes(field.id))patch[field.id]=Array.isArray(answer)?answer.join(" / "):answer
+        if(referralIds.includes(field.id))patch.referral_source=Array.isArray(answer)?answer.join(" / "):answer
+        if(tableName==="company_applications"&&field.id==="manager_name")patch.manager_name=Array.isArray(answer)?answer.join(" / "):answer
+      })
+      const {data,error}=await supa.from(tableName).update(patch).eq("id",editResponse.row.id).select("*").single()
+      if(error)throw error
+      const nextRow=data||{...editResponse.row,...patch}
+      setAnalyticsRows(prev=>prev.map(row=>row.id===editResponse.row.id?nextRow:row))
+      setEditResponse(null)
+      showToast("응답 데이터를 수정했어요.")
+    }catch(e){
+      showToast("응답 수정 실패: "+((e as any)?.message||"오류"),false)
+    }finally{
+      setEditResponseSaving(false)
+    }
   }
   function analyticsValues(row:any,field:any){
     const norm=(v:any)=>{
@@ -4580,8 +4636,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </div>
             {rows.length===0?emptyState("아직 수집된 응답이 없습니다."):<div className="catchform-analytics-table-scroll" style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,overflow:"auto",boxShadow:A.shadow}}>
               <style>{`.catchform-analytics-table-scroll::-webkit-scrollbar{height:7px;width:7px}.catchform-analytics-table-scroll::-webkit-scrollbar-thumb{background:${A.border2};border-radius:999px}.catchform-analytics-table-scroll::-webkit-scrollbar-track{background:transparent}`}</style>
-              <table style={{borderCollapse:"collapse",minWidth:Math.max(1030,238+fields.length*230),width:"100%",fontSize:13}}>
-                <thead><tr><th style={{width:48,minWidth:48,padding:"13px 10px",textAlign:"center" as const,borderBottom:`1px solid ${A.border}`,color:A.t2,background:A.card2}}></th><th style={{width:190,minWidth:190,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t2,background:A.card2}}>날짜</th>{fields.map(f=>{const fileCount=analyticsFieldFiles(rows,f).length;return <th key={f.id} style={{padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,minWidth:fileCount?260:220,background:A.card2}}>
+              <table style={{borderCollapse:"collapse",minWidth:Math.max(1070,278+fields.length*230),width:"100%",fontSize:13}}>
+                <thead><tr><th style={{width:88,minWidth:88,padding:"13px 10px",textAlign:"center" as const,borderBottom:`1px solid ${A.border}`,color:A.t2,background:A.card2}}>관리</th><th style={{width:190,minWidth:190,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t2,background:A.card2}}>날짜</th>{fields.map(f=>{const fileCount=analyticsFieldFiles(rows,f).length;return <th key={f.id} style={{padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,minWidth:fileCount?260:220,background:A.card2}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
                     <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{f.label}</span>
                     {fileCount>0&&<button onClick={()=>downloadAnalyticsFilesZip(f,rows)} title={`첨부파일 ${fileCount}개 일괄 다운로드`} style={{height:28,padding:"0 9px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,flexShrink:0,fontFamily:FONT,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const}}>
@@ -4590,7 +4646,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     </button>}
                   </div>
                 </th>})}</tr></thead>
-                <tbody>{rows.map(row=>{const dt=fmtAnalyticsDate(row.created_at);return <tr key={row.id}><td style={{width:48,minWidth:48,padding:"13px 10px",borderBottom:`1px solid ${A.border}`,textAlign:"center" as const}}><button onClick={()=>deleteAnalyticsRow(row)} title="응답 삭제" style={{width:28,height:28,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t3,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v6M8 6v6M11 6v6M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg></button></td><td style={{width:190,minWidth:190,padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}><div style={{whiteSpace:"nowrap" as const,fontWeight:400}}>{dt[0]}</div><div style={{fontSize:12,color:A.t3,marginTop:4,whiteSpace:"nowrap" as const}}>{dt[1]}</div></td>{fields.map(f=><td key={f.id} style={{padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}><div style={{padding:"7px 9px",border:`1px solid ${A.border}`,borderRadius:A.r,background:A.card2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:A.t1,fontWeight:400}}>{renderAnalyticsAnswer(row,f)}</div></td>)}</tr>})}</tbody>
+                <tbody>{rows.map(row=>{const dt=fmtAnalyticsDate(row.created_at);return <tr key={row.id}><td style={{width:88,minWidth:88,padding:"13px 10px",borderBottom:`1px solid ${A.border}`,textAlign:"center" as const}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                  <button onClick={()=>openEditAnalyticsRow(row)} title="응답 수정" style={{width:28,height:28,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 11.5V13h1.5L12 5.5 10.5 4 3 11.5zM9.8 4.7l1.5 1.5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                  <button onClick={()=>deleteAnalyticsRow(row)} title="응답 삭제" style={{width:28,height:28,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t3,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v6M8 6v6M11 6v6M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                </div></td><td style={{width:190,minWidth:190,padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}><div style={{whiteSpace:"nowrap" as const,fontWeight:400}}>{dt[0]}</div><div style={{fontSize:12,color:A.t3,marginTop:4,whiteSpace:"nowrap" as const}}>{dt[1]}</div></td>{fields.map(f=><td key={f.id} style={{padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}><div style={{padding:"7px 9px",border:`1px solid ${A.border}`,borderRadius:A.r,background:A.card2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:A.t1,fontWeight:400}}>{renderAnalyticsAnswer(row,f)}</div></td>)}</tr>})}</tbody>
               </table>
             </div>}
           </div>}
@@ -4872,6 +4931,49 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	            <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
 	              <button onClick={()=>setShowDeleteAllAnalytics(false)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>취소</button>
 	              <button onClick={deleteAllAnalyticsData} style={{height:38,padding:"0 14px",borderRadius:A.r,border:"none",background:A.red,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>모두 삭제</button>
+	            </div>
+	          </div>
+	        </div>
+	      )}
+	      {editResponse&&(
+	        <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.48)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:10002,padding:22,boxSizing:"border-box" as const}} onClick={()=>!editResponseSaving&&setEditResponse(null)}>
+	          <div style={{width:720,maxWidth:"94vw",maxHeight:"86vh",background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,boxShadow:A.shadow,overflow:"hidden",display:"flex",flexDirection:"column" as const}} onClick={e=>e.stopPropagation()}>
+	            <div style={{height:58,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",gap:12,padding:"0 18px",flexShrink:0}}>
+	              <div style={{width:34,height:34,borderRadius:A.r,background:A.blue2,color:A.blue,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+	                <svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M3 11.5V13h1.5L12 5.5 10.5 4 3 11.5zM9.8 4.7l1.5 1.5" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/></svg>
+	              </div>
+	              <div style={{minWidth:0,flex:1}}>
+	                <div style={{fontSize:16,fontWeight:600,color:A.t1}}>응답 데이터 수정</div>
+	                <div style={{fontSize:12,color:A.t3,marginTop:3}}>{fmtAnalyticsDate(editResponse.row.created_at).filter(Boolean).join(" ")}</div>
+	              </div>
+	              <button onClick={()=>!editResponseSaving&&setEditResponse(null)} disabled={editResponseSaving} style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,cursor:editResponseSaving?"not-allowed":"pointer",fontSize:18,lineHeight:1}}>×</button>
+	            </div>
+	            <div style={{padding:18,overflow:"auto",display:"grid",gridTemplateColumns:width<900?"1fr":"1fr 1fr",gap:14}}>
+	              {fields.map((field:any)=>{
+	                const fileItems=analyticsFileItems(analyticsRawAnswer(editResponse.row,field))
+	                const isFile=field.type==="file"
+	                return <div key={field.id} style={{gridColumn:field.type==="textarea"||isFile?"1 / -1":undefined}}>
+	                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:7}}>
+	                    <label style={{fontSize:12.5,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{field.label}</label>
+	                    <span style={{fontSize:11,color:A.t3,flexShrink:0}}>{fieldTypeName(field.type)}</span>
+	                  </div>
+	                  {isFile
+	                    ? <div style={{minHeight:42,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,padding:"10px 11px",fontSize:12.5,color:A.t2,lineHeight:1.55}}>
+	                        {fileItems.length?fileItems.map((file:any,i:number)=><button key={i} onClick={()=>file.url&&setFilePreview(file)} style={{display:"block",border:"none",background:"transparent",padding:0,margin:"0 0 4px",color:file.url?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:file.url?"pointer":"default",textAlign:"left" as const}}>{file.name}</button>):"첨부파일 없음"}
+	                        <div style={{fontSize:11.5,color:A.t3,marginTop:5}}>첨부파일은 이 화면에서 교체하지 않고, 응답 내용만 수정됩니다.</div>
+	                      </div>
+	                    : <textarea value={editResponse.values[field.id]||""} onChange={e=>setEditResponse(prev=>prev?{...prev,values:{...prev.values,[field.id]:e.target.value}}:prev)}
+	                        placeholder={field.type==="checkbox"?"복수 선택값은 줄바꿈으로 구분해 주세요.":"수정할 값을 입력해주세요."}
+	                        style={{width:"100%",height:field.type==="textarea"?104:68,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,fontWeight:400,lineHeight:1.5,padding:"9px 10px",outline:"none",resize:"vertical" as const,boxSizing:"border-box" as const}}/>}
+	                </div>
+	              })}
+	            </div>
+	            <div style={{borderTop:`1px solid ${A.border}`,padding:"14px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexShrink:0}}>
+	              <div style={{fontSize:12,color:A.t3,lineHeight:1.5}}>저장하면 응답별 데이터, 질문별 인사이트, CSV 다운로드에 바로 반영됩니다.</div>
+	              <div style={{display:"flex",gap:8,flexShrink:0}}>
+	                <button onClick={()=>setEditResponse(null)} disabled={editResponseSaving} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:editResponseSaving?"not-allowed":"pointer"}}>취소</button>
+	                <button onClick={()=>saveEditedAnalyticsRow(fields)} disabled={editResponseSaving} style={{height:38,padding:"0 15px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:editResponseSaving?"wait":"pointer"}}>{editResponseSaving?"저장 중...":"저장"}</button>
+	              </div>
 	            </div>
 	          </div>
 	        </div>
