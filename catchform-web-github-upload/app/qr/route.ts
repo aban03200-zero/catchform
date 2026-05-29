@@ -33,9 +33,28 @@ function appendQrParams(target: string, params: Record<string, string>) {
   return url.toString()
 }
 
-function formUrlFromSlug(req: NextRequest, slug: string) {
-  const rawBrand = (req.nextUrl.searchParams.get("brand") || req.nextUrl.searchParams.get("b") || "").toUpperCase()
-  const brand = rawBrand === "SF" ? "SNIPERFACTORY" : rawBrand === "IO" ? "INSIDEOUT" : rawBrand
+function normalizeBrand(raw: string) {
+  const value = (raw || "").toUpperCase()
+  return value === "SF" ? "SNIPERFACTORY" : value === "IO" ? "INSIDEOUT" : value
+}
+
+function decodeCompactFormId(value: string) {
+  if (!value) return ""
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) return value
+  if (!/^[A-Za-z0-9_-]{20,24}$/.test(value)) return ""
+  try {
+    const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=")
+    const hex = Buffer.from(padded, "base64").toString("hex")
+    if (!/^[0-9a-f]{32}$/i.test(hex)) return ""
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+  } catch {
+    return ""
+  }
+}
+
+function formUrlFromSlug(req: NextRequest, slug: string, brandOverride = "") {
+  const rawBrand = brandOverride || req.nextUrl.searchParams.get("brand") || req.nextUrl.searchParams.get("b") || ""
+  const brand = normalizeBrand(rawBrand)
   const base = (
     brand === "SNIPERFACTORY"
       ? process.env.NEXT_PUBLIC_SF_FORM_BASE_URL
@@ -49,6 +68,19 @@ function formUrlFromSlug(req: NextRequest, slug: string) {
   }
 
   return new URL(`/form/${encodeURIComponent(slug)}`, req.url)
+}
+
+type FormConfigRow = {
+  id?: string
+  slug?: string
+  brand?: string
+  config?: { brand?: string; integrations?: { qrLinks?: Array<{ code?: string; url?: string }> } }
+}
+
+function qrTargetFromConfig(row: FormConfigRow | null, code: string) {
+  const links = row?.config?.integrations?.qrLinks || []
+  const target = links.find((item) => item?.code === code)?.url || ""
+  return /^https?:\/\//i.test(target) ? target : ""
 }
 
 async function findFormIdBySlug(slug: string) {
@@ -75,6 +107,54 @@ async function findFormIdBySlug(slug: string) {
   }
 }
 
+async function findFormById(formId: string): Promise<FormConfigRow | null> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+  if (!supabaseUrl || !supabaseAnonKey || !formId) return null
+
+  try {
+    const response = await fetch(
+      `${supabaseUrl.replace(/\/+$/, "")}/rest/v1/form_configs?select=id,slug,brand,config&id=eq.${encodeURIComponent(formId)}&limit=1`,
+      {
+        headers: {
+          apikey: supabaseAnonKey,
+          authorization: `Bearer ${supabaseAnonKey}`,
+        },
+        cache: "no-store",
+      },
+    )
+    if (!response.ok) return null
+    const rows = (await response.json()) as FormConfigRow[]
+    return rows[0] || null
+  } catch {
+    return null
+  }
+}
+
+async function findQrTargetBySlug(slug: string, code: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+  if (!supabaseUrl || !supabaseAnonKey || !slug || !code) return ""
+
+  try {
+    const response = await fetch(
+      `${supabaseUrl.replace(/\/+$/, "")}/rest/v1/form_configs?select=config&slug=eq.${encodeURIComponent(slug)}&limit=1`,
+      {
+        headers: {
+          apikey: supabaseAnonKey,
+          authorization: `Bearer ${supabaseAnonKey}`,
+        },
+        cache: "no-store",
+      },
+    )
+    if (!response.ok) return ""
+    const rows = (await response.json()) as FormConfigRow[]
+    return qrTargetFromConfig(rows[0] || null, code)
+  } catch {
+    return ""
+  }
+}
+
 async function recordQrScan(req: NextRequest, targetUrl: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
@@ -88,7 +168,8 @@ async function recordQrScan(req: NextRequest, targetUrl: string) {
   const region = readHeader(headers, ["x-vercel-ip-country-region", "x-vercel-ip-region", "x-region"])
   const city = readHeader(headers, ["x-vercel-ip-city", "x-city"])
   const formSlug = search.get("slug") || search.get("s") || ""
-  const formId = search.get("fid") || search.get("f") || (await findFormIdBySlug(formSlug))
+  const compactFormId = decodeCompactFormId(search.get("i") || "")
+  const formId = search.get("fid") || search.get("f") || compactFormId || (await findFormIdBySlug(formSlug))
   const qrType = search.get("type") || (search.get("d") ? "detail" : "form")
   const qrLabel = search.get("label") || search.get("l") || ""
   const fingerprint = createHash("sha256")
@@ -141,16 +222,22 @@ async function recordQrScan(req: NextRequest, targetUrl: string) {
 export async function GET(req: NextRequest) {
   const target = req.nextUrl.searchParams.get("to") || req.nextUrl.searchParams.get("u") || ""
   const slug = req.nextUrl.searchParams.get("slug") || req.nextUrl.searchParams.get("s") || ""
+  const qrCode = req.nextUrl.searchParams.get("q") || ""
+  const compactFormId = decodeCompactFormId(req.nextUrl.searchParams.get("i") || "")
+  const formRow = compactFormId ? await findFormById(compactFormId) : null
+  const resolvedSlug = slug || formRow?.slug || ""
+  const resolvedBrand = formRow?.brand || formRow?.config?.brand || ""
+  const storedTarget = target ? "" : qrTargetFromConfig(formRow, qrCode) || (await findQrTargetBySlug(resolvedSlug, qrCode))
   let targetUrl: URL
   try {
-    targetUrl = target ? new URL(target) : formUrlFromSlug(req, slug)
+    targetUrl = target || storedTarget ? new URL(target || storedTarget) : formUrlFromSlug(req, resolvedSlug, resolvedBrand)
     if (!["http:", "https:"].includes(targetUrl.protocol)) throw new Error("invalid protocol")
   } catch {
     targetUrl = new URL("/", req.url)
   }
 
   const qrType = req.nextUrl.searchParams.get("type") || (req.nextUrl.searchParams.get("d") ? "detail" : "form")
-  const qrLabel = req.nextUrl.searchParams.get("label") || req.nextUrl.searchParams.get("l") || req.nextUrl.searchParams.get("slug") || req.nextUrl.searchParams.get("s") || qrType
+  const qrLabel = req.nextUrl.searchParams.get("label") || req.nextUrl.searchParams.get("l") || resolvedSlug || qrType
   const redirectUrl = appendQrParams(targetUrl.toString(), {
     cf_qr: "1",
     cf_qr_redirected: "1",

@@ -16,6 +16,7 @@ type KdtField = { id:string; label:string; type:KdtFieldType; required?:boolean;
 type FieldType = "text"|"name"|"phone"|"email"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"
 type HelperItem = { text:string; callout?:boolean }
 type FormField = { id:string; type:FieldType; label:string; placeholder?:string; helper?:string; helpers?:HelperItem[]; required?:boolean; opts?:Opt[]; etcPh?:string; dupCheck?:boolean; page?:number; cols?:number; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
+type QrLink = { code:string; url:string; label?:string; type?:string; createdAt?:string }
 type Cfg = {
   header: { imageUrl:string; programId:string; overline:string; title:string; educationStart:string; educationEnd:string; tuitionFree:boolean; tuitionFreeText:string; tuitionAmount:string; stipend:string; noticeEnabled:boolean; noticeIconEnabled:boolean; noticeIconText:string; noticeText:string; noticeShape?:"pill"|"rect"; applicationType?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
   form: { fields:FormField[]; showNum:boolean; dupText:string; pages:number; pageLabels?:string[] }
@@ -24,7 +25,7 @@ type Cfg = {
   modal: { title:string; body:string; btnLabel:string; btnUrl:string; btnReplace:boolean }
   styles: { theme:Theme; fieldH:number; qGap:number; maxW:number; labelGap?:number }
   auth: { enabled:boolean; loginUrl:string; errText:string }
-  integrations?: { googleSheets?: { enabled:boolean; mode:"existing"|"new"; accountEmail:string; sheetUrl:string; sheetName:string; webhookUrl:string; lastSyncStatus?:"idle"|"sent"|"error"; lastSyncAt?:string; lastSyncMessage?:string } }
+  integrations?: { googleSheets?: { enabled:boolean; mode:"existing"|"new"; accountEmail:string; sheetUrl:string; sheetName:string; webhookUrl:string; lastSyncStatus?:"idle"|"sent"|"error"; lastSyncAt?:string; lastSyncMessage?:string }; qrLinks?:QrLink[] }
   brand: string
   formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"
   kdtFields?: KdtField[]
@@ -278,11 +279,28 @@ function makeQrMatrix(text:string){
   return modules
 }
 function qrMatrixToSvgMarkup(matrix:boolean[][],px=1024){
-  const margin=8
+  const margin=4
   const n=matrix.length+margin*2
   const path:string[]=[]
   matrix.forEach((row,y)=>row.forEach((dark,x)=>{if(dark)path.push(`M${x+margin} ${y+margin}h1v1h-1z`)}))
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges"><rect width="${n}" height="${n}" fill="#fff"/><path d="${path.join("")}" fill="#000"/></svg>`
+}
+function compactQrCode(input:string){
+  let a=0x811c9dc5,b=0x9e3779b9
+  for(let i=0;i<input.length;i++){
+    const c=input.charCodeAt(i)
+    a^=c
+    a=Math.imul(a,0x01000193)>>>0
+    b=(Math.imul(b^c,0x85ebca6b)+i)>>>0
+  }
+  return `${a.toString(36)}${b.toString(36)}`.replace(/[^a-z0-9]/gi,"").slice(0,12).toLowerCase()
+}
+function compactFormId(id:string){
+  const hex=(id||"").replace(/-/g,"")
+  if(!/^[0-9a-f]{32}$/i.test(hex))return ""
+  let raw=""
+  for(let i=0;i<hex.length;i+=2)raw+=String.fromCharCode(parseInt(hex.slice(i,i+2),16))
+  return btoa(raw).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"")
 }
 function safeDownloadName(name:string){
   return (name||"catchform").trim().replace(/[\\/:*?"<>|\s]+/g,"-").replace(/-+/g,"-").replace(/^-|-$/g,"")||"catchform"
@@ -304,7 +322,7 @@ function downloadQrFile(text:string,baseName:string,format:QrFileFormat){
     downloadBlobFile(new Blob([qrMatrixToSvgMarkup(matrix)],{type:"image/svg+xml;charset=utf-8"}),`${fileBase}.svg`)
     return
   }
-  const margin=8,n=matrix.length+margin*2,modulePx=36,size=n*modulePx
+  const margin=4,n=matrix.length+margin*2,modulePx=48,size=n*modulePx
   const canvas=document.createElement("canvas")
   canvas.width=size;canvas.height=size
   const ctx=canvas.getContext("2d")
@@ -473,7 +491,7 @@ const DEF: Cfg = {
   modal:{title:"알림 신청이 완료되었어요!",body:"오픈 소식과 모집 안내를 가장 먼저 전달드릴게요.",btnLabel:"교육과정 더 보러가기",btnUrl:"https://insideout.or.kr/program",btnReplace:false},
   styles:{theme:"light",fieldH:44,qGap:28,maxW:560,labelGap:12},
   auth:{enabled:true,loginUrl:"/login",errText:"로그인이 필요해요."},
-  integrations:{googleSheets:DEFAULT_GOOGLE_SHEETS},
+  integrations:{googleSheets:DEFAULT_GOOGLE_SHEETS,qrLinks:[]},
   brand:"",
   formType:"alert" as const,
   kdtFields:undefined,
@@ -640,6 +658,7 @@ function fmtDateKo(d:string){if(!d)return "";const dt=new Date(d+"T00:00:00");co
 function mergeCfg(raw:any):Cfg {
   const d=dc(DEF)
   if(!raw)return d
+  const rawIntegrations=raw.integrations||{}
   return {
     header:{...d.header,...(raw.header||{})},
     form:(()=>{
@@ -662,7 +681,11 @@ function mergeCfg(raw:any):Cfg {
     modal:{...d.modal,...(raw.modal||{})},
     styles:{...d.styles,...(raw.styles||{})},
     auth:{...d.auth,...(raw.auth||{})},
-    integrations:{googleSheets:{...DEFAULT_GOOGLE_SHEETS,...(raw.integrations?.googleSheets||{})}},
+    integrations:{
+      ...rawIntegrations,
+      googleSheets:{...DEFAULT_GOOGLE_SHEETS,...(rawIntegrations.googleSheets||{})},
+      qrLinks:Array.isArray(rawIntegrations.qrLinks)?rawIntegrations.qrLinks.filter((item:any)=>item&&item.code&&item.url):[],
+    },
     brand:raw.brand||d.brand,
     formType:raw.formType||d.formType,
     kdtFields:raw.kdtFields||d.kdtFields,
@@ -3365,10 +3388,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         const trackerBase=typeof window!=="undefined"?window.location.origin:""
         const qrLabel=loadedName||savedSlug||(qrMode==="form"?"폼 QR":"상세페이지 QR")
         const qrBrand=currentBrand==="SNIPERFACTORY"?"sf":currentBrand==="INSIDEOUT"?"io":""
+        const compactLoadedId=compactFormId(loadedId)
+        const qrFormRef=compactLoadedId?`i=${encodeURIComponent(compactLoadedId)}`:`s=${encodeURIComponent(savedSlug||"")}`
+        const customQrCode=qrMode==="custom"&&activeQrUrl?compactQrCode(`${savedSlug||loadedId||"detail"}|${activeQrUrl}`):""
+        const canUseShortCustomQr=!!(loadedId&&supa&&customQrCode)
         const trackedQrUrl=activeQrUrl&&trackerBase
           ? qrMode==="form"
-            ? `${trackerBase}/qr?s=${encodeURIComponent(savedSlug||"")}${qrBrand?`&b=${qrBrand}`:""}`
-            : `${trackerBase}/qr?u=${encodeURIComponent(activeQrUrl)}${savedSlug?`&s=${encodeURIComponent(savedSlug)}`:""}${qrBrand?`&b=${qrBrand}`:""}&d=1`
+            ? `${trackerBase}/qr?${qrFormRef}${qrBrand?`&b=${qrBrand}`:""}`
+            : canUseShortCustomQr
+              ? `${trackerBase}/qr?${qrFormRef}&q=${encodeURIComponent(customQrCode)}${qrBrand?`&b=${qrBrand}`:""}&d=1`
+              : `${trackerBase}/qr?u=${encodeURIComponent(activeQrUrl)}${savedSlug?`&s=${encodeURIComponent(savedSlug)}`:""}${qrBrand?`&b=${qrBrand}`:""}&d=1`
           : activeQrUrl
         let qrMatrix:boolean[][]|null=null
         let qrError=""
@@ -3376,9 +3405,33 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           try{qrMatrix=makeQrMatrix(trackedQrUrl)}
           catch(e){qrError=(e as Error).message||"QR을 만들 수 없어요."}
         }
-        const onQrDownload=(format:QrFileFormat)=>{
+        const ensureQrLinkSaved=async()=>{
+          if(qrMode!=="custom"||!canUseShortCustomQr||!activeQrUrl||!customQrCode)return
+          const existing=Array.isArray(cfg.integrations?.qrLinks)?cfg.integrations!.qrLinks!:[]
+          const current=existing.find(link=>link.code===customQrCode)
+          if(current?.url===activeQrUrl)return
+          const link:QrLink={code:customQrCode,url:activeQrUrl,label:qrLabel,type:"detail",createdAt:new Date().toISOString()}
+          const nextCfg:Cfg={
+            ...cfg,
+            brand:currentBrand,
+            integrations:{
+              ...(cfg.integrations||{}),
+              googleSheets:{...DEFAULT_GOOGLE_SHEETS,...(cfg.integrations?.googleSheets||{})},
+              qrLinks:[link,...existing.filter(item=>item.code!==customQrCode)].slice(0,80),
+            },
+          }
+          setCfg(nextCfg)
+          if(loadedId){
+            const updatedAt=new Date().toISOString()
+            fullFormCache.current[loadedId]={updatedAt,data:{config:nextCfg,slug:savedSlug,name:loadedName,brand:currentBrand}}
+            const {error}=await supa!.from("form_configs").update({config:nextCfg,brand:currentBrand,updated_at:updatedAt}).eq("id",loadedId)
+            if(error)throw error
+          }
+        }
+        const onQrDownload=async(format:QrFileFormat)=>{
           try{
             if(!activeQrUrl){showToast(qrMode==="form"?"폼 링크가 먼저 필요해요":"상세페이지 URL을 입력해주세요",false);return}
+            await ensureQrLinkSaved()
             downloadQrFile(trackedQrUrl,qrName,format)
             showToast(`${format.toUpperCase()} QR 다운로드를 시작했어요`)
           }catch(e){showToast((e as Error).message||"QR 다운로드에 실패했어요",false)}
