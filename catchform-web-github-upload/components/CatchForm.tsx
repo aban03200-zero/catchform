@@ -535,7 +535,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
     React.useEffect(() => {
         let alive = true
-        fetch("/api/geo", { cache: "force-cache" })
+        fetch("/api/geo", { cache: "no-store" })
             .then(r => r.ok ? r.json() : null)
             .then(data => { if (alive && data) setGeoMeta(data) })
             .catch(() => {})

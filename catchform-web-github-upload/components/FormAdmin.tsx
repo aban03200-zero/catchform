@@ -4421,6 +4421,37 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	      if(country&&country!=="미확인")return place?`${country} · ${place}`:country
 	      return place||"미확인"
 	    }
+	    const normalizeSubmittedLocation=(value:any)=>{
+	      const raw=String(Array.isArray(value)?value[0]:value||"").replace(/^기타:\s*/,"").replace(/\s+/g," ").trim()
+	      if(!raw)return""
+	      const aliases:[RegExp,string][]=[
+	        [/서울특별시|서울시|서울/,"서울"],[/부산광역시|부산시|부산/,"부산"],[/대구광역시|대구시|대구/,"대구"],[/인천광역시|인천시|인천/,"인천"],
+	        [/광주광역시|광주시|광주/,"광주"],[/대전광역시|대전시|대전/,"대전"],[/울산광역시|울산시|울산/,"울산"],[/세종특별자치시|세종시|세종/,"세종"],
+	        [/경기도|경기/,"경기"],[/강원특별자치도|강원도|강원/,"강원"],[/충청북도|충북/,"충북"],[/충청남도|충남/,"충남"],
+	        [/전북특별자치도|전라북도|전북/,"전북"],[/전라남도|전남/,"전남"],[/경상북도|경북/,"경북"],[/경상남도|경남/,"경남"],[/제주특별자치도|제주도|제주/,"제주"],
+	      ]
+	      const province=aliases.find(([re])=>re.test(raw))?.[1]||""
+	      const district=raw.replace(/대한민국|한국|Republic of Korea|Korea/gi,"").replace(/\s+/g," ").trim()
+	      if(province){
+	        const cleaned=district.startsWith(province)?district:`${province}${district&&district!==province?` ${district}`:""}`
+	        return `대한민국 · ${cleaned.trim()}`
+	      }
+	      if(/대한민국|한국|Republic of Korea|Korea/i.test(raw))return "대한민국 · 지역 미확인"
+	      return raw
+	    }
+	    const locationAnswerFields=fields.filter((f:any)=>{
+	      const key=`${f.id||""} ${f.label||""}`.toLowerCase()
+	      return /(region|location|address|residence|city|province|sido|area|거주|주소|지역|위치|소재)/.test(key)
+	    })
+	    const locationFromRow=(row:any)=>{
+	      for(const f of locationAnswerFields){
+	        const raw=analyticsRawAnswer(row,f)
+	        if(isEmptyAnalyticsAnswer(raw)||analyticsFileItems(raw).length)continue
+	        const label=normalizeSubmittedLocation(raw)
+	        if(label)return label
+	      }
+	      return ""
+	    }
 	    const sourceBySession:any={}
 	    const sessionSummaries=sessions.map((evs:any[])=>{
 	      const first=evs[0]||{}
@@ -4473,11 +4504,21 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	      const large=end-start<=180?0:1
 	      return`M ${o2.x} ${o2.y} A ${ro} ${ro} 0 ${large} 1 ${o1.x} ${o1.y} L ${i2.x} ${i2.y} A ${ri} ${ri} 0 ${large} 0 ${i1.x} ${i1.y} Z`
 	    }
-	    const locationMap:any={}
-	    sessionSummaries.forEach((s:any)=>{
-	      const label=s.location||"미확인"
-	      locationMap[label]=(locationMap[label]||0)+1
+	    const rowLocationMap:any={}
+	    rows.forEach((row:any)=>{
+	      const label=locationFromRow(row)
+	      if(label)rowLocationMap[label]=(rowLocationMap[label]||0)+1
 	    })
+	    const locationMap:any={}
+	    if(Object.keys(rowLocationMap).length){
+	      Object.assign(locationMap,rowLocationMap)
+	    }else{
+	      sessionSummaries.forEach((s:any)=>{
+	        const label=s.location||"미확인"
+	        locationMap[label]=(locationMap[label]||0)+1
+	      })
+	    }
+	    const locationSource=Object.keys(rowLocationMap).length?"응답의 거주지/주소 답변":"접속 metadata"
 	    const locationEntries=Object.keys(locationMap).map(k=>[k,locationMap[k]]).sort((a:any,b:any)=>Number(b[1])-Number(a[1]))
 	    const locationTotal=locationEntries.reduce((a:any,b:any)=>a+Number(b[1]||0),0)
     const shareMap:any={}
@@ -4757,9 +4798,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 </div>}
               </div>
               <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-	                {infoTitle("위치","폼 참여/진입 시 form_response_events metadata에 저장된 country, region, city 값을 기준으로 도시나 지역별 세션 수를 집계합니다. 응답자가 직접 입력한 주소/거주지 답변은 사용하지 않습니다.")}
+	                {infoTitle("위치","응답에 거주지/주소/지역 질문이 있으면 해당 답변을 우선 사용하고, 없을 때만 form_response_events metadata의 country, region, city 값을 사용합니다. 브라우저/IP 위치는 네트워크 환경에 따라 지역이 비어 있을 수 있습니다.")}
 	                {periodTip("location")}
 	                {locationTotal===0?emptyState("위치 데이터가 아직 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:11}}>
+	                  <div style={{height:28,padding:"0 10px",borderRadius:999,background:A.blue2,border:`1px solid ${A.blue}33`,color:A.blue,fontSize:11.5,fontWeight:600,display:"inline-flex",alignItems:"center",alignSelf:"flex-start"}}>
+	                    기준: {locationSource}
+	                  </div>
 	                  {locationEntries.slice(0,12).map((item:any,i:number)=>{
 	                    const label=String(item[0]||"미확인")
 	                    const count=Number(item[1])||0
@@ -4775,7 +4819,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	                    </div>
 	                  })}
 	                  <div style={{marginTop:4,padding:"10px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12.5,lineHeight:1.55,color:A.t2}}>
-	                    위치는 폼 진입/참여 이벤트에 저장된 브라우저 접속 위치 추정값이에요. 네트워크 환경이나 차단 설정에 따라 `미확인`으로 남을 수 있습니다.
+	                    거주지/주소 질문이 있는 폼은 제출 답변을 기준으로 지역을 더 명확하게 보여줍니다. 해당 질문이 없는 폼은 접속 위치 추정값을 사용하며, 네트워크 환경이나 차단 설정에 따라 `미확인`으로 남을 수 있습니다.
 	                  </div>
 	                </div>}
               </div>

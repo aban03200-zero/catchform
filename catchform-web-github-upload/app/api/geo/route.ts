@@ -1,6 +1,8 @@
 import { headers } from "next/headers"
 import { NextResponse } from "next/server"
 
+export const dynamic = "force-dynamic"
+
 function readHeader(h: Headers, names: string[]) {
   for (const name of names) {
     const value = h.get(name)
@@ -36,7 +38,7 @@ export async function GET() {
     { country, region, city },
     {
       headers: {
-        "cache-control": "private, max-age=3600",
+        "cache-control": "no-store, max-age=0",
       },
     },
   )
