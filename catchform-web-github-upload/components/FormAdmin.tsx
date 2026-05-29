@@ -1189,6 +1189,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [slugDraft,setSlugDraft]=React.useState("")
   const [qrMode,setQrMode]=React.useState<"form"|"custom">("form")
   const [qrCustomUrl,setQrCustomUrl]=React.useState("")
+  const [qrGeneratedUrl,setQrGeneratedUrl]=React.useState("")
+  const [qrGeneratedMatrix,setQrGeneratedMatrix]=React.useState<boolean[][]|null>(null)
+  const [qrGeneratedError,setQrGeneratedError]=React.useState("")
   const [showAnalyticsTip,setShowAnalyticsTip]=React.useState(false)
   const [actionLoading,setActionLoading]=React.useState("")
   const [analyticsInfoTip,setAnalyticsInfoTip]=React.useState("")
@@ -3399,12 +3402,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               ? `${trackerBase}/qr?${qrFormRef}&q=${encodeURIComponent(customQrCode)}${qrBrand?`&b=${qrBrand}`:""}&d=1`
               : `${trackerBase}/qr?u=${encodeURIComponent(activeQrUrl)}${savedSlug?`&s=${encodeURIComponent(savedSlug)}`:""}${qrBrand?`&b=${qrBrand}`:""}&d=1`
           : activeQrUrl
-        let qrMatrix:boolean[][]|null=null
-        let qrError=""
-        if(trackedQrUrl){
-          try{qrMatrix=makeQrMatrix(trackedQrUrl)}
-          catch(e){qrError=(e as Error).message||"QR을 만들 수 없어요."}
-        }
+        const qrMatrix=qrGeneratedUrl===trackedQrUrl?qrGeneratedMatrix:null
+        const qrError=qrGeneratedUrl===trackedQrUrl?qrGeneratedError:""
         const ensureQrLinkSaved=async()=>{
           if(qrMode!=="custom"||!canUseShortCustomQr||!activeQrUrl||!customQrCode)return
           const existing=Array.isArray(cfg.integrations?.qrLinks)?cfg.integrations!.qrLinks!:[]
@@ -3428,9 +3427,25 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             if(error)throw error
           }
         }
+        const onQrGenerate=async()=>{
+          try{
+            if(!activeQrUrl){showToast(qrMode==="form"?"폼 링크가 먼저 필요해요":"상세페이지 URL을 입력해주세요",false);return}
+            await ensureQrLinkSaved()
+            setQrGeneratedMatrix(makeQrMatrix(trackedQrUrl))
+            setQrGeneratedUrl(trackedQrUrl)
+            setQrGeneratedError("")
+            showToast("QR 미리보기를 생성했어요")
+          }catch(e){
+            setQrGeneratedMatrix(null)
+            setQrGeneratedUrl(trackedQrUrl)
+            setQrGeneratedError((e as Error).message||"QR을 만들 수 없어요.")
+            showToast((e as Error).message||"QR 생성에 실패했어요",false)
+          }
+        }
         const onQrDownload=async(format:QrFileFormat)=>{
           try{
             if(!activeQrUrl){showToast(qrMode==="form"?"폼 링크가 먼저 필요해요":"상세페이지 URL을 입력해주세요",false);return}
+            if(!qrMatrix){showToast("먼저 QR 생성 버튼을 눌러주세요.",false);return}
             await ensureQrLinkSaved()
             downloadQrFile(trackedQrUrl,qrName,format)
             showToast(`${format.toUpperCase()} QR 다운로드를 시작했어요`)
@@ -3471,9 +3486,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 {qrMatrix
                   ? <div style={{width:212,height:212}} dangerouslySetInnerHTML={{__html:qrMatrixToSvgMarkup(qrMatrix,212)}}/>
                   : <div style={{textAlign:"center" as const,color:A.t3,fontSize:12.5,lineHeight:1.6,padding:16}}>
-                      {qrError||"폼 링크가 준비되면 QR 미리보기가 표시됩니다."}
+                      {qrError||"QR 생성 버튼을 누르면 미리보기가 표시됩니다."}
                     </div>}
               </div>
+              <button onClick={onQrGenerate} disabled={!activeQrUrl}
+                style={{width:"100%",height:40,borderRadius:A.r,border:"none",background:activeQrUrl?A.blue:A.border2,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:activeQrUrl?"pointer":"not-allowed"}}>
+                {qrMatrix?"QR 다시 생성":"QR 생성"}
+              </button>
               {qrError&&<div style={{fontSize:12,color:A.red,lineHeight:1.5,textAlign:"center" as const}}>{qrError}</div>}
               <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,width:"100%"}}>
                 {(["png","svg","jpg"] as QrFileFormat[]).map(format=>(
