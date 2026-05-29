@@ -20,6 +20,10 @@
 - `CatchForm.tsx`에서 Next.js 전용 `@/lib/env` import 의존을 제거하고, `props`, Vercel public env, Framer 전역값 순서로 Supabase/Google Sheets 설정을 읽도록 변경
 - Framer에서 Supabase URL/Anon Key가 비어 있을 때 원인을 바로 알 수 있도록 오류 문구를 구체화
 - Framer 임시 운영용 `docs/CatchForm.framer.tsx` 파일을 추가하고, Supabase URL, Anon Key, slug 등을 Framer 오른쪽 패널에서 입력할 수 있도록 Property Controls 추가
+- 편집 패널의 답변 옵션마다 위/아래 이동 버튼을 추가해 선택지 순서를 조정할 수 있도록 변경
+- 동의 유형 선택 시 해당 유형에 맞는 법적 문서 URL이 자동 선택되도록 변경
+- 폼 제출 완료 모달의 공유 버튼 크기와 SNS 아이콘 크기를 줄여 이전 UI에 가깝게 조정
+- 작성 중인 폼 답변을 브라우저 `localStorage`에 폼별 임시저장해 페이지 이동/재진입 시 텍스트, 선택값, 동의 체크 상태가 복원되도록 추가
 
 ### 확인 필요
 
@@ -28,6 +32,7 @@
 - 응답 수정은 DB의 응답 데이터와 분석/CSV 기준에 반영되며, 이미 외부 Google Sheet로 전송된 과거 행은 자동 수정되지 않음
 - 위치 metadata는 Vercel/IP 헤더가 제공되지 않는 네트워크에서는 여전히 비어 있을 수 있으므로, 국내 지역 분석이 중요한 폼은 거주지/지역 질문을 두는 것이 가장 정확함
 - Framer에서 `docs/CatchForm.framer.tsx` 내용을 코드 컴포넌트에 붙여넣은 뒤 오른쪽 패널의 `Supabase URL`, `Anon Key`, `Slug` 값을 입력해야 폼이 정상 로드됨
+- 브라우저 보안상 첨부파일의 실제 `File` 객체는 재진입 후 자동 복원할 수 없으므로, 파일 첨부 문항은 제출 전에 다시 선택해야 함
 
 ## 2026-05-28
 

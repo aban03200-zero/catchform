@@ -353,10 +353,21 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const lastTouchedFieldRef = React.useRef<any>(null)
     const startedTrackedRef = React.useRef(false)
     const qrScanTrackedRef = React.useRef(false)
+    const draftLoadedRef = React.useRef(false)
+
+    const draftKey = React.useMemo(() => {
+        const raw = formId || formSlug || cfg.header?.programId || cfg.header?.title || "form"
+        const safe = String(raw).trim().replace(/[^A-Za-z0-9가-힣._-]/g, "_").slice(0, 120) || "form"
+        return `catchform_draft_v2_${safe}`
+    }, [formId, formSlug, cfg.header?.programId, cfg.header?.title])
 
     const setVal = (id: string, v: string) => setVals(p => ({ ...p, [id]: v }))
     const setErr = (id: string, msg: string) => setErrors(p => ({ ...p, [id]: msg }))
     const clearErr = (id: string) => setErrors(p => { const n = { ...p }; delete n[id]; return n })
+
+    const clearDraft = React.useCallback(() => {
+        try { window.localStorage.removeItem(draftKey) } catch {}
+    }, [draftKey])
 
     const getTrackingSessionId = () => {
         if (trackingSessionRef.current) return trackingSessionRef.current
@@ -518,7 +529,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         trackEvent("share", { metadata: { channel: "Twitter", href: url } })
     }
 
-    const shareButtonStyle: React.CSSProperties = { width: "clamp(48px, 13vw, 76px)", aspectRatio: "1 / 1", borderRadius: "50%", border: "none", background: "#F2F4F7", color: "#000", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontWeight:600, fontSize: 13, flexShrink: 0 }
+    const shareButtonStyle: React.CSSProperties = { width: "clamp(42px, 10vw, 58px)", aspectRatio: "1 / 1", borderRadius: "50%", border: "none", background: "#F2F4F7", color: "#000", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontWeight:600, fontSize: 13, flexShrink: 0 }
     const shareMenuButtonStyle: React.CSSProperties = { width: "100%", height: 38, border: "none", background: "transparent", color: FC.t1, display: "flex", alignItems: "center", gap: 10, padding: "0 10px", borderRadius: 10, cursor: "pointer", fontFamily: FONT, fontSize: 13, fontWeight:600, textAlign: "left" as const }
     const ShareIcon = ({type,size=18}:{type:"kakao"|"instagram"|"threads"|"x"|"link";size?:number}) => {
         if(type==="kakao")return <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
@@ -565,6 +576,42 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             : cfg.form.fields
 
     const isLastPage = page === formPages
+
+    React.useEffect(() => {
+        draftLoadedRef.current = false
+        if (typeof window === "undefined") {
+            draftLoadedRef.current = true
+            return
+        }
+        try {
+            const raw = window.localStorage.getItem(draftKey)
+            if (raw) {
+                const draft = JSON.parse(raw)
+                if (draft?.vals && typeof draft.vals === "object") setVals(draft.vals)
+                if (draft?.checked && typeof draft.checked === "object") setChecked(draft.checked)
+                if (Array.isArray(draft?.consentOk)) setConsentOk(draft.consentOk)
+                const savedPage = Number(draft?.page)
+                if (Number.isFinite(savedPage) && savedPage >= 1 && savedPage <= formPages) setPage(savedPage)
+            }
+        } catch {}
+        draftLoadedRef.current = true
+    }, [draftKey, formPages])
+
+    React.useEffect(() => {
+        if (!draftLoadedRef.current || typeof window === "undefined") return
+        const timer = window.setTimeout(() => {
+            try {
+                window.localStorage.setItem(draftKey, JSON.stringify({
+                    vals,
+                    checked,
+                    consentOk,
+                    page,
+                    updatedAt: new Date().toISOString(),
+                }))
+            } catch {}
+        }, 150)
+        return () => window.clearTimeout(timer)
+    }, [draftKey, vals, checked, consentOk, page])
 
     React.useEffect(() => {
         let alive = true
@@ -1012,6 +1059,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             }
 
             trackEvent("completed", { page: formPages })
+            clearDraft()
             setShareCopied(false)
             setShowModal(true)
 
@@ -1508,19 +1556,19 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     {cfg.modal.body && <div style={{ fontSize: 13.5, color: FC.t2, lineHeight: 1.6, marginBottom: 16 }}>{cfg.modal.body}</div>}
                     <div style={{ display: "flex", justifyContent: "center", gap: "clamp(8px, 2.2vw, 18px)", marginBottom: 22 }}>
                         <button onClick={shareKakao} title="카카오톡 공유" style={shareButtonStyle}>
-                            <ShareIcon type="kakao" size={40} />
+                            <ShareIcon type="kakao" size={28} />
                         </button>
                         <button onClick={shareInstagramStory} title="인스타그램 스토리로 이동" style={shareButtonStyle}>
-                            <ShareIcon type="instagram" size={40} />
+                            <ShareIcon type="instagram" size={28} />
                         </button>
                         <button onClick={shareThreads} title="스레드 공유" style={shareButtonStyle}>
-                            <ShareIcon type="threads" size={42} />
+                            <ShareIcon type="threads" size={29} />
                         </button>
                         <button onClick={shareToX} title="X 공유" style={shareButtonStyle}>
-                            <ShareIcon type="x" size={38} />
+                            <ShareIcon type="x" size={27} />
                         </button>
                         <button onClick={() => copyShareUrl(false)} title="URL 복사" style={shareButtonStyle}>
-                            <ShareIcon type="link" size={39} />
+                            <ShareIcon type="link" size={28} />
                         </button>
                     </div>
                     {shareCopied && <div style={{fontSize:12,color:accentBg,fontWeight:600,marginTop:-10,marginBottom:12}}>URL이 복사됐어요.</div>}

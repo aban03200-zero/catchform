@@ -346,6 +346,13 @@ const CONSENT_TYPES = [
   {key:"terms",             label:"서비스 이용약관",          answerKey:"terms_consent",              isPrivacy:false},
   {key:"marketing_consent", label:"마케팅 정보 수신 동의",    answerKey:"marketing_consent",          isPrivacy:false},
 ]
+const CONSENT_POLICY_URL: Record<string,string> = {
+  privacy_policy: "https://insideout.or.kr/signup/privacy-policy",
+  privacy_consent: "https://insideout.or.kr/signup/privacy-consent",
+  terms: "https://insideout.or.kr/signup/terms",
+  marketing_consent: "https://insideout.or.kr/signup/marketing-consent",
+}
+const policyUrlForConsent = (type:string) => CONSENT_POLICY_URL[type] || ""
 
 // ─── Default guide content ────────────────────────────────────────────────
 const DEFAULT_GUIDE_SECTIONS = [
@@ -1580,7 +1587,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setCfg(prev=>{const arr=[...(prev.form.pageLabels||Array.from({length:formPages},(_,i)=>""))];arr[p-1]=label;return{...prev,form:{...prev.form,pageLabels:arr}}})
   }
   function moveActiveField(from:number,to:number){if(isKdt){const kf=cfg.kdtFields||[];const pageFields=kf.filter(f=>f.page===pvPage);const gFrom=kf.indexOf(pageFields[from]);const gTo=kf.indexOf(pageFields[to]);moveKdtField(gFrom,gTo)}else if(isMultiPage){const pageF=cfg.form.fields.filter(f=>(f.page||1)===pvPage);const gFrom=cfg.form.fields.indexOf(pageF[from]);const gTo=cfg.form.fields.indexOf(pageF[to]);moveField(gFrom,gTo)}else{moveField(from,to)}}
+  function moveActiveFieldOption(fieldIdx:number,optIdx:number,dir:-1|1){
+    const field=(getActiveFields() as any[])[fieldIdx]
+    if(!field)return
+    const raw=(field.opts&&field.opts.length)?field.opts:(field.options||[]).map((o:any)=>({label:String(o),value:String(o),isEtc:String(o)==="기타"}))
+    const target=optIdx+dir
+    if(target<0||target>=raw.length)return
+    const next=[...raw]
+    const [moved]=next.splice(optIdx,1)
+    next.splice(target,0,moved)
+    patchActiveField(fieldIdx,{opts:next})
+  }
   function uc<K extends keyof Cfg["consents"][0]>(idx:number,k:K,v:Cfg["consents"][0][K]){setCfg(p=>({...p,consents:p.consents.map((c,i)=>i===idx?{...c,[k]:v}:c)}))}
+  function patchConsent(idx:number,patch:Partial<Cfg["consents"][0]>){setCfg(p=>({...p,consents:p.consents.map((c,i)=>i===idx?{...c,...patch}:c)}))}
   function addConsent(){setCfg(p=>({...p,consents:[...p.consents,{enabled:true,required:false,title:"추가 동의 항목",body:"",checkLabel:"동의합니다.",policyUrl:""}]}))}
   function removeConsent(idx:number){setCfg(p=>({...p,consents:p.consents.filter((_,i)=>i!==idx)}))}
   function ut<K extends keyof Cfg["cta"]>(k:K,v:Cfg["cta"][K]){setCfg(p=>({...p,cta:{...p.cta,[k]:v}}))}
@@ -3228,6 +3247,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       <div style={{display:"flex",flexDirection:"column" as const,gap:4,marginBottom:8}}>
                         {((field as any).opts||[]).map((o:any,oi:number)=>(
                           <div key={oi} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px 5px 10px",borderRadius:A.r,background:A.card,border:`1px solid ${A.border2}`,fontSize:12,color:A.t1}}>
+                            <div style={{display:"flex",flexDirection:"column" as const,gap:1,flexShrink:0}}>
+                              <button onClick={()=>moveActiveFieldOption(idx,oi,-1)} disabled={oi===0} title="위로 이동"
+                                style={{width:18,height:13,border:"none",borderRadius:3,background:oi===0?"transparent":A.card2,color:oi===0?A.t3:A.t2,cursor:oi===0?"default":"pointer",fontSize:9,lineHeight:1,padding:0,opacity:oi===0?0.35:1}}>▲</button>
+                              <button onClick={()=>moveActiveFieldOption(idx,oi,1)} disabled={oi===(((field as any).opts||[]).length-1)} title="아래로 이동"
+                                style={{width:18,height:13,border:"none",borderRadius:3,background:oi===(((field as any).opts||[]).length-1)?"transparent":A.card2,color:oi===(((field as any).opts||[]).length-1)?A.t3:A.t2,cursor:oi===(((field as any).opts||[]).length-1)?"default":"pointer",fontSize:9,lineHeight:1,padding:0,opacity:oi===(((field as any).opts||[]).length-1)?0.35:1}}>▼</button>
+                            </div>
                             <span onDoubleClick={e=>{const s=e.currentTarget;s.contentEditable="true";s.focus();const r=document.createRange();r.selectNodeContents(s);window.getSelection()?.removeAllRanges();window.getSelection()?.addRange(r)}}
                               onBlur={e=>{e.currentTarget.contentEditable="false";const newOpts=[...((field as any).opts||[])];newOpts[oi]={...newOpts[oi],label:e.currentTarget.textContent||o.label,value:newOpts[oi].value||e.currentTarget.textContent||o.label};patchActiveField(idx,{opts:newOpts})}}
                               onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();(e.currentTarget as HTMLElement).blur()}}}
@@ -3314,9 +3339,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <TRow label="동의 섹션 표시" on={cs.enabled} toggle={()=>uc(idx,"enabled",!cs.enabled)} A={A}/>
           <F label="동의 유형 선택" A={A}>
             <select value={cs.consentType||""} onChange={e=>{
-              const ct=CONSENT_TYPES.find(c=>c.key===e.target.value)
-              uc(idx,"consentType",e.target.value)
-              if(ct)uc(idx,"title",ct.label)
+              const nextType=e.target.value
+              const ct=CONSENT_TYPES.find(c=>c.key===nextType)
+              const nextPolicyUrl=policyUrlForConsent(nextType)
+              patchConsent(idx,{
+                consentType:nextType,
+                ...(ct?{title:ct.label}:{}),
+                ...(nextPolicyUrl?{policyUrl:nextPolicyUrl}:{}),
+              })
             }} style={{...selS}}>
               <option value="">— 동의 유형을 선택해주세요 —</option>
               {CONSENT_TYPES.map(ct=><option key={ct.key} value={ct.key}>{ct.label}</option>)}
