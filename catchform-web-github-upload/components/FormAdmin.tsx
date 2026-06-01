@@ -10,7 +10,10 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 type Theme = "dark" | "light"
 type Opt = { label: string; value: string; isEtc: boolean; nextPage?: number }
 type Cat = { id: string; name: string }
-type Prog = { id: string; title: string; slug?: string; category?: string }
+type Prog = { id: string; title: string; slug?: string; category?: string; [key:string]:any }
+type DashboardFormType = "alert"|"application"|"recruit"|"survey"|"evaluation"|"other"
+type DashboardManualStatus = ""|"draft"|"active"|"closed"
+type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; manualStatus?:DashboardManualStatus }
 type KdtFieldType = FieldType|"section_desc"
 type KdtField = { id:string; label:string; type:KdtFieldType; required?:boolean; page?:number; options?:string[]; placeholder?:string; desc?:string }
 type FieldType = "text"|"name"|"phone"|"email"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"
@@ -26,6 +29,7 @@ type Cfg = {
   styles: { theme:Theme; fieldH:number; qGap:number; maxW:number; labelGap?:number }
   auth: { enabled:boolean; loginUrl:string; errText:string }
   integrations?: { googleSheets?: { enabled:boolean; mode:"existing"|"new"; accountEmail:string; sheetUrl:string; sheetName:string; webhookUrl:string; lastSyncStatus?:"idle"|"sent"|"error"; lastSyncAt?:string; lastSyncMessage?:string }; qrLinks?:QrLink[] }
+  dashboard?: DashboardMeta
   brand: string
   formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"
   kdtFields?: KdtField[]
@@ -76,8 +80,33 @@ const FONT = "'Pretendard Variable','Pretendard','Noto Sans KR',-apple-system,'A
 const FILE_MAX_COUNT = 5
 const FILE_MAX_SIZE_MB = 10
 const FILE_LIMIT_TEXT = `최대 ${FILE_MAX_COUNT}개, 파일당 ${FILE_MAX_SIZE_MB}MB`
-const FORM_SUMMARY_SELECT = "id,name,slug,updated_at,brand,config_brand:config->>brand,header_title:config->header->>title,program_id:config->header->>programId"
+const FORM_SUMMARY_SELECT = "id,name,slug,updated_at,brand,config_brand:config->>brand,header_title:config->header->>title,program_id:config->header->>programId,form_type:config->>formType,dashboard_meta:config->dashboard"
 const DEFAULT_GOOGLE_SHEETS = {enabled:false,mode:"existing" as const,accountEmail:"",sheetUrl:"",sheetName:"",webhookUrl:"",lastSyncStatus:"idle" as const,lastSyncAt:"",lastSyncMessage:""}
+const DASHBOARD_FORM_TYPES:{value:DashboardFormType;label:string}[]=[
+  {value:"alert",label:"사전 알림"},
+  {value:"application",label:"신청"},
+  {value:"recruit",label:"채용"},
+  {value:"survey",label:"설문"},
+  {value:"evaluation",label:"평가"},
+  {value:"other",label:"기타"},
+]
+function legacyDashboardFormType(formType?:Cfg["formType"]):DashboardFormType{
+  if(formType==="alert")return"alert"
+  if(formType==="recruit")return"recruit"
+  if(formType==="kdt"||formType==="edu_biz"||formType==="company")return"application"
+  return"other"
+}
+function firstDateValue(source:any,keys:string[]){
+  for(const key of keys){const value=source?.[key];if(typeof value==="string"&&value.trim())return value.trim()}
+  return""
+}
+function recruitmentPeriodOf(program?:Prog){
+  if(!program)return{start:"",end:""}
+  return{
+    start:firstDateValue(program,["recruitment_start","recruitment_start_at","recruitment_start_date","recruit_start","recruit_start_at","recruit_start_date","application_start","application_start_at","application_start_date","apply_start","apply_start_at"]),
+    end:firstDateValue(program,["recruitment_end","recruitment_end_at","recruitment_end_date","recruit_end","recruit_end_at","recruit_end_date","application_end","application_end_at","application_end_date","apply_end","apply_end_at"]),
+  }
+}
 function postAppsScriptPayload(url:string,payload:any,opts:{allowDirectFallback?:boolean}={}){
   const allowDirectFallback=opts.allowDirectFallback!==false
   const directPost=()=>fetch(url,{method:"POST",mode:"no-cors",body:new URLSearchParams({payload:JSON.stringify(payload)}).toString(),headers:{"content-type":"application/x-www-form-urlencoded;charset=UTF-8"}}).then(()=>{})
@@ -693,6 +722,7 @@ function mergeCfg(raw:any):Cfg {
       googleSheets:{...DEFAULT_GOOGLE_SHEETS,...(rawIntegrations.googleSheets||{})},
       qrLinks:Array.isArray(rawIntegrations.qrLinks)?rawIntegrations.qrLinks.filter((item:any)=>item&&item.code&&item.url):[],
     },
+    dashboard:{...(raw.dashboard||{})},
     brand:raw.brand||d.brand,
     formType:raw.formType||d.formType,
     kdtFields:raw.kdtFields||d.kdtFields,
@@ -1153,6 +1183,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [showBrandModal,setShowBrandModal]=React.useState(false)
   const [showGuide,setShowGuide]=React.useState(false)
   const [dashTab,setDashTab]=React.useState<"SNIPERFACTORY"|"INSIDEOUT">("SNIPERFACTORY")
+  const [dashBrandFilter,setDashBrandFilter]=React.useState("")
+  const [dashProgramFilter,setDashProgramFilter]=React.useState("")
+  const [dashSideTypeFilter,setDashSideTypeFilter]=React.useState<DashboardFormType|"" >("")
+  const [dashTopTypeFilter,setDashTopTypeFilter]=React.useState<DashboardFormType|"" >("")
+  const [dashTopStatusFilter,setDashTopStatusFilter]=React.useState<DashboardManualStatus|"" >("")
+  const [dashQuery,setDashQuery]=React.useState("")
+  const [dashOpenGroups,setDashOpenGroups]=React.useState<Record<string,boolean>>({})
+  const [dashResponseCounts,setDashResponseCounts]=React.useState<Record<string,number>>({})
+  const [dashboardSettings,setDashboardSettings]=React.useState<null|{item:any;formTypeTag:DashboardFormType;operationStart:string;operationEnd:string;manualStatus:DashboardManualStatus}>(null)
+  const [dashboardSettingsSaving,setDashboardSettingsSaving]=React.useState(false)
   const [guideData,setGuideData]=React.useState<{topics:any[]}|null>(null)
   const [guideLoading,setGuideLoading]=React.useState(false)
   const [guideTopic,setGuideTopic]=React.useState(0)
@@ -1305,10 +1345,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const brand=row.config_brand||row.config?.brand||row.brand||""
     const title=row.header_title||row.config?.header?.title||""
     const programId=row.program_id||row.config?.header?.programId||""
+    const formType=row.form_type||row.config?.formType||""
+    const dashboard=row.dashboard_meta||row.config?.dashboard||{}
     return {
       ...row,
       brand,
-      config:{brand,header:{title,programId}},
+      config:{brand,formType,dashboard,header:{title,programId}},
       __summary:true,
     }
   }
@@ -1360,7 +1402,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     withTimeout(sb.auth.getSession(),8000,"세션 확인 시간이 초과됐어요.").then(({data})=>{
       if(data?.session){setAuthUser(data.session.user);setSbSt("ok");loadDashboard(sb);setView("dashboard")}
     }).catch(()=>{})
-    withTimeout(sb.from("programs").select("id,title,slug,category,is_hidden,is_archived").eq("is_archived",false).order("title"),8000,"프로그램 목록 확인 시간이 초과됐어요.").then(({data})=>{if(data)setProgs(data)}).catch(()=>{})
+    withTimeout(sb.from("programs").select("*").eq("is_archived",false).order("title"),8000,"프로그램 목록 확인 시간이 초과됐어요.").then(({data})=>{if(data)setProgs(data)}).catch(()=>{})
     withTimeout(sb.from("categories").select("id,name"),8000,"카테고리 목록 확인 시간이 초과됐어요.").then(({data})=>{if(data)setCats(data)}).catch(()=>{})
   },[supabaseUrl,supabaseAnonKey])
 
@@ -1387,7 +1429,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       setAuthUser(data.user);setSbSt("ok")
       setView("dashboard")
       loadDashboard(supa)
-      withTimeout(supa.from("programs").select("id,title,slug,category,is_hidden,is_archived").eq("is_archived",false).order("title"),8000,"프로그램 목록 확인 시간이 초과됐어요.").then(({data:pd})=>{if(pd)setProgs(pd)}).catch(()=>{})
+      withTimeout(supa.from("programs").select("*").eq("is_archived",false).order("title"),8000,"프로그램 목록 확인 시간이 초과됐어요.").then(({data:pd})=>{if(pd)setProgs(pd)}).catch(()=>{})
       withTimeout(supa.from("categories").select("id,name"),8000,"카테고리 목록 확인 시간이 초과됐어요.").then(({data:cd})=>{if(cd)setCats(cd)}).catch(()=>{})
     } catch(e){const err=(e as any);setLoginErr(err.message==="Invalid login credentials"?"이메일 또는 비밀번호가 올바르지 않아요.":err.message||"로그인 실패")}
     finally {setLoginLoading(false)}
@@ -1401,11 +1443,26 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       setSnList(all.filter((x:any)=>(x.config?.brand||x.brand)==="SNIPERFACTORY"))
       setIoList(all.filter((x:any)=>(x.config?.brand||x.brand)==="INSIDEOUT"))
       setSaved(all)
+      loadDashboardResponseCounts(sb,all)
       const warm=()=>all.slice(0,16).forEach((item:any)=>prefetchFullFormRow(item))
       if(typeof window!=="undefined"&&"requestIdleCallback" in window)(window as any).requestIdleCallback(warm,{timeout:1200})
       else setTimeout(warm,350)
     } catch(e){showToast((e as any)?.message||"폼 목록을 불러오지 못했어요.",false)}
     finally {setDashLoading(false)}
+  }
+
+  async function loadDashboardResponseCounts(sb:any,items:any[]){
+    const ids=items.map((item:any)=>item.id).filter(Boolean)
+    if(!ids.length){setDashResponseCounts({});return}
+    try{
+      const [normal,company]=await Promise.all([
+        sb.from("applications").select("form_id").in("form_id",ids).limit(10000),
+        sb.from("company_applications").select("form_id").in("form_id",ids).limit(10000),
+      ])
+      const counts:Record<string,number>={}
+      ;[...(normal.data||[]),...(company.data||[])].forEach((row:any)=>{if(row.form_id)counts[row.form_id]=(counts[row.form_id]||0)+1})
+      setDashResponseCounts(counts)
+    }catch{}
   }
 
   function startNewForm(brand:"SNIPERFACTORY"|"INSIDEOUT"){
@@ -1500,6 +1557,54 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       setView("builder")
     } catch(e){showToast("폼 불러오기 실패",false)}
     finally{setActionLoading("")}
+  }
+  async function openFormAnalytics(item:any){
+    setActionLoading("응답 데이터를 준비하는 중이에요.")
+    try{
+      const full=await getFullFormRow(item)
+      const merged=mergeCfg(full.config||{})
+      const brand=merged.brand||full.brand||item.brand||""
+      setCfg(applyBrandDefaults(merged,brand))
+      setLoadedId(item.id||"")
+      setLoadedName(full.name||item.name||"")
+      setSavedSlug(full.slug||item.slug||"")
+      setCurrentBrand(brand)
+      setAnalyticsTab("responses")
+      setView("analytics")
+    }catch(e){showToast("응답 데이터를 불러오지 못했어요.",false)}
+    finally{setActionLoading("")}
+  }
+  function openDashboardSettings(item:any){
+    const dashboard=item.config?.dashboard||{}
+    setDashboardSettings({
+      item,
+      formTypeTag:dashboard.formTypeTag||legacyDashboardFormType(item.config?.formType),
+      operationStart:dashboard.operationStart||"",
+      operationEnd:dashboard.operationEnd||"",
+      manualStatus:dashboard.manualStatus||"",
+    })
+  }
+  async function saveDashboardSettings(){
+    if(!supa||!dashboardSettings?.item?.id)return
+    setDashboardSettingsSaving(true)
+    try{
+      const full=await getFullFormRow(dashboardSettings.item)
+      const next=mergeCfg(full.config||{})
+      next.dashboard={
+        ...(next.dashboard||{}),
+        formTypeTag:dashboardSettings.formTypeTag,
+        operationStart:dashboardSettings.operationStart,
+        operationEnd:dashboardSettings.operationEnd,
+        manualStatus:dashboardSettings.manualStatus,
+      }
+      const {error}=await supa.from("form_configs").update({config:next,updated_at:new Date().toISOString()}).eq("id",dashboardSettings.item.id)
+      if(error)throw error
+      delete fullFormCache.current[dashboardSettings.item.id]
+      setDashboardSettings(null)
+      await loadDashboard(supa)
+      showToast("목록 설정을 저장했어요.")
+    }catch(e){showToast("목록 설정 저장 실패: "+((e as any)?.message||"오류"),false)}
+    finally{setDashboardSettingsSaving(false)}
   }
 
   // ── Cfg updaters ─────────────────────────────────────────────────────
@@ -2392,145 +2497,169 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             가이드
           </button>
         </div>
-        {/* Tab bar */}
-        <div style={{display:"flex",alignItems:"center",gap:4,padding:"0 24px",borderBottom:`1px solid ${A.border}`,background:A.card,flexShrink:0}}>
-          {([
-            {id:"SNIPERFACTORY" as const,logo:<SFLogo height={16} dark={adminDark}/>,count:snList.length},
-            {id:"INSIDEOUT" as const,logo:<IOLogo height={13} dark={adminDark}/>,count:ioList.length},
-          ]).map(tab=>{
-            const active=dashTab===tab.id
-            return <button key={tab.id} onClick={()=>setDashTab(tab.id)}
-              style={{display:"flex",alignItems:"center",gap:8,height:44,padding:"0 16px",border:"none",borderBottom:`2px solid ${active?A.blue:"transparent"}`,background:"transparent",cursor:"pointer",fontFamily:FONT,transition:"all .15s",marginBottom:-1}}>
-              {tab.logo}
-              <span style={{fontSize:12,fontWeight:600,color:active?A.blue:A.t3,background:active?A.blue2:A.card2,padding:"1px 7px",borderRadius:999}}>{tab.count}</span>
-            </button>
-          })}
-        </div>
-        {/* Grid */}
-        <div style={{flex:1,overflowY:"auto" as const,padding:24,display:"flex",flexDirection:"column" as const,gap:16,alignContent:"start"}}>
-	          {(()=>{
-	            const renderFormItem=(item:any)=>(
-	              <div key={item.id}
-	                onMouseEnter={()=>prefetchFullFormRow(item)}
-	                onContextMenu={e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,item,source:"dashboard"})}}
-	                style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:A.r,marginBottom:2}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name}</div>
-                  <div style={{fontSize:11.5,color:A.t3,marginTop:2}}>{new Date(item.updated_at).toLocaleDateString("ko-KR")} · {item.config?.header?.title||""}</div>
+        {(()=>{
+          const programOf=(item:any)=>progs.find(p=>p.id===item.config?.header?.programId)
+          const typeOf=(item:any):DashboardFormType=>item.config?.dashboard?.formTypeTag||legacyDashboardFormType(item.config?.formType)
+          const statusOf=(item:any):DashboardManualStatus=>{
+            const dashboard=item.config?.dashboard||{}
+            const dbPeriod=recruitmentPeriodOf(programOf(item))
+            const start=dbPeriod.start||dashboard.operationStart||""
+            const end=dbPeriod.end||dashboard.operationEnd||""
+            const startAt=start?new Date(start.length<=10?`${start}T00:00:00`:start).getTime():0
+            const endAt=end?new Date(end.length<=10?`${end}T23:59:59`:end).getTime():0
+            const now=Date.now()
+            if(startAt&&now<startAt)return"draft"
+            if(endAt&&now>endAt)return"closed"
+            if(startAt||endAt)return"active"
+            return dashboard.manualStatus||"draft"
+          }
+          const statusInfo=(status:DashboardManualStatus)=>{
+            if(status==="active")return{label:"진행중",color:A.green,bg:"rgba(23,201,100,0.10)"}
+            if(status==="closed")return{label:"종료",color:A.t2,bg:A.card2}
+            return{label:"임시저장",color:"#8B5CF6",bg:"rgba(139,92,246,0.10)"}
+          }
+          const typeLabel=(type:DashboardFormType)=>DASHBOARD_FORM_TYPES.find(x=>x.value===type)?.label||"기타"
+          const brandOf=(item:any)=>item.config?.brand||item.brand||""
+          const brandLabel=(brand:string)=>brand==="SNIPERFACTORY"?"스나이퍼팩토리":brand==="INSIDEOUT"?"인사이드아웃":"기타"
+          const categoryNameOf=(prog?:Prog)=>cats.find(c=>c.id===prog?.category)?.name||"기타"
+          const sidebarItems=saved.filter((item:any)=>!dashBrandFilter||brandOf(item)===dashBrandFilter)
+          const sidebarProgramIds=new Set(sidebarItems.map((item:any)=>item.config?.header?.programId).filter(Boolean))
+          const sidebarPrograms=progs.filter(program=>sidebarProgramIds.has(program.id))
+          const programGroups=sidebarPrograms.reduce((acc:Record<string,Prog[]>,program)=>{
+            const key=categoryNameOf(program)
+            ;(acc[key]||(acc[key]=[])).push(program)
+            return acc
+          },{})
+          const filtered=saved.filter((item:any)=>{
+            const type=typeOf(item)
+            const status=statusOf(item)
+            const query=dashQuery.trim().toLowerCase()
+            return(!dashBrandFilter||brandOf(item)===dashBrandFilter)
+              &&(!dashProgramFilter||item.config?.header?.programId===dashProgramFilter)
+              &&(!dashSideTypeFilter||type===dashSideTypeFilter)
+              &&(!dashTopTypeFilter||type===dashTopTypeFilter)
+              &&(!dashTopStatusFilter||status===dashTopStatusFilter)
+              &&(!query||`${item.name||""} ${item.config?.header?.title||""} ${programOf(item)?.title||""}`.toLowerCase().includes(query))
+          })
+          const sideButton=(active:boolean):React.CSSProperties=>({width:"100%",height:34,padding:"0 10px",borderRadius:A.r,border:"none",background:active?A.blue2:"transparent",color:active?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:active?600:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left" as const})
+          return <div style={{flex:1,minHeight:0,display:"flex",overflow:"hidden"}}>
+            <aside style={{width:252,flexShrink:0,overflowY:"auto" as const,padding:16,borderRight:`1px solid ${A.border}`,background:A.card}}>
+              <div style={{border:`1px solid ${A.border}`,borderRadius:A.r2,padding:8,marginBottom:12}}>
+                <div style={{padding:"4px 6px 8px",fontSize:11.5,fontWeight:600,color:A.t3}}>브랜드</div>
+                <button onClick={()=>setDashBrandFilter("")} style={sideButton(!dashBrandFilter)}>전체 브랜드</button>
+                <button onClick={()=>setDashBrandFilter("SNIPERFACTORY")} style={sideButton(dashBrandFilter==="SNIPERFACTORY")}><SFLogo height={13} dark={adminDark}/></button>
+                <button onClick={()=>setDashBrandFilter("INSIDEOUT")} style={sideButton(dashBrandFilter==="INSIDEOUT")}><IOLogo height={12} dark={adminDark}/></button>
+              </div>
+              <div style={{border:`1px solid ${A.border}`,borderRadius:A.r2,padding:8,marginBottom:12}}>
+                <div style={{padding:"4px 6px 8px",fontSize:11.5,fontWeight:600,color:A.t3}}>교육과정</div>
+                <button onClick={()=>setDashProgramFilter("")} style={sideButton(!dashProgramFilter)}>전체 교육과정</button>
+                {Object.entries(programGroups).sort(([a],[b])=>a.localeCompare(b,"ko")).map(([group,programs])=>{
+                  const open=dashOpenGroups[group]!==false
+                  return <div key={group}>
+                    <button onClick={()=>setDashOpenGroups(prev=>({...prev,[group]:!open}))} style={{...sideButton(false),justifyContent:"space-between",color:A.t1,fontWeight:600}}>
+                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{group}</span>
+                      <span style={{fontSize:12,color:A.t3}}>{open?"−":"+"}</span>
+                    </button>
+                    {open&&programs.sort((a,b)=>a.title.localeCompare(b.title,"ko")).map(program=><button key={program.id} onClick={()=>setDashProgramFilter(program.id)} style={{...sideButton(dashProgramFilter===program.id),paddingLeft:18}}>
+                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{program.title}</span>
+                    </button>)}
+                  </div>
+                })}
+              </div>
+              <div style={{border:`1px solid ${A.border}`,borderRadius:A.r2,padding:8}}>
+                <div style={{padding:"4px 6px 8px",fontSize:11.5,fontWeight:600,color:A.t3}}>폼 유형</div>
+                <button onClick={()=>setDashSideTypeFilter("")} style={sideButton(!dashSideTypeFilter)}>전체</button>
+                {DASHBOARD_FORM_TYPES.map(type=><button key={type.value} onClick={()=>setDashSideTypeFilter(type.value)} style={sideButton(dashSideTypeFilter===type.value)}>{type.label}</button>)}
+              </div>
+            </aside>
+            <main style={{flex:1,minWidth:0,overflowY:"auto" as const,padding:24}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>
+                <div>
+                  <div style={{fontSize:20,fontWeight:600,color:A.t1}}>전체 폼</div>
+                  <div style={{fontSize:12.5,color:A.t3,marginTop:4}}>필요한 폼을 빠르게 찾고 응답 현황을 확인할 수 있어요.</div>
                 </div>
-                <div style={{display:"flex",alignItems:"center",gap:2,flexShrink:0}}>
-                  <button onClick={e=>{e.stopPropagation();openFormForEdit(item)}} title="편집"
-                    style={{display:"flex",alignItems:"center",gap:4,height:28,padding:"0 8px",borderRadius:6,border:"none",background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12,fontWeight:500}}
-                    onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2}}
-                    onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
-                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M11.5 2.5a2.12 2.12 0 0 1 3 3L5 15H2v-3L11.5 2.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    편집
-                  </button>
-                  <button onClick={e=>{
-                    e.stopPropagation()
-                    const slug=item.slug||item.config?.slug||""
-                    if(!slug){showToast("저장된 슬러그가 없어요",false);return}
-                    const isSF=(item.config?.brand||item.brand)==="SNIPERFACTORY"
-                    const base=isSF?(sfFormBaseUrl||"").replace(/\/+$/,""):(formBaseUrl||"").replace(/\/+$/,"")
-                    if(!base){showToast("환경변수 NEXT_PUBLIC_FORM_BASE_URL을 먼저 설정해주세요",false);return}
-                    navigator.clipboard.writeText(`${base}?slug=${slug}`)
-                    showToast("폼 링크 복사 완료! 🔗")
-                  }} title="링크 복사"
-                    style={{display:"flex",alignItems:"center",gap:4,height:28,padding:"0 8px",borderRadius:6,border:"none",background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12,fontWeight:500}}
-                    onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2}}
-                    onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
-                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M6.5 9.5a4.24 4.24 0 0 0 6 0l2-2a4.24 4.24 0 0 0-6-6L7 3M9.5 6.5a4.24 4.24 0 0 0-6 0l-2 2a4.24 4.24 0 0 0 6 6L9 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                    복사
-                  </button>
-                  <button onClick={e=>{
-                    e.stopPropagation()
-                    const slug=item.slug||item.config?.slug||""
-                    if(!slug){showToast("저장된 슬러그가 없어요",false);return}
-                    const isSF=(item.config?.brand||item.brand)==="SNIPERFACTORY"
-                    const base=isSF?(sfFormBaseUrl||"").replace(/\/+$/,""):(formBaseUrl||"").replace(/\/+$/,"")
-                    if(!base){showToast("환경변수 NEXT_PUBLIC_FORM_BASE_URL을 먼저 설정해주세요",false);return}
-                    window.open(`${base}?slug=${slug}`,"_blank")
-                  }} title="링크 열기"
-                    style={{display:"flex",alignItems:"center",gap:4,height:28,padding:"0 8px",borderRadius:6,border:"none",background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12,fontWeight:500}}
-                    onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2}}
-                    onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
-                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M10 2h4v4M14 2l-7 7M6 4H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    열기
-                  </button>
+                <div style={{flex:1}}/>
+                <select value={dashTopTypeFilter} onChange={e=>setDashTopTypeFilter(e.target.value as DashboardFormType|"")} style={{height:36,padding:"0 28px 0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,outline:"none"}}>
+                  <option value="">폼 유형 전체</option>
+                  {DASHBOARD_FORM_TYPES.map(type=><option key={type.value} value={type.value}>{type.label}</option>)}
+                </select>
+                <select value={dashTopStatusFilter} onChange={e=>setDashTopStatusFilter(e.target.value as DashboardManualStatus|"")} style={{height:36,padding:"0 28px 0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,outline:"none"}}>
+                  <option value="">상태 전체</option>
+                  <option value="draft">임시저장</option>
+                  <option value="active">진행중</option>
+                  <option value="closed">종료</option>
+                </select>
+                <div style={{width:220,height:36,display:"flex",alignItems:"center",gap:7,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card}}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{color:A.t3,flexShrink:0}}><circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8"/><path d="m20 20-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                  <input value={dashQuery} onChange={e=>setDashQuery(e.target.value)} placeholder="폼 이름 검색" style={{width:"100%",border:"none",outline:"none",background:"transparent",color:A.t1,fontFamily:FONT,fontSize:12.5}}/>
                 </div>
               </div>
-            )
-
-            const renderCard=(header:React.ReactNode,items:any[])=>(
-              <div style={{background:A.card,borderRadius:A.r2,border:`1px solid ${A.border}`,overflow:"hidden",boxShadow:A.shadow}}>
-                <div style={{padding:"12px 18px",borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{flex:1,display:"flex",alignItems:"center"}}>{header}</div>
-                  <span style={{fontSize:11.5,color:A.t3,background:A.card2,padding:"2px 8px",borderRadius:999,fontWeight:500}}>{items.length}개</span>
+              <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,boxShadow:A.shadow,overflowX:"auto" as const,overflowY:"hidden" as const}}>
+                <div style={{display:"grid",gridTemplateColumns:"minmax(240px,1.7fr) 110px minmax(160px,1fr) 92px 80px 74px 100px 148px",alignItems:"center",minWidth:1050,padding:"11px 14px",borderBottom:`1px solid ${A.border}`,background:A.card2,fontSize:11.5,fontWeight:600,color:A.t3}}>
+                  <span>폼 이름</span><span>브랜드</span><span>교육과정</span><span>폼 유형</span><span>상태</span><span>응답 수</span><span>수정일</span><span style={{textAlign:"right"}}>관리</span>
                 </div>
-                <div style={{padding:8,minHeight:80,maxHeight:320,overflowY:"auto" as const}}>
-                  {dashLoading
-                    ?<div style={{padding:"8px 6px"}}>
-                      {[1,2,3].map(i=><div key={i} style={{padding:"10px 12px",marginBottom:4,borderRadius:A.r}}>
-                        <div style={{height:12,borderRadius:4,background:adminDark?"rgba(255,255,255,0.07)":"rgba(0,0,0,0.06)",marginBottom:6,width:`${50+i*12}%`,animation:"skeletonPulse 1.4s ease-in-out infinite"}}/>
-                        <div style={{height:10,borderRadius:4,background:adminDark?"#1E2230":"#F7F8F9",width:"35%",animation:"skeletonPulse 1.4s ease-in-out infinite"}}/>
-                      </div>)}
+                <div style={{minWidth:1050}}>
+                  {dashLoading?<div style={{padding:14}}>{[1,2,3,4,5].map(i=><div key={i} style={{height:50,borderRadius:A.r,background:A.card2,marginBottom:8,animation:"skeletonPulse 1.4s ease-in-out infinite"}}/>)}</div>
+                  :filtered.length===0?<div style={{padding:"56px 20px",textAlign:"center" as const,fontSize:13,color:A.t3}}>조건에 맞는 폼이 없어요.</div>
+                  :filtered.map((item:any)=>{
+                    const type=typeOf(item)
+                    const status=statusInfo(statusOf(item))
+                    const program=programOf(item)
+                    return <div key={item.id} onMouseEnter={()=>prefetchFullFormRow(item)} onContextMenu={e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,item,source:"dashboard"})}}
+                      style={{display:"grid",gridTemplateColumns:"minmax(240px,1.7fr) 110px minmax(160px,1fr) 92px 80px 74px 100px 148px",alignItems:"center",minHeight:58,padding:"0 14px",borderBottom:`1px solid ${A.border}`,fontSize:12.5,color:A.t2}}>
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name||"이름 없는 폼"}</div>
+                        <div style={{fontSize:11.5,color:A.t3,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.config?.header?.title||""}</div>
+                      </div>
+                      <span>{brandLabel(brandOf(item))}</span>
+                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{program?.title||"교육과정 없음"}</span>
+                      <span style={{color:A.t2}}>{typeLabel(type)}</span>
+                      <span><span style={{display:"inline-flex",padding:"3px 7px",borderRadius:999,background:status.bg,color:status.color,fontSize:11.5,fontWeight:600}}>{status.label}</span></span>
+                      <span style={{fontWeight:600,color:A.t1}}>{dashResponseCounts[item.id]||0}</span>
+                      <span>{item.updated_at?new Date(item.updated_at).toLocaleDateString("ko-KR"):"-"}</span>
+                      <div style={{display:"flex",justifyContent:"flex-end",gap:4}}>
+                        <button onClick={()=>openFormAnalytics(item)} title="응답 및 분석" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg></button>
+                        <button onClick={()=>openDashboardSettings(item)} title="목록 설정" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V20.3h-3v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 0 0 7.08 15a1.7 1.7 0 0 0-1.55-1H5.4v-3h.13a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06L8.8 5.94l.06.06a1.7 1.7 0 0 0 1.88.34 1.7 1.7 0 0 0 1-1.55V4.7h3v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.12 2.12-.06.06A1.7 1.7 0 0 0 19.4 10a1.7 1.7 0 0 0 1.55 1h.13v3h-.13a1.7 1.7 0 0 0-1.55 1Z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                        <button onClick={()=>openFormForEdit(item)} title="편집" style={{height:30,padding:"0 9px",borderRadius:6,border:`1px solid ${A.border}`,background:A.card,color:A.t1,cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:600}}>편집</button>
+                      </div>
                     </div>
-                    :items.length===0
-                      ?<div style={{padding:"20px 12px",textAlign:"center" as const,fontSize:12.5,color:A.t3}}>저장된 폼이 없어요</div>
-                      :items.map(renderFormItem)
-                  }
+                  })}
                 </div>
               </div>
-            )
-
-            if(dashTab==="SNIPERFACTORY") {
-              const sfCatOf=(item:any)=>{
-                const progId=item.config?.header?.programId
-                if(!progId)return "기타"
-                const prog=progs.find(p=>p.id===progId)
-                if(!prog)return "기타"
-                const catName=cats.find(c=>c.id===prog.category)?.name||""
-                if(catName.includes("KDT"))return "KDT"
-                if(catName.includes("새싹")||catName.includes("SeSAC"))return "새싹"
-                if(catName.includes("인재키움"))return "인재키움"
-                return "기타"
-              }
-              const sfKdt=snList.filter((x:any)=>sfCatOf(x)==="KDT")
-              const sfSesac=snList.filter((x:any)=>sfCatOf(x)==="새싹")
-              const sfInjae=snList.filter((x:any)=>sfCatOf(x)==="인재키움")
-              const sfEtc=snList.filter((x:any)=>sfCatOf(x)==="기타")
-              const sfTitle=(label:string)=><span style={{fontSize:14,fontWeight:600,color:A.t1,letterSpacing:"-0.2px"}}>{label}</span>
-              return <>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
-                  {renderCard(sfTitle("KDT"),sfKdt)}
-                  {renderCard(sfTitle("새싹"),sfSesac)}
-                  {renderCard(sfTitle("인재키움"),sfInjae)}
+            </main>
+          </div>
+        })()}
+        {dashboardSettings&&(()=>{
+          const program=progs.find(p=>p.id===dashboardSettings.item.config?.header?.programId)
+          const recruitment=recruitmentPeriodOf(program)
+          const hasRecruitmentPeriod=!!(recruitment.start||recruitment.end)
+          return <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={()=>setDashboardSettings(null)}>
+            <div style={{width:420,padding:24,borderRadius:16,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
+              <div style={{fontSize:17,fontWeight:600,color:A.t1,marginBottom:5}}>목록 설정</div>
+              <div style={{fontSize:12.5,color:A.t3,marginBottom:20}}>폼 유형과 대시보드 상태 표시 기준을 정합니다.</div>
+              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 유형</div>
+              <select value={dashboardSettings.formTypeTag} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formTypeTag:e.target.value as DashboardFormType}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
+                {DASHBOARD_FORM_TYPES.map(type=><option key={type.value} value={type.value}>{type.label}</option>)}
+              </select>
+              {hasRecruitmentPeriod?<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB 모집 기간을 기준으로 상태가 자동 표시됩니다.<br/>{recruitment.start||"시작일 미정"} ~ {recruitment.end||"종료일 미정"}</div>:<>
+                <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
+                <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
+                  <input type="date" value={dashboardSettings.operationStart} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,operationStart:e.target.value}))} style={{flex:1,height:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12}}/>
+                  <span style={{fontSize:12,color:A.t3}}>~</span>
+                  <input type="date" value={dashboardSettings.operationEnd} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,operationEnd:e.target.value}))} style={{flex:1,height:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12}}/>
                 </div>
-                {renderCard(sfTitle("기타"),sfEtc)}
-              </>
-            }
-
-            // INSIDEOUT — 카테고리별 분류
-            const catNameOf=(item:any)=>{
-              const progId=item.config?.header?.programId
-              if(!progId)return "기타"
-              const prog=progs.find(p=>p.id===progId)
-              if(!prog)return "기타"
-              const catName=cats.find(c=>c.id===prog.category)?.name||""
-              if(catName.includes("인턴"))return "인턴형"
-              if(catName.includes("프로젝트"))return "프로젝트형"
-              return "기타"
-            }
-            const ioIntern=ioList.filter((x:any)=>catNameOf(x)==="인턴형")
-            const ioProject=ioList.filter((x:any)=>catNameOf(x)==="프로젝트형")
-            const ioEtc=ioList.filter((x:any)=>catNameOf(x)==="기타")
-            return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
-              {renderCard(<span style={{fontSize:14,fontWeight:600,color:A.t1,letterSpacing:"-0.2px"}}>인턴형</span>,ioIntern)}
-              {renderCard(<span style={{fontSize:14,fontWeight:600,color:A.t1,letterSpacing:"-0.2px"}}>프로젝트형</span>,ioProject)}
-              {renderCard(<span style={{fontSize:14,fontWeight:600,color:A.t1,letterSpacing:"-0.2px"}}>기타</span>,ioEtc)}
+                <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>기간 미설정 시 상태</div>
+                <select value={dashboardSettings.manualStatus} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,manualStatus:e.target.value as DashboardManualStatus}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
+                  <option value="">임시저장</option><option value="active">진행중</option><option value="closed">종료</option>
+                </select>
+              </>}
+              <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+                <button onClick={()=>setDashboardSettings(null)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
+                <button onClick={saveDashboardSettings} disabled={dashboardSettingsSaving} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>{dashboardSettingsSaving?"저장 중...":"저장"}</button>
+              </div>
             </div>
-          })()}
-        </div>
+          </div>
+        })()}
         {/* Brand modal */}
         {showBrandModal&&(
           <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={()=>setShowBrandModal(false)}>
