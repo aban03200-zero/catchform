@@ -1264,6 +1264,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
   // ── Analytics state ───────────────────────────────────────────────────
   const [analyticsTab,setAnalyticsTab]=React.useState<"questions"|"responses"|"period"|"dropoff"|"qr">("responses")
+  const [qrAnalyticsScope,setQrAnalyticsScope]=React.useState<"form"|"detail">("form")
   const [analyticsRows,setAnalyticsRows]=React.useState<any[]>([])
   const [analyticsEvents,setAnalyticsEvents]=React.useState<any[]>([])
   const [analyticsLoading,setAnalyticsLoading]=React.useState(false)
@@ -1570,6 +1571,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       setSavedSlug(full.slug||item.slug||"")
       setCurrentBrand(brand)
       setAnalyticsTab("responses")
+      setQrAnalyticsScope("form")
       setView("analytics")
     }catch(e){showToast("응답 데이터를 불러오지 못했어요.",false)}
     finally{setActionLoading("")}
@@ -4662,18 +4664,26 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const m=eventMeta(e)
       return e.event_type==="qr_scan"||m.cf_qr==="1"||m.utm_source==="qr"||m.utm_medium==="qrcode"||String(m.source||"").toLowerCase()==="qr"
     }
-    const qrEvents=events.filter(isQrEvent)
-    const qrScanEvents=events.filter((e:any)=>e.event_type==="qr_scan"||(isQrEvent(e)&&e.event_type==="started"&&!eventMeta(e).cf_qr_redirected))
-    const qrVisitEvents=events.filter((e:any)=>isQrEvent(e)&&["started","page_view","completed"].includes(e.event_type))
+    const qrEventScope=(e:any):"form"|"detail"=>{
+      const m=eventMeta(e)
+      return String(m.qr_type||"").toLowerCase()==="detail"||String(m.d||"")==="1"?"detail":"form"
+    }
+    const allQrEvents=events.filter(isQrEvent)
+    const hasDetailQr=(cfg.integrations?.qrLinks||[]).some(link=>link.type==="detail")||allQrEvents.some((e:any)=>qrEventScope(e)==="detail")
+    const activeQrScope=hasDetailQr?qrAnalyticsScope:"form"
+    const qrEvents=allQrEvents.filter((e:any)=>qrEventScope(e)===activeQrScope)
+    const qrScanEvents=events.filter((e:any)=>qrEventScope(e)===activeQrScope&&(e.event_type==="qr_scan"||(isQrEvent(e)&&e.event_type==="started"&&!eventMeta(e).cf_qr_redirected)))
+    const qrVisitEvents=events.filter((e:any)=>qrEventScope(e)===activeQrScope&&isQrEvent(e)&&["started","page_view","completed"].includes(e.event_type))
     const qrScanTotal=qrScanEvents.length
     const qrUniqueScans=new Set(qrScanEvents.map((e:any)=>e.session_id||e.id)).size
-    const qrVisits=new Set(qrVisitEvents.map((e:any)=>e.session_id||e.id)).size||qrUniqueScans
+    const qrVisits=activeQrScope==="detail"?qrScanTotal:(new Set(qrVisitEvents.map((e:any)=>e.session_id||e.id)).size||qrUniqueScans)
+    const qrVisitLabel=activeQrScope==="detail"?"상세페이지 이동":"폼 방문"
     const qrBaseEvents=qrScanEvents.length?qrScanEvents:qrEvents
     const qrDateKeys=Array.from(new Set(qrBaseEvents.map((e:any)=>dayOf(e.created_at)))).sort().slice(-7)
     const qrActivityRows=qrDateKeys.map((d:string)=>{
       const scan=qrScanEvents.filter((e:any)=>dayOf(e.created_at)===d)
       const visit=qrVisitEvents.filter((e:any)=>dayOf(e.created_at)===d)
-      return {date:d,total:scan.length,unique:new Set(scan.map((e:any)=>e.session_id||e.id)).size,visits:new Set(visit.map((e:any)=>e.session_id||e.id)).size}
+      return {date:d,total:scan.length,unique:new Set(scan.map((e:any)=>e.session_id||e.id)).size,visits:activeQrScope==="detail"?scan.length:new Set(visit.map((e:any)=>e.session_id||e.id)).size}
     })
     const qrActivityMax=Math.max(1,...qrActivityRows.flatMap((d:any)=>[d.total,d.unique,d.visits]))
     const qrCounterEntries=(items:any[],getLabel:(e:any)=>string,total=items.length)=>{
@@ -5013,25 +5023,36 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </div>}
           </div>}
           {activeAnalyticsTab==="qr"&&<div>
-            <div style={{fontSize:22,fontWeight:600,color:A.t1,marginBottom:16}}>QR 데이터</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap" as const,marginBottom:10}}>
+              <div style={{fontSize:22,fontWeight:600,color:A.t1}}>QR 데이터</div>
+              {hasDetailQr&&<div style={{display:"flex",gap:4,padding:4,borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`}}>
+                {([{id:"form",label:"폼 QR"},{id:"detail",label:"상세페이지 QR"}] as const).map(item=>{const active=activeQrScope===item.id;return <button key={item.id} onClick={()=>setQrAnalyticsScope(item.id)}
+                  style={{height:30,padding:"0 12px",borderRadius:A.r,border:"none",background:active?A.card:"transparent",color:active?A.blue:A.t2,boxShadow:active?A.shadow:"none",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
+                  {item.label}
+                </button>})}
+              </div>}
+            </div>
+            <div style={{fontSize:12.5,color:A.t3,marginBottom:16}}>
+              {activeQrScope==="detail"?"상세페이지용 QR을 스캔하고 외부 페이지로 이동한 데이터를 보여줍니다.":"폼 진입용 QR을 스캔하고 폼 페이지로 들어온 데이터를 보여줍니다."}
+            </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14,marginBottom:16}}>
               {metric(<><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h4v4H3z" stroke="currentColor" strokeWidth="1.4"/><path d="M10 10h3v3h-3z" fill="currentColor"/></>,String(qrScanTotal),"총 스캔",chartBlue)}
               {metric(<path d="M8 2.5a3 3 0 1 1 0 6 3 3 0 0 1 0-6zM3 14c.8-2.5 2.6-3.8 5-3.8s4.2 1.3 5 3.8" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round"/>,String(qrUniqueScans),"고유 스캔",chartOrange)}
-              {metric(<><path d="M2.5 8s2-4 5.5-4 5.5 4 5.5 4-2 4-5.5 4-5.5-4-5.5-4z" stroke="currentColor" strokeWidth="1.5"/><circle cx="8" cy="8" r="1.8" fill="currentColor"/></>,String(qrVisits),"방문",chartGreen)}
+              {metric(<><path d="M2.5 8s2-4 5.5-4 5.5 4 5.5 4-2 4-5.5 4-5.5-4-5.5-4z" stroke="currentColor" strokeWidth="1.5"/><circle cx="8" cy="8" r="1.8" fill="currentColor"/></>,String(qrVisits),qrVisitLabel,chartGreen)}
             </div>
             {qrBaseEvents.length===0?emptyState("아직 QR 스캔 데이터가 없습니다. QR 메뉴에서 다운로드한 QR을 스캔하면 이곳에 기록됩니다."):<>
               <div style={{display:"grid",gridTemplateColumns:"minmax(340px,1.2fr) minmax(300px,0.8fr)",gap:16,marginBottom:16}}>
                 <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-                  {infoTitle("스캔 활동","QR 추적 링크를 통해 들어온 스캔 이벤트를 날짜별로 집계합니다. 총 스캔은 전체 스캔 횟수, 고유 스캔은 같은 사용자/기기를 중복 제외한 수, 방문은 QR을 통해 폼 페이지까지 들어온 세션 수입니다.")}
+                  {infoTitle("스캔 활동",activeQrScope==="detail"?"상세페이지 QR 추적 링크를 날짜별로 집계합니다. 총 스캔은 전체 스캔 횟수, 고유 스캔은 같은 사용자/기기를 중복 제외한 수, 상세페이지 이동은 QR 리다이렉트 횟수입니다.":"폼 QR 추적 링크를 날짜별로 집계합니다. 총 스캔은 전체 스캔 횟수, 고유 스캔은 같은 사용자/기기를 중복 제외한 수, 폼 방문은 QR을 통해 폼 페이지까지 들어온 세션 수입니다.")}
                   {periodTip("qr-activity")}
                   <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:12,fontSize:12.5,color:A.t2,fontWeight:600}}>
                     <span style={{display:"flex",alignItems:"center",gap:6}}><i style={{width:10,height:10,borderRadius:3,background:chartBlue}}/>총 스캔</span>
                     <span style={{display:"flex",alignItems:"center",gap:6}}><i style={{width:10,height:10,borderRadius:3,background:chartOrange}}/>고유 스캔</span>
-                    <span style={{display:"flex",alignItems:"center",gap:6}}><i style={{width:10,height:10,borderRadius:3,background:chartGreen}}/>방문</span>
+                    <span style={{display:"flex",alignItems:"center",gap:6}}><i style={{width:10,height:10,borderRadius:3,background:chartGreen}}/>{qrVisitLabel}</span>
                   </div>
                   <div style={{height:270,display:"flex",alignItems:"flex-end",gap:16,borderLeft:`1px solid ${A.border}`,borderBottom:`1px solid ${A.border}`,padding:"12px 12px 28px"}}>
                     {qrActivityRows.map((d:any)=><div key={d.date} style={{flex:1,height:"100%",display:"flex",alignItems:"flex-end",gap:5,position:"relative" as const}}>
-                      {([["total",chartBlue,"총 스캔"],["unique",chartOrange,"고유 스캔"],["visits",chartGreen,"방문"]] as any[]).map(pair=><div key={pair[0]} onMouseMove={e=>movePeriodTip("qr-activity",e,{title:`${d.date} ${pair[2]}`,color:pair[1],lines:[`${pair[2]} : ${d[pair[0]]}`,`날짜 : ${d.date}`]})} onMouseLeave={()=>setPeriodHover(null)}
+                      {([["total",chartBlue,"총 스캔"],["unique",chartOrange,"고유 스캔"],["visits",chartGreen,qrVisitLabel]] as any[]).map(pair=><div key={pair[0]} onMouseMove={e=>movePeriodTip("qr-activity",e,{title:`${d.date} ${pair[2]}`,color:pair[1],lines:[`${pair[2]} : ${d[pair[0]]}`,`날짜 : ${d.date}`]})} onMouseLeave={()=>setPeriodHover(null)}
                         style={{flex:1,height:`${Math.max(2,(d[pair[0]]/qrActivityMax)*100)}%`,borderRadius:"7px 7px 0 0",background:pair[1],cursor:"pointer",transform:periodHover?.scope==="qr-activity"&&periodHover.title===`${d.date} ${pair[2]}`?"scaleY(1.06)":"scaleY(1)",transformOrigin:"bottom",transition:"transform .16s ease"}}/>)}
                       <div style={{position:"absolute" as const,left:"50%",bottom:-22,transform:"translateX(-50%)",fontSize:10.5,color:A.t3,whiteSpace:"nowrap" as const}}>{String(d.date).slice(5)}</div>
                     </div>)}
