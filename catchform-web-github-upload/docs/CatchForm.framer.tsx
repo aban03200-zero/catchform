@@ -412,6 +412,14 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             country: params.get("country") || geoMeta.country || localeCountry || "",
             region: params.get("region") || params.get("province") || params.get("sido") || geoMeta.region || "",
             city: params.get("city") || geoMeta.city || "",
+            district: params.get("district") || params.get("gu") || geoMeta.district || "",
+            neighborhood: params.get("neighborhood") || params.get("dong") || geoMeta.neighborhood || "",
+            geo_label: geoMeta.geo_label || "",
+            latitude: geoMeta.latitude || "",
+            longitude: geoMeta.longitude || "",
+            geo_accuracy: geoMeta.geo_accuracy || "",
+            geo_source: geoMeta.geo_source || "",
+            geo_permission: geoMeta.geo_permission || "",
             language: locale,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
             platform: navigator.platform || "",
@@ -614,13 +622,97 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         return () => window.clearTimeout(timer)
     }, [draftKey, vals, checked, consentOk, page])
 
+    const isQrLanding = () => {
+        if (typeof window === "undefined") return false
+        const params = new URLSearchParams(window.location.search || "")
+        return params.get("cf_qr") === "1" || params.get("utm_medium") === "qrcode" || params.get("utm_source") === "qr" || params.get("geo") === "1"
+    }
+
     React.useEffect(() => {
         let alive = true
-        fetch("/api/geo", { cache: "no-store" })
-            .then(r => r.ok ? r.json() : null)
-            .then(data => { if (alive && data) setGeoMeta(data) })
-            .catch(() => {})
-            .finally(() => { if (alive) setGeoLoaded(true) })
+        const getGeo = async (query = "") => {
+            const res = await fetch(`/api/geo${query}`, { cache: "no-store" })
+            return res.ok ? res.json() : null
+        }
+        const finish = () => {
+            if (alive) setGeoLoaded(true)
+        }
+        const loadGeo = async () => {
+            let base: Record<string, string> = {}
+            try {
+                base = await getGeo() || {}
+                if (alive && base) setGeoMeta(prev => ({ ...prev, ...base }))
+            } catch {}
+
+            if (typeof navigator === "undefined" || !navigator.geolocation) {
+                if (alive) setGeoMeta(prev => ({ ...prev, geo_permission: "unsupported" }))
+                finish()
+                return
+            }
+
+            const shouldAskPrecise = isQrLanding()
+            let permissionState = ""
+            try {
+                const permissions = (navigator as any).permissions
+                if (permissions?.query) {
+                    const result = await permissions.query({ name: "geolocation" as PermissionName })
+                    permissionState = result?.state || ""
+                }
+            } catch {}
+
+            if (permissionState === "denied") {
+                if (alive) setGeoMeta(prev => ({ ...prev, geo_permission: "denied" }))
+                finish()
+                return
+            }
+            if (!shouldAskPrecise && permissionState !== "granted") {
+                if (alive) setGeoMeta(prev => ({ ...prev, geo_permission: permissionState || "not_requested" }))
+                finish()
+                return
+            }
+
+            await new Promise<void>((resolve) => {
+                navigator.geolocation.getCurrentPosition(
+                    async (pos) => {
+                        try {
+                            const lat = pos.coords.latitude
+                            const lon = pos.coords.longitude
+                            const precise = await getGeo(`?lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}`)
+                            if (alive) {
+                                setGeoMeta(prev => ({
+                                    ...prev,
+                                    ...base,
+                                    ...(precise || {}),
+                                    latitude: String(lat),
+                                    longitude: String(lon),
+                                    geo_accuracy: String(Math.round(pos.coords.accuracy || 0)),
+                                    geo_permission: "granted",
+                                }))
+                            }
+                        } catch {
+                            if (alive) {
+                                setGeoMeta(prev => ({
+                                    ...prev,
+                                    latitude: String(pos.coords.latitude),
+                                    longitude: String(pos.coords.longitude),
+                                    geo_accuracy: String(Math.round(pos.coords.accuracy || 0)),
+                                    geo_permission: "granted",
+                                    geo_source: prev.geo_source || "browser_geolocation_unresolved",
+                                }))
+                            }
+                        }
+                        resolve()
+                    },
+                    (err) => {
+                        if (alive) setGeoMeta(prev => ({ ...prev, geo_permission: err?.code === 1 ? "denied" : "unavailable" }))
+                        resolve()
+                    },
+                    { enableHighAccuracy: true, timeout: 4200, maximumAge: 5 * 60 * 1000 },
+                )
+            })
+            finish()
+        }
+        loadGeo().catch(finish)
         return () => { alive = false }
     }, [])
 
@@ -638,7 +730,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         if (startedTrackedRef.current) return
         startedTrackedRef.current = true
         trackEvent("started", { page: 1, metadata: { formType: cfg.formType || "" } })
-    }, [geoLoaded, geoMeta.country, geoMeta.region, geoMeta.city])
+    }, [geoLoaded, geoMeta.country, geoMeta.region, geoMeta.city, geoMeta.district, geoMeta.neighborhood, geoMeta.geo_label])
 
     React.useEffect(() => {
         lastTouchedFieldRef.current = null

@@ -4444,48 +4444,21 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	    }
 	    const placeFromMeta=(meta:any)=>{
 	      const country=countryName(meta?.country||"")
+	      const explicit=String(meta?.geo_label||"").trim()
 	      const city=regionName(meta?.city||"")
 	      const region=regionName(meta?.region||"")
-	      const place=city||region
+	      const district=regionName(meta?.district||meta?.borough||meta?.county||"")
+	      const neighborhood=regionName(meta?.neighborhood||meta?.dong||meta?.suburb||"")
+	      const place=[region,city,district,neighborhood].filter(Boolean).filter((v:string,i:number,a:string[])=>a.indexOf(v)===i).join(" · ")
+	      if(explicit)return explicit
 	      if(country==="대한민국")return place?`대한민국 · ${place}`:"대한민국 · 지역 미확인"
 	      if(country&&country!=="미확인")return place?`${country} · ${place}`:country
 	      return place||"미확인"
 	    }
-	    const normalizeSubmittedLocation=(value:any)=>{
-	      const raw=String(Array.isArray(value)?value[0]:value||"").replace(/^기타:\s*/,"").replace(/\s+/g," ").trim()
-	      if(!raw)return""
-	      const aliases:[RegExp,string][]=[
-	        [/서울특별시|서울시|서울/,"서울"],[/부산광역시|부산시|부산/,"부산"],[/대구광역시|대구시|대구/,"대구"],[/인천광역시|인천시|인천/,"인천"],
-	        [/광주광역시|광주시|광주/,"광주"],[/대전광역시|대전시|대전/,"대전"],[/울산광역시|울산시|울산/,"울산"],[/세종특별자치시|세종시|세종/,"세종"],
-	        [/경기도|경기/,"경기"],[/강원특별자치도|강원도|강원/,"강원"],[/충청북도|충북/,"충북"],[/충청남도|충남/,"충남"],
-	        [/전북특별자치도|전라북도|전북/,"전북"],[/전라남도|전남/,"전남"],[/경상북도|경북/,"경북"],[/경상남도|경남/,"경남"],[/제주특별자치도|제주도|제주/,"제주"],
-	      ]
-	      const province=aliases.find(([re])=>re.test(raw))?.[1]||""
-	      const district=raw.replace(/대한민국|한국|Republic of Korea|Korea/gi,"").replace(/\s+/g," ").trim()
-	      if(province){
-	        const cleaned=district.startsWith(province)?district:`${province}${district&&district!==province?` ${district}`:""}`
-	        return `대한민국 · ${cleaned.trim()}`
-	      }
-	      if(/대한민국|한국|Republic of Korea|Korea/i.test(raw))return "대한민국 · 지역 미확인"
-	      return raw
-	    }
-	    const locationAnswerFields=fields.filter((f:any)=>{
-	      const key=`${f.id||""} ${f.label||""}`.toLowerCase()
-	      return /(region|location|address|residence|city|province|sido|area|거주|주소|지역|위치|소재)/.test(key)
-	    })
-	    const locationFromRow=(row:any)=>{
-	      for(const f of locationAnswerFields){
-	        const raw=analyticsRawAnswer(row,f)
-	        if(isEmptyAnalyticsAnswer(raw)||analyticsFileItems(raw).length)continue
-	        const label=normalizeSubmittedLocation(raw)
-	        if(label)return label
-	      }
-	      return ""
-	    }
 	    const sourceBySession:any={}
 	    const sessionSummaries=sessions.map((evs:any[])=>{
 	      const first=evs[0]||{}
-	      const metaEvent=evs.find(e=>{const m=eventMeta(e);return ["started","page_view"].includes(String(e.event_type||""))&&(m.country||m.region||m.city)})||evs.find(e=>{const m=eventMeta(e);return m.country||m.region||m.city})||first
+	      const metaEvent=evs.find(e=>{const m=eventMeta(e);return ["started","page_view"].includes(String(e.event_type||""))&&(m.geo_label||m.latitude||m.country||m.region||m.city||m.district||m.neighborhood)})||evs.find(e=>{const m=eventMeta(e);return m.geo_label||m.latitude||m.country||m.region||m.city||m.district||m.neighborhood})||first
 	      const meta=eventMeta(metaEvent)
 	      const source=meta.source||meta.utm_source||meta.referrer_host||"직접 유입"
 	      const country=countryName(meta.country||"")
@@ -4495,7 +4468,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	      const completed=evs.some(e=>e.event_type==="completed")
 	      sourceBySession[first.session_id||"unknown"]=source
 	      return{session:first.session_id||"unknown",source,country,region,city,location,completed,startedAt:first.created_at}
-    })
+	    })
     rows.forEach((row:any)=>{
       if(!sessionSummaries.length){
         const src=row.referral_source||"직접 유입"
@@ -4534,21 +4507,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	      const large=end-start<=180?0:1
 	      return`M ${o2.x} ${o2.y} A ${ro} ${ro} 0 ${large} 1 ${o1.x} ${o1.y} L ${i2.x} ${i2.y} A ${ri} ${ri} 0 ${large} 0 ${i1.x} ${i1.y} Z`
 	    }
-	    const rowLocationMap:any={}
-	    rows.forEach((row:any)=>{
-	      const label=locationFromRow(row)
-	      if(label)rowLocationMap[label]=(rowLocationMap[label]||0)+1
-	    })
 	    const locationMap:any={}
-	    if(Object.keys(rowLocationMap).length){
-	      Object.assign(locationMap,rowLocationMap)
-	    }else{
-	      sessionSummaries.forEach((s:any)=>{
-	        const label=s.location||"미확인"
-	        locationMap[label]=(locationMap[label]||0)+1
-	      })
-	    }
-	    const locationSource=Object.keys(rowLocationMap).length?"응답의 거주지/주소 답변":"접속 metadata"
+	    sessionSummaries.forEach((s:any)=>{
+	      const label=s.location||"미확인"
+	      locationMap[label]=(locationMap[label]||0)+1
+	    })
+	    const locationSource="접속 metadata"
 	    const locationEntries=Object.keys(locationMap).map(k=>[k,locationMap[k]]).sort((a:any,b:any)=>Number(b[1])-Number(a[1]))
 	    const locationTotal=locationEntries.reduce((a:any,b:any)=>a+Number(b[1]||0),0)
     const shareMap:any={}
@@ -4583,16 +4547,24 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       return {date:d,total:scan.length,unique:new Set(scan.map((e:any)=>e.session_id||e.id)).size,visits:new Set(visit.map((e:any)=>e.session_id||e.id)).size}
     })
     const qrActivityMax=Math.max(1,...qrActivityRows.flatMap((d:any)=>[d.total,d.unique,d.visits]))
-    const qrCounterEntries=(items:any[],getLabel:(e:any)=>string)=>{
+    const qrCounterEntries=(items:any[],getLabel:(e:any)=>string,total=items.length)=>{
       const map:any={}
       items.forEach((e:any)=>{const label=getLabel(e)||"미확인";map[label]=(map[label]||0)+1})
-      return Object.keys(map).map(k=>({label:k,count:map[k],pct:qrBaseEvents.length?Math.round((map[k]/qrBaseEvents.length)*1000)/10:0})).sort((a:any,b:any)=>b.count-a.count)
+      return Object.keys(map).map(k=>({label:k,count:map[k],pct:total?Math.round((map[k]/total)*1000)/10:0})).sort((a:any,b:any)=>b.count-a.count)
     }
-    const qrCountryEntries=qrCounterEntries(qrBaseEvents,(e:any)=>countryName(eventMeta(e).country||""))
-    const qrCityEntries=qrCounterEntries(qrBaseEvents,(e:any)=>{
-      const m=eventMeta(e)
-      return m.city||regionName(m.region||"")||countryName(m.country||"")
-    })
+    const qrFormLocationEvents=qrEvents.filter((e:any)=>["started","page_view"].includes(String(e.event_type||"")))
+    const qrLocationEvents=Array.from(qrFormLocationEvents.reduce((map:any,e:any)=>{
+      const sid=e.session_id||e.id
+      const current=map.get(sid)
+      const meta=eventMeta(e)
+      const currentMeta=current?eventMeta(current):{}
+      const score=(m:any)=>(m.geo_source==="browser_geolocation"?10:0)+(m.geo_label?4:0)+(m.latitude?2:0)+(m.city||m.region?1:0)
+      if(!current||score(meta)>score(currentMeta))map.set(sid,e)
+      return map
+    },new Map()).values()) as any[]
+    const qrLocationBase=qrLocationEvents.length?qrLocationEvents:qrBaseEvents
+    const qrCountryEntries=qrCounterEntries(qrLocationBase,(e:any)=>countryName(eventMeta(e).country||""),qrLocationBase.length)
+    const qrCityEntries=qrCounterEntries(qrLocationBase,(e:any)=>placeFromMeta(eventMeta(e)),qrLocationBase.length)
     const qrOsName=(m:any)=>{
       const raw=String(m.device_os||m.os||m.platform||m.user_agent||"")
       if(/android/i.test(raw))return"Android"
@@ -4828,7 +4800,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 </div>}
               </div>
               <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-	                {infoTitle("위치","응답에 거주지/주소/지역 질문이 있으면 해당 답변을 우선 사용하고, 없을 때만 form_response_events metadata의 country, region, city 값을 사용합니다. 브라우저/IP 위치는 네트워크 환경에 따라 지역이 비어 있을 수 있습니다.")}
+	                {infoTitle("위치","제출자가 입력한 현 거주지, 주소, 지역 답변은 사용하지 않습니다. 폼 진입 시 form_response_events metadata에 저장된 접속 위치만 사용합니다. QR 진입은 사용자가 브라우저 위치 권한을 허용하면 좌표를 기준으로 시·구·동을 확인하고, 허용하지 않으면 IP 기반 추정 위치를 사용합니다.")}
 	                {periodTip("location")}
 	                {locationTotal===0?emptyState("위치 데이터가 아직 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:11}}>
 	                  <div style={{height:28,padding:"0 10px",borderRadius:999,background:A.blue2,border:`1px solid ${A.blue}33`,color:A.blue,fontSize:11.5,fontWeight:600,display:"inline-flex",alignItems:"center",alignSelf:"flex-start"}}>
@@ -4849,7 +4821,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	                    </div>
 	                  })}
 	                  <div style={{marginTop:4,padding:"10px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12.5,lineHeight:1.55,color:A.t2}}>
-	                    거주지/주소 질문이 있는 폼은 제출 답변을 기준으로 지역을 더 명확하게 보여줍니다. 해당 질문이 없는 폼은 접속 위치 추정값을 사용하며, 네트워크 환경이나 차단 설정에 따라 `미확인`으로 남을 수 있습니다.
+	                    위치 분석은 제출 답변이 아니라 실제 접속 metadata만 사용합니다. QR 진입 시 위치 권한을 허용하면 좌표 기반 지역을 표시하고, 권한을 거부하거나 브라우저에서 좌표를 확인하지 못하면 통신망/IP 위치가 표시되어 실제 위치와 다르거나 `미확인`으로 남을 수 있습니다.
 	                  </div>
 	                </div>}
               </div>
@@ -4961,7 +4933,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   </div>}
                 </div>
                 <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-                  {infoTitle("도시/지역별 분석","QR 스캔 시 확인된 city, region metadata를 기준으로 도시나 지역별 스캔 수를 정렬해 보여줍니다. 국내 캠페인은 지역 반응을 비교하는 데 사용할 수 있습니다.")}
+                  {infoTitle("도시/지역별 분석","QR 스캔 시 브라우저 위치 권한이 허용되면 좌표를 기준으로 확인한 시·구·동 metadata를 우선 사용합니다. 권한이 없으면 IP 기반 country, region, city 추정값을 사용합니다.")}
                   {periodTip("qr-city")}
                   {qrCityEntries.length===0?emptyState("도시/지역 데이터가 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:10}}>
                     {qrCityEntries.slice(0,10).map((item:any,i:number)=>{const max=Math.max(1,qrCityEntries[0]?.count||1);const color=colors[(i+2)%colors.length];return <div key={item.label} onMouseMove={e=>movePeriodTip("qr-city",e,{title:item.label,color,lines:[`스캔 : ${item.count}`,`비율 : ${item.pct}%`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"120px 1fr 62px",gap:10,alignItems:"center",cursor:"default"}}>
