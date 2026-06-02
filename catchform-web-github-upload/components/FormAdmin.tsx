@@ -14,7 +14,7 @@ type Prog = { id: string; title: string; slug?: string; category?: string; [key:
 type BrandId = "SNIPERFACTORY"|"INSIDEOUT"|"SFACSPACE"
 type DashboardFormType = "alert"|"application"|"recruit"|"survey"|"evaluation"|"other"
 type DashboardManualStatus = ""|"draft"|"active"|"closed"
-type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; manualStatus?:DashboardManualStatus; isPublished?:boolean; publishedAt?:string }
+type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; manualStatus?:DashboardManualStatus; isPublished?:boolean; publishedAt?:string; editPasswordHash?:string }
 type KdtFieldType = FieldType|"section_desc"
 type KdtField = { id:string; label:string; type:KdtFieldType; required?:boolean; page?:number; options?:string[]; placeholder?:string; desc?:string }
 type FieldType = "text"|"name"|"phone"|"email"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"
@@ -132,6 +132,11 @@ function withTimeout<T>(promise:PromiseLike<T>,ms:number,message:string):Promise
       err=>{clearTimeout(id);reject(err)}
     )
   })
+}
+async function sha256Text(value:string){
+  if(typeof crypto==="undefined"||!crypto.subtle)throw new Error("이 브라우저에서는 비밀번호 보호를 사용할 수 없어요.")
+  const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value))
+  return Array.from(new Uint8Array(digest)).map(v=>v.toString(16).padStart(2,"0")).join("")
 }
 
 type QrFileFormat = "png"|"svg"|"jpg"
@@ -1228,8 +1233,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [dashQuery,setDashQuery]=React.useState("")
   const [dashOpenGroups,setDashOpenGroups]=React.useState<Record<string,boolean>>({})
   const [dashResponseCounts,setDashResponseCounts]=React.useState<Record<string,number>>({})
-  const [dashboardSettings,setDashboardSettings]=React.useState<null|{item:any;brand:BrandId;formTypeTag:DashboardFormType;operationStart:string;operationEnd:string;manualStatus:DashboardManualStatus}>(null)
+  const [dashboardSettings,setDashboardSettings]=React.useState<null|{item:any;brand:BrandId;formTypeTag:DashboardFormType;operationStart:string;operationEnd:string;manualStatus:DashboardManualStatus;currentEditPasswordDraft:string;editPasswordDraft:string;clearEditPassword:boolean}>(null)
   const [dashboardSettingsSaving,setDashboardSettingsSaving]=React.useState(false)
+  const [editPasswordPrompt,setEditPasswordPrompt]=React.useState<null|{item:any;password:string;error:string;checking:boolean}>(null)
   const [guideData,setGuideData]=React.useState<{topics:any[]}|null>(null)
   const [guideLoading,setGuideLoading]=React.useState(false)
   const [guideTopic,setGuideTopic]=React.useState(0)
@@ -1306,6 +1312,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [analyticsRows,setAnalyticsRows]=React.useState<any[]>([])
   const [selectedAnalyticsRowIds,setSelectedAnalyticsRowIds]=React.useState<string[]>([])
   const [analyticsEvents,setAnalyticsEvents]=React.useState<any[]>([])
+  const [analyticsTrashEvents,setAnalyticsTrashEvents]=React.useState<any[]>([])
+  const [showAnalyticsTrash,setShowAnalyticsTrash]=React.useState(false)
+  const [analyticsTrashBusy,setAnalyticsTrashBusy]=React.useState(false)
   const [analyticsLoading,setAnalyticsLoading]=React.useState(false)
   const [analyticsErr,setAnalyticsErr]=React.useState("")
   const [analyticsQuestionId,setAnalyticsQuestionId]=React.useState("")
@@ -1601,6 +1610,40 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     } catch(e){showToast("폼 불러오기 실패",false)}
     finally{setActionLoading("")}
   }
+  function requestOpenFormForEdit(item:any){
+    const passwordHash=item.config?.dashboard?.editPasswordHash||""
+    if(passwordHash){
+      setEditPasswordPrompt({item,password:"",error:"",checking:false})
+      return
+    }
+    openFormForEdit(item)
+  }
+  async function verifyEditPassword(){
+    if(!editPasswordPrompt?.item)return
+    if(!editPasswordPrompt.password){setEditPasswordPrompt(prev=>prev&&({...prev,error:"비밀번호를 입력해주세요."}));return}
+    setEditPasswordPrompt(prev=>prev&&({...prev,checking:true,error:""}))
+    try{
+      const full=await getFullFormRow(editPasswordPrompt.item)
+      const expected=full.config?.dashboard?.editPasswordHash||""
+      if(expected&&await sha256Text(editPasswordPrompt.password)!==expected){
+        setEditPasswordPrompt(prev=>prev&&({...prev,checking:false,error:"비밀번호가 맞지 않아요."}))
+        return
+      }
+      setEditPasswordPrompt(null)
+      await openFormForEdit(full)
+    }catch(e){
+      setEditPasswordPrompt(prev=>prev&&({...prev,checking:false,error:(e as any)?.message||"비밀번호를 확인하지 못했어요."}))
+    }
+  }
+  async function returnToBuilderFromAnalytics(){
+    const expected=cfg.dashboard?.editPasswordHash||""
+    if(expected){
+      const password=window.prompt("편집 비밀번호를 입력해주세요.")
+      if(password===null)return
+      if(!password||await sha256Text(password)!==expected){showToast("편집 비밀번호가 맞지 않아요.",false);return}
+    }
+    setView("builder")
+  }
   async function openFormAnalytics(item:any){
     setActionLoading("응답 데이터를 준비하는 중이에요.")
     try{
@@ -1628,6 +1671,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       operationStart:dashboard.operationStart||"",
       operationEnd:dashboard.operationEnd||"",
       manualStatus:dashboard.manualStatus||"",
+      currentEditPasswordDraft:"",
+      editPasswordDraft:"",
+      clearEditPassword:false,
     })
   }
   async function saveDashboardSettings(){
@@ -1636,12 +1682,25 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     try{
       const full=await getFullFormRow(dashboardSettings.item)
       const next=applyBrandDefaults(mergeCfg(full.config||{}),dashboardSettings.brand)
+      const previousEditPasswordHash=next.dashboard?.editPasswordHash||""
+      let editPasswordHash=previousEditPasswordHash
+      const changingEditPassword=!!dashboardSettings.editPasswordDraft||dashboardSettings.clearEditPassword
+      if(changingEditPassword&&previousEditPasswordHash){
+        if(!dashboardSettings.currentEditPasswordDraft)throw new Error("현재 편집 비밀번호를 입력해주세요.")
+        if(await sha256Text(dashboardSettings.currentEditPasswordDraft)!==previousEditPasswordHash)throw new Error("현재 편집 비밀번호가 맞지 않아요.")
+      }
+      if(dashboardSettings.clearEditPassword)editPasswordHash=""
+      else if(dashboardSettings.editPasswordDraft){
+        if(dashboardSettings.editPasswordDraft.length<4)throw new Error("편집 비밀번호는 4자 이상으로 입력해주세요.")
+        editPasswordHash=await sha256Text(dashboardSettings.editPasswordDraft)
+      }
       next.dashboard={
         ...(next.dashboard||{}),
         formTypeTag:dashboardSettings.formTypeTag,
         operationStart:dashboardSettings.operationStart,
         operationEnd:dashboardSettings.operationEnd,
         manualStatus:dashboardSettings.manualStatus,
+        editPasswordHash,
       }
       const {error}=await supa.from("form_configs").update({config:next,brand:dbBrandValue(dashboardSettings.brand),updated_at:new Date().toISOString()}).eq("id",dashboardSettings.item.id)
       if(error)throw error
@@ -2221,6 +2280,37 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const d=new Date(v)
     return [d.toLocaleDateString("sv-SE"),d.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",hour12:false})]
   }
+  function analyticsEventMeta(event:any){
+    try{return typeof event?.metadata==="string"?JSON.parse(event.metadata||"{}"):(event?.metadata||{})}catch{return{}}
+  }
+  function analyticsTrashSessionId(prefix="admin_trash"){
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2,8)}`
+  }
+  const analyticsTrashTypes=["response_trashed","response_restored","analytics_scope_trashed","analytics_scope_restored"]
+  function activeAnalyticsTrashRecords(source:any[]=analyticsTrashEvents){
+    const restoredIds=new Set(source.filter(event=>["response_restored","analytics_scope_restored"].includes(event.event_type)).map(event=>analyticsEventMeta(event).trash_event_id).filter(Boolean))
+    const activeScopes=source.filter(event=>event.event_type==="analytics_scope_trashed"&&!restoredIds.has(event.id))
+    const activeBatchIds=new Set(activeScopes.map(event=>analyticsEventMeta(event).batch_id).filter(Boolean))
+    return source.filter(event=>{
+      if(!["response_trashed","analytics_scope_trashed"].includes(event.event_type)||restoredIds.has(event.id))return false
+      const meta=analyticsEventMeta(event)
+      return event.event_type==="analytics_scope_trashed"||!meta.batch_id||!activeBatchIds.has(meta.batch_id)
+    }).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())
+  }
+  async function insertAnalyticsAdminEvents(events:{event_type:string;session_id?:string;metadata?:any}[]){
+    if(!supa||!loadedId||!events.length)return[] as any[]
+    const payloads=events.map(event=>({form_id:loadedId,form_slug:savedSlug||"",session_id:event.session_id||analyticsTrashSessionId(),event_type:event.event_type,page:1,metadata:event.metadata||{}}))
+    const inserted:any[]=[]
+    for(let i=0;i<payloads.length;i+=100){
+      const {data,error}=await supa.from("form_response_events").insert(payloads.slice(i,i+100)).select("*")
+      if(error)throw error
+      inserted.push(...(data||[]))
+    }
+    return inserted
+  }
+  async function insertAnalyticsAdminEvent(event_type:string,metadata:any,session_id?:string){
+    return (await insertAnalyticsAdminEvents([{event_type,metadata,session_id}]))[0]
+  }
   async function loadAnalytics(){
     if(!supa||!loadedId){setAnalyticsErr("저장된 폼을 먼저 선택해주세요.");return}
     setAnalyticsLoading(true);setAnalyticsErr("")
@@ -2231,9 +2321,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const res=await supa.from(tableName).select("*").eq("form_id",loadedId).order("created_at",{ascending:false}).limit(1000)
       if(res.error)throw res.error
       rows=res.data||[]
-      setAnalyticsRows(rows)
       const ev=await supa.from("form_response_events").select("*").eq("form_id",loadedId).order("created_at",{ascending:false}).limit(5000)
-      setAnalyticsEvents(ev.error?[]:[...(ev.data||[])].reverse())
+      const rawEvents=ev.error?[]:(ev.data||[])
+      const restoredIds=new Set(rawEvents.filter(event=>["response_restored","analytics_scope_restored"].includes(event.event_type)).map(event=>analyticsEventMeta(event).trash_event_id).filter(Boolean))
+      const activeScope=[...rawEvents].filter(event=>event.event_type==="analytics_scope_trashed"&&!restoredIds.has(event.id)).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
+      const trashedDraftSessions=new Set(rawEvents.filter(event=>event.event_type==="response_trashed"&&!restoredIds.has(event.id)&&analyticsEventMeta(event).trash_kind==="draft").map(event=>analyticsEventMeta(event).session_id).filter(Boolean))
+      const visibleEvents=rawEvents.filter(event=>!analyticsTrashTypes.includes(event.event_type))
+        .filter(event=>!activeScope||new Date(event.created_at).getTime()>new Date(activeScope.created_at).getTime())
+        .filter(event=>!trashedDraftSessions.has(event.session_id))
+      setAnalyticsRows(rows)
+      setAnalyticsTrashEvents(rawEvents)
+      setAnalyticsEvents([...visibleEvents].reverse())
       const fields=getAnalyticsFields()
       if(!analyticsQuestionId&&fields[0]){
         setAnalyticsQuestionId(fields[0].id)
@@ -2241,7 +2339,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
     } catch(e){
       setAnalyticsErr((e as any)?.message||"응답 데이터를 불러오지 못했어요.")
-      setAnalyticsRows([]);setAnalyticsEvents([])
+      setAnalyticsRows([]);setAnalyticsEvents([]);setAnalyticsTrashEvents([])
     } finally {setAnalyticsLoading(false)}
   }
   function analyticsTableName(){
@@ -2251,37 +2349,99 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   async function deleteAnalyticsRow(row:any){
     if(!supa||!row?.id)return
     if(row.__draft){
-      if(!confirm("이 작성 중 기록을 삭제할까요?"))return
-      const {error}=await supa.from("form_response_events").delete().eq("form_id",loadedId).eq("session_id",row.__sessionId)
-      if(error){showToast("작성 중 기록 삭제 실패: "+(error.message||""),false);return}
-      setAnalyticsEvents(prev=>prev.filter(event=>event.session_id!==row.__sessionId))
-      showToast("작성 중 기록을 삭제했어요.")
+      if(!confirm("이 작성 중 기록을 휴지통으로 이동할까요?"))return
+      try{
+        await insertAnalyticsAdminEvent("response_trashed",{trash_kind:"draft",session_id:row.__sessionId,original_row:row,deleted_at:new Date().toISOString()})
+        await loadAnalytics()
+        showToast("작성 중 기록을 휴지통으로 이동했어요.")
+      }catch(error){showToast("작성 중 기록 삭제 실패: "+((error as any)?.message||""),false)}
       return
     }
-    if(!confirm("이 응답을 삭제할까요?"))return
+    if(!confirm("이 응답을 휴지통으로 이동할까요?"))return
     const tableName=analyticsTableName()
-    const {error}=await supa.from(tableName).delete().eq("id",row.id)
-    if(error){showToast("응답 삭제 실패: "+(error.message||""),false);return}
-    setAnalyticsRows(prev=>prev.filter(r=>r.id!==row.id))
-    showToast("응답을 삭제했어요.")
+    try{
+      const trashEvent=await insertAnalyticsAdminEvent("response_trashed",{trash_kind:"submitted",table_name:tableName,original_row:row,deleted_at:new Date().toISOString()})
+      const {error}=await supa.from(tableName).delete().eq("id",row.id)
+      if(error){
+        if(trashEvent?.id)await supa.from("form_response_events").delete().eq("id",trashEvent.id)
+        throw error
+      }
+      await loadAnalytics()
+      showToast("응답을 휴지통으로 이동했어요.")
+    }catch(error){showToast("응답 삭제 실패: "+((error as any)?.message||""),false)}
   }
   async function deleteAllAnalyticsData(){
     if(!supa||!loadedId)return
-    setActionLoading("응답 데이터를 삭제하는 중이에요.")
+    setActionLoading("응답 데이터를 휴지통으로 이동하는 중이에요.")
     try{
       const tableName=analyticsTableName()
+      const responseRows=await supa.from(tableName).select("*").eq("form_id",loadedId).limit(10000)
+      if(responseRows.error)throw responseRows.error
+      const batchId=analyticsTrashSessionId("trash_batch")
+      await insertAnalyticsAdminEvents((responseRows.data||[]).map((row:any)=>({event_type:"response_trashed",metadata:{trash_kind:"submitted",table_name:tableName,original_row:row,batch_id:batchId,deleted_at:new Date().toISOString()}})))
       const res=await supa.from(tableName).delete().eq("form_id",loadedId)
       if(res.error)throw res.error
-      await supa.from("form_response_events").delete().eq("form_id",loadedId)
-      setAnalyticsRows([])
-      setAnalyticsEvents([])
+      await insertAnalyticsAdminEvent("analytics_scope_trashed",{trash_kind:"scope",batch_id:batchId,deleted_count:(responseRows.data||[]).length,deleted_at:new Date().toISOString()})
       setShowDeleteAllAnalytics(false)
-      showToast("해당 폼의 응답 데이터를 모두 삭제했어요.")
+      await loadAnalytics()
+      showToast("해당 폼의 응답 데이터를 휴지통으로 이동했어요.")
     } catch(e){
       showToast("전체 응답 삭제 실패: "+((e as any)?.message||"오류"),false)
     } finally {
       setActionLoading("")
     }
+  }
+  async function restoreAnalyticsTrash(event:any){
+    if(!supa||!event)return
+    setAnalyticsTrashBusy(true)
+    try{
+      const meta=analyticsEventMeta(event)
+      if(event.event_type==="analytics_scope_trashed"){
+        const batchEvents=analyticsTrashEvents.filter(item=>item.event_type==="response_trashed"&&analyticsEventMeta(item).batch_id===meta.batch_id)
+        const submitted=batchEvents.filter(item=>analyticsEventMeta(item).trash_kind==="submitted")
+        for(const tableName of Array.from(new Set(submitted.map(item=>analyticsEventMeta(item).table_name||analyticsTableName())))){
+          const sourceRows=submitted.filter(item=>(analyticsEventMeta(item).table_name||analyticsTableName())===tableName).map(item=>analyticsEventMeta(item).original_row).filter(Boolean)
+          if(sourceRows.length){
+            const {error}=await supa.from(tableName).insert(sourceRows)
+            if(error)throw error
+          }
+        }
+        await insertAnalyticsAdminEvents([
+          ...batchEvents.map(item=>({event_type:"response_restored",metadata:{trash_event_id:item.id,restored_at:new Date().toISOString()}})),
+          {event_type:"analytics_scope_restored",metadata:{trash_event_id:event.id,batch_id:meta.batch_id,restored_at:new Date().toISOString()}},
+        ])
+      }else if(meta.trash_kind==="submitted"){
+        const {error}=await supa.from(meta.table_name||analyticsTableName()).insert(meta.original_row)
+        if(error)throw error
+        await insertAnalyticsAdminEvent("response_restored",{trash_event_id:event.id,restored_at:new Date().toISOString()})
+      }else{
+        await insertAnalyticsAdminEvent("response_restored",{trash_event_id:event.id,restored_at:new Date().toISOString()})
+      }
+      await loadAnalytics()
+      showToast("휴지통의 응답을 복구했어요.")
+    }catch(error){showToast("응답 복구 실패: "+((error as any)?.message||"오류"),false)}
+    finally{setAnalyticsTrashBusy(false)}
+  }
+  async function purgeAnalyticsTrash(event:any){
+    if(!supa||!event||!confirm("이 기록을 영구 삭제할까요? 영구 삭제 후에는 복구할 수 없어요."))return
+    setAnalyticsTrashBusy(true)
+    try{
+      const meta=analyticsEventMeta(event)
+      if(event.event_type==="analytics_scope_trashed"){
+        const {error}=await supa.from("form_response_events").delete().eq("form_id",loadedId).lte("created_at",event.created_at)
+        if(error)throw error
+      }else{
+        if(meta.trash_kind==="draft"&&meta.session_id){
+          const {error}=await supa.from("form_response_events").delete().eq("form_id",loadedId).eq("session_id",meta.session_id)
+          if(error)throw error
+        }
+        const {error}=await supa.from("form_response_events").delete().eq("id",event.id)
+        if(error)throw error
+      }
+      await loadAnalytics()
+      showToast("휴지통 기록을 영구 삭제했어요.")
+    }catch(error){showToast("영구 삭제 실패: "+((error as any)?.message||"오류"),false)}
+    finally{setAnalyticsTrashBusy(false)}
   }
   React.useEffect(()=>{
     if(view==="analytics")loadAnalytics()
@@ -2745,8 +2905,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       <span>{item.updated_at?new Date(item.updated_at).toLocaleDateString("ko-KR"):"-"}</span>
                       <div style={{display:"flex",justifyContent:"flex-end",gap:4}}>
                         <button onClick={()=>openFormAnalytics(item)} title="응답 및 분석" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg></button>
-                        <button onClick={()=>openDashboardSettings(item)} title="목록 설정" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
-                        <button onClick={()=>openFormForEdit(item)} title="편집" style={{height:30,padding:"0 9px",borderRadius:6,border:`1px solid ${A.border}`,background:A.card,color:A.t1,cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:600}}>편집</button>
+                        <button onClick={()=>openDashboardSettings(item)} title="목록 설정" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.2" stroke="currentColor" strokeWidth="1.8"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.04 1.56v.08h-3v-.08a1.7 1.7 0 0 0-1.04-1.56 1.7 1.7 0 0 0-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 0 0 6.6 15a1.7 1.7 0 0 0-1.56-1.04h-.08v-3h.08A1.7 1.7 0 0 0 6.6 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.12-2.12.06.06a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 11.3 3.78V3.7h3v.08a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.12 2.12-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.56 1.04h.08v3h-.08A1.7 1.7 0 0 0 19.4 15Z" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                        <button onClick={()=>requestOpenFormForEdit(item)} title="편집" style={{height:30,padding:"0 9px",borderRadius:6,border:`1px solid ${A.border}`,background:A.card,color:A.t1,cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:600}}>편집</button>
                       </div>
                     </div>
                   })}
@@ -2771,6 +2931,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <select value={dashboardSettings.formTypeTag} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formTypeTag:e.target.value as DashboardFormType}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
                 {DASHBOARD_FORM_TYPES.map(type=><option key={type.value} value={type.value}>{type.label}</option>)}
               </select>
+              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>편집 비밀번호</div>
+              {!!dashboardSettings.item.config?.dashboard?.editPasswordHash&&<input type="password" value={dashboardSettings.currentEditPasswordDraft} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,currentEditPasswordDraft:e.target.value}))} placeholder="변경 또는 해제 시 현재 비밀번호" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:8,boxSizing:"border-box" as const}}/>}
+              <input type="password" value={dashboardSettings.editPasswordDraft} disabled={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,editPasswordDraft:e.target.value}))} placeholder={dashboardSettings.item.config?.dashboard?.editPasswordHash?"새 비밀번호 입력 시 변경":"비밀번호 입력 시 편집 보호"} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,opacity:dashboardSettings.clearEditPassword?.55:1}}/>
+              <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,margin:"6px 0 9px"}}>설정하면 대시보드에서 편집을 열 때 비밀번호를 확인합니다. 원문 대신 해시값만 저장됩니다.</div>
+              {!!dashboardSettings.item.config?.dashboard?.editPasswordHash&&<label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:16}}><input type="checkbox" checked={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,clearEditPassword:e.target.checked,editPasswordDraft:e.target.checked?"":prev.editPasswordDraft}))}/>편집 비밀번호 해제</label>}
               {hasRecruitmentPeriod?<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB 모집 기간을 기준으로 상태가 자동 표시됩니다.<br/>{recruitment.start||"시작일 미정"} ~ {recruitment.end||"종료일 미정"}</div>:<>
                 <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
                 <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
@@ -2790,6 +2955,23 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </div>
           </div>
         })()}
+        {editPasswordPrompt&&(
+          <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1001}} onClick={()=>!editPasswordPrompt.checking&&setEditPasswordPrompt(null)}>
+            <div style={{width:360,padding:24,borderRadius:16,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
+              <div style={{width:40,height:40,borderRadius:A.r,background:A.blue2,color:A.blue,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:14}}>
+                <svg width="19" height="19" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="2" stroke="currentColor" strokeWidth="1.4"/><path d="M5 7V5a3 3 0 0 1 6 0v2M8 10v1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+              </div>
+              <div style={{fontSize:17,fontWeight:600,color:A.t1,marginBottom:5}}>편집 비밀번호 확인</div>
+              <div style={{fontSize:12.5,color:A.t3,lineHeight:1.55,marginBottom:15}}>이 폼은 편집 보호가 설정되어 있어요.</div>
+              <input autoFocus type="password" value={editPasswordPrompt.password} onChange={e=>setEditPasswordPrompt(prev=>prev&&({...prev,password:e.target.value,error:""}))} onKeyDown={e=>e.key==="Enter"&&verifyEditPassword()} placeholder="비밀번호 입력" style={{width:"100%",height:40,padding:"0 11px",borderRadius:A.r,border:`1px solid ${editPasswordPrompt.error?A.red:A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,outline:"none"}}/>
+              {editPasswordPrompt.error&&<div style={{fontSize:12,color:A.red,marginTop:7}}>{editPasswordPrompt.error}</div>}
+              <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}}>
+                <button onClick={()=>setEditPasswordPrompt(null)} disabled={editPasswordPrompt.checking} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
+                <button onClick={verifyEditPassword} disabled={editPasswordPrompt.checking} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>{editPasswordPrompt.checking?"확인 중...":"편집 열기"}</button>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Brand modal */}
         {showBrandModal&&(
           <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={()=>setShowBrandModal(false)}>
@@ -4606,6 +4788,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	    const accent=chartBlue, accentSoft=A.blue2
 	    const rows=Array.isArray(analyticsRows)?analyticsRows:[]
 	    const events=Array.isArray(analyticsEvents)?analyticsEvents:[]
+	    const trashRecords=activeAnalyticsTrashRecords()
 	    const eventMeta=(e:any)=>{try{return typeof e?.metadata==="string"?JSON.parse(e.metadata||"{}"):(e?.metadata||{})}catch{return{}}}
 	    const fields=getAnalyticsFields()
 	    const colors=[chartBlue,chartGreen,chartYellow,chartSlate,chartPurple,chartOrange,chartCyan,chartPink]
@@ -4947,7 +5130,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	    </div>
 	    return <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,color:A.t1,fontFamily:FONT,overflow:"hidden",position:"relative" as const}}>
       <div style={{height:52,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 16px",gap:10,flexShrink:0,boxShadow:A.shadow}}>
-        <button onClick={()=>setView("builder")} style={{display:"flex",alignItems:"center",gap:6,background:"transparent",border:"none",cursor:"pointer",color:A.t2,fontSize:12.5,fontWeight:600,fontFamily:FONT}}>
+        <button onClick={returnToBuilderFromAnalytics} style={{display:"flex",alignItems:"center",gap:6,background:"transparent",border:"none",cursor:"pointer",color:A.t2,fontSize:12.5,fontWeight:600,fontFamily:FONT}}>
           <span style={{fontSize:13}}>←</span><span>편집으로</span>
         </button>
         <div style={{width:1,height:16,background:A.border}}/>
@@ -4955,6 +5138,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <div style={{fontSize:13,fontWeight:600,color:A.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:340}}>{loadedName||"응답 및 분석"}</div>
         </div>
         <div style={{flex:1}}/>
+	        {topIconButton("trash","휴지통",()=>setShowAnalyticsTrash(true),<><path d="M3 5h10M6 5V3.5h4V5M5 7v5M8 7v5M11 7v5M4 5l.55 8.2c.04.45.4.8.85.8h5.2c.45 0 .81-.35.85-.8L12 5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/>{trashRecords.length>0&&<circle cx="13" cy="3" r="2.2" fill={A.red}/>}</>)}
 	        {topIconButton("delete-all","응답 전체 삭제",()=>setShowDeleteAllAnalytics(true),<path d="M2 4h12M6 4V2.8h4V4M5 6v6M8 6v6M11 6v6M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/>,A.red)}
 	        {topIconButton("refresh","새로고침",loadAnalytics,<path d="M13 3v4H9M3 13V9h4M12.2 8.8A4.5 4.5 0 0 1 4.5 12M3.8 7.2A4.5 4.5 0 0 1 11.5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>)}
         <button onClick={()=>exportAnalyticsCsv()} style={{height:32,padding:"0 13px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
@@ -5293,6 +5477,43 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </>}
         </div>
 	      </div>
+	      {showAnalyticsTrash&&(
+	        <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:10001,padding:22,boxSizing:"border-box" as const}} onClick={()=>!analyticsTrashBusy&&setShowAnalyticsTrash(false)}>
+	          <div style={{width:620,maxWidth:"94vw",maxHeight:"82vh",background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,boxShadow:A.shadow,overflow:"hidden",display:"flex",flexDirection:"column" as const}} onClick={e=>e.stopPropagation()}>
+	            <div style={{height:60,padding:"0 18px",borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",gap:11,flexShrink:0}}>
+	              <div style={{width:34,height:34,borderRadius:A.r,background:A.blue2,color:A.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
+	                <svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6 5V3.5h4V5M5 7v5M8 7v5M11 7v5M4 5l.55 8.2c.04.45.4.8.85.8h5.2c.45 0 .81-.35.85-.8L12 5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg>
+	              </div>
+	              <div style={{flex:1,minWidth:0}}>
+	                <div style={{fontSize:16,fontWeight:600,color:A.t1}}>응답 휴지통</div>
+	                <div style={{fontSize:12,color:A.t3,marginTop:3}}>실수로 삭제한 응답을 다시 복구할 수 있어요.</div>
+	              </div>
+	              <button onClick={()=>setShowAnalyticsTrash(false)} disabled={analyticsTrashBusy} style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>
+	            </div>
+	            <div style={{padding:16,overflow:"auto",display:"flex",flexDirection:"column" as const,gap:9}}>
+	              {trashRecords.length===0?<div style={{padding:"34px 16px",borderRadius:A.r,border:`1px dashed ${A.border2}`,color:A.t3,fontSize:13,textAlign:"center" as const}}>휴지통이 비어 있어요.</div>:trashRecords.map(event=>{
+	                const meta=analyticsEventMeta(event)
+	                const row=meta.original_row||{}
+	                const whole=event.event_type==="analytics_scope_trashed"
+	                const draft=meta.trash_kind==="draft"
+	                const title=whole?"전체 응답 삭제 기록":draft?"작성 중 응답":row.name||row.email||row.phone||"제출 응답"
+	                const detail=whole?`${meta.deleted_count||0}개 제출 응답과 삭제 당시 분석 기록`:draft?`세션 ${String(meta.session_id||"").slice(0,18)}`:fmtAnalyticsDate(row.created_at).filter(Boolean).join(" ")
+	                return <div key={event.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 13px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2}}>
+	                  <div style={{width:34,height:34,borderRadius:A.r,background:whole?A.red+"14":A.blue2,color:whole?A.red:A.blue,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+	                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d={whole?"M3 5h10M6 5V3.5h4V5M5 7v5M8 7v5M11 7v5M4 5l.55 8.2c.04.45.4.8.85.8h5.2c.45 0 .81-.35.85-.8L12 5":"M3 8a5 5 0 1 0 1.46-3.54M3 3.5v3h3"} stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg>
+	                  </div>
+	                  <div style={{flex:1,minWidth:0}}>
+	                    <div style={{fontSize:13.5,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{title}</div>
+	                    <div style={{fontSize:12,color:A.t3,marginTop:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{detail}</div>
+	                  </div>
+	                  <button onClick={()=>restoreAnalyticsTrash(event)} disabled={analyticsTrashBusy} style={{height:32,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.blue}44`,background:A.blue2,color:A.blue,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:"pointer"}}>복구</button>
+	                  <button onClick={()=>purgeAnalyticsTrash(event)} disabled={analyticsTrashBusy} style={{height:32,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.red,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:"pointer"}}>영구 삭제</button>
+	                </div>
+	              })}
+	            </div>
+	          </div>
+	        </div>
+	      )}
 	      {showDeleteAllAnalytics&&(
 	        <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:10001,padding:22,boxSizing:"border-box" as const}} onClick={()=>setShowDeleteAllAnalytics(false)}>
 	          <div style={{width:420,maxWidth:"92vw",background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,boxShadow:A.shadow,padding:22}} onClick={e=>e.stopPropagation()}>
@@ -5301,11 +5522,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	            </div>
 	            <div style={{fontSize:18,fontWeight:600,color:A.t1,marginBottom:8}}>응답 데이터를 모두 삭제할까요?</div>
 	            <div style={{fontSize:13,color:A.t2,lineHeight:1.65,marginBottom:18}}>
-	              현재 폼의 제출 응답과 분석 이벤트가 모두 삭제됩니다. 이 작업은 되돌릴 수 없어요.
+	              현재 폼의 제출 응답과 분석 기록을 휴지통으로 이동합니다. 휴지통에서 다시 복구할 수 있어요.
 	            </div>
 	            <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
 	              <button onClick={()=>setShowDeleteAllAnalytics(false)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>취소</button>
-	              <button onClick={deleteAllAnalyticsData} style={{height:38,padding:"0 14px",borderRadius:A.r,border:"none",background:A.red,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>모두 삭제</button>
+	              <button onClick={deleteAllAnalyticsData} style={{height:38,padding:"0 14px",borderRadius:A.r,border:"none",background:A.red,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>휴지통으로 이동</button>
 	            </div>
 	          </div>
 	        </div>
@@ -5381,7 +5602,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{maxWidth:520,background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:24,boxShadow:A.shadow}}>
           <div style={{fontSize:18,fontWeight:600,marginBottom:8}}>응답 및 분석 화면 오류</div>
           <div style={{fontSize:13,color:A.red,lineHeight:1.6,marginBottom:16}}>{msg}</div>
-          <Btn onClick={()=>setView("builder")} sm A={A}>편집으로 돌아가기</Btn>
+          <Btn onClick={returnToBuilderFromAnalytics} sm A={A}>편집으로 돌아가기</Btn>
         </div>
       </div>
     }
