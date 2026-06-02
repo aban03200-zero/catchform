@@ -22,7 +22,7 @@ type HelperItem = { text:string; callout?:boolean }
 type FormField = { id:string; type:FieldType; label:string; placeholder?:string; helper?:string; helpers?:HelperItem[]; required?:boolean; opts?:Opt[]; etcPh?:string; dupCheck?:boolean; page?:number; cols?:number; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
 type QrLink = { code:string; url:string; label?:string; type?:string; createdAt?:string }
 type Cfg = {
-  header: { imageUrl:string; programId:string; overline:string; title:string; educationStart:string; educationEnd:string; tuitionFree:boolean; tuitionFreeText:string; tuitionAmount:string; stipend:string; noticeEnabled:boolean; noticeIconEnabled:boolean; noticeIconText:string; noticeText:string; noticeShape?:"pill"|"rect"; applicationType?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
+  header: { imageUrl:string; programId:string; programUnlinked?:boolean; overline:string; title:string; educationStart:string; educationEnd:string; tuitionFree:boolean; tuitionFreeText:string; tuitionAmount:string; stipend:string; noticeEnabled:boolean; noticeIconEnabled:boolean; noticeIconText:string; noticeText:string; noticeShape?:"pill"|"rect"; applicationType?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
   form: { fields:FormField[]; showNum:boolean; dupText:string; pages:number; pageLabels?:string[] }
   consents: { enabled:boolean; required:boolean; title:string; consentType?:string; body:string; checkLabel:string; policyUrl:string }[]
   cta: { label:string; loadLabel:string; height:number; bg:string; color:string }
@@ -1283,10 +1283,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [qrGeneratedMatrix,setQrGeneratedMatrix]=React.useState<boolean[][]|null>(null)
   const [qrGeneratedError,setQrGeneratedError]=React.useState("")
   const [showAnalyticsTip,setShowAnalyticsTip]=React.useState(false)
+  const [showBuilderSettingsTip,setShowBuilderSettingsTip]=React.useState(false)
   const [actionLoading,setActionLoading]=React.useState("")
   const [analyticsInfoTip,setAnalyticsInfoTip]=React.useState("")
   const [analyticsTopTip,setAnalyticsTopTip]=React.useState("")
   const [showDeleteAllAnalytics,setShowDeleteAllAnalytics]=React.useState(false)
+  const [showAnalyticsDeleteMenu,setShowAnalyticsDeleteMenu]=React.useState(false)
   const [editResponse,setEditResponse]=React.useState<null|{row:any;values:Record<string,string> }>(null)
   const [editResponseSaving,setEditResponseSaving]=React.useState(false)
   const [imageCropModal,setImageCropModal]=React.useState<null|{
@@ -1676,11 +1678,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       clearEditPassword:false,
     })
   }
+  function openBuilderSettings(){
+    if(!loadedId){showToast("폼을 먼저 저장해주세요.",false);return}
+    openDashboardSettings({id:loadedId,name:loadedName,slug:savedSlug,brand:currentBrand,config:cfg,__fromBuilder:true})
+  }
   async function saveDashboardSettings(){
     if(!supa||!dashboardSettings?.item?.id)return
     setDashboardSettingsSaving(true)
     try{
-      const full=await getFullFormRow(dashboardSettings.item)
+      const full=dashboardSettings.item.__fromBuilder?dashboardSettings.item:await getFullFormRow(dashboardSettings.item)
       const next=applyBrandDefaults(mergeCfg(full.config||{}),dashboardSettings.brand)
       const previousEditPasswordHash=next.dashboard?.editPasswordHash||""
       let editPasswordHash=previousEditPasswordHash
@@ -1705,6 +1711,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const {error}=await supa.from("form_configs").update({config:next,brand:dbBrandValue(dashboardSettings.brand),updated_at:new Date().toISOString()}).eq("id",dashboardSettings.item.id)
       if(error)throw error
       delete fullFormCache.current[dashboardSettings.item.id]
+      if(dashboardSettings.item.__fromBuilder){
+        setCfg(next)
+        setCurrentBrand(dashboardSettings.brand)
+      }
       setDashboardSettings(null)
       await loadDashboard(supa)
       showToast("목록 설정을 저장했어요.")
@@ -1715,6 +1725,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   // ── Cfg updaters ─────────────────────────────────────────────────────
   function uh<K extends keyof Cfg["header"]>(k:K,v:Cfg["header"][K]){setCfg(p=>({...p,header:{...p.header,[k]:v}}))}
   function uf<K extends keyof Cfg["form"]>(k:K,v:Cfg["form"][K]){setCfg(p=>({...p,form:{...p.form,[k]:v}}))}
+  function setOperationPeriod(k:"operationStart"|"operationEnd",v:string){setCfg(p=>({...p,dashboard:{...(p.dashboard||{}),[k]:v}}))}
+  function unlinkedOperationPeriodError(){
+    if(!cfg.header.programUnlinked)return""
+    const start=cfg.dashboard?.operationStart||""
+    const end=cfg.dashboard?.operationEnd||""
+    if(!start||!end)return"교육과정 연동을 하지 않는 폼은 폼 운영 기간을 설정해주세요."
+    if(start>end)return"폼 운영 기간의 종료일은 시작일보다 빠를 수 없어요."
+    return""
+  }
   function updateField(idx:number,patch:Partial<FormField>){setCfg(p=>({...p,form:{...p.form,fields:p.form.fields.map((f,i)=>i===idx?{...f,...patch}:f)}}))}
   function addField(type:FieldType="text"){
     const fieldDefs:Record<string,{id:string;label:string;placeholder:string;helper?:string;required:boolean}> = {
@@ -1914,6 +1933,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   async function saveCfg(){
     if(!supa){setSaveErr("Supabase를 먼저 연결해주세요.");return}
     if(!saveName.trim()){setSaveErr("이름을 입력해주세요.");return}
+    const periodError=unlinkedOperationPeriodError()
+    if(periodError){setSaveErr(periodError);return}
     setSaving(true);setSaveErr("")
     try{
       const slug=saveSlug.trim()||saveName.trim().toLowerCase().replace(/\s+/g,"-")+"-"+Date.now()
@@ -1930,6 +1951,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
 	  function updateCfg(silent?:boolean){
 	    if(!supa||!loadedId)return
+	    const periodError=unlinkedOperationPeriodError()
+	    if(periodError){
+	      if(!silent)showToast(periodError,false)
+	      return
+	    }
 	    setShowUpdateModal(false)
 	    if(!silent)showToast(`"${loadedName}" 수정 완료!`)
 	    const cfgFinal={...cfg,brand:currentBrand}
@@ -1946,6 +1972,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const base=getBrandFormBaseUrl()
     if(!base){showToast("환경변수 NEXT_PUBLIC_FORM_BASE_URL을 먼저 설정해주세요",false);return}
     if(!savedSlug||!loadedId){showToast("폼을 먼저 저장해주세요",false);return}
+    const periodError=unlinkedOperationPeriodError()
+    if(periodError){showToast(periodError,false);return}
     const target=`${base}?slug=${savedSlug}`
     const popup=typeof window!=="undefined"?window.open("about:blank","_blank"):null
     if(!supa){
@@ -2469,6 +2497,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   React.useEffect(()=>{
     if(!supa||!loadedId||view!=="builder")return
     if(autoSaveTimer.current)clearTimeout(autoSaveTimer.current)
+    if(unlinkedOperationPeriodError())return
     setAutoSaved(false)
     setAutoSaving(false)
     autoSaveTimer.current=setTimeout(()=>{
@@ -3402,10 +3431,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </label>
         </FG>
         <FG title="프로그램" A={A}>
-          {progs.length>0&&<F label="과정 선택" A={A}>
+          <div style={{display:"flex",justifyContent:"flex-end",margin:"-2px 0 8px"}}>
+            <label style={{display:"inline-flex",alignItems:"center",gap:6,color:cfg.header.programUnlinked?A.blue:A.t2,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:FONT}}>
+              <input type="checkbox" checked={!!cfg.header.programUnlinked} onChange={e=>setCfg(p=>({...p,header:{...p.header,programUnlinked:e.target.checked,programId:e.target.checked?"":p.header.programId}}))}/>
+              연동 안함
+            </label>
+          </div>
+          {!cfg.header.programUnlinked&&progs.length>0&&<F label="과정 선택" A={A}>
             <ProgramPicker progs={progs} cats={cats} brand={currentBrand} value={cfg.header.programId}
-              onChange={(p)=>{uh("programId",p.id);if(p.title)uh("title",p.title)}} A={A}/>
+              onChange={(p)=>{uh("programId",p.id);uh("programUnlinked",false);if(p.title)uh("title",p.title)}} A={A}/>
           </F>}
+          {cfg.header.programUnlinked&&<div style={{padding:"9px 11px",marginBottom:10,borderRadius:A.r,border:`1px solid ${A.blue}33`,background:A.blue2,color:A.blue,fontSize:12,lineHeight:1.55}}>교육과정과 연결하지 않습니다. 저장할 때 폼 운영 기간을 설정해주세요.</div>}
           <F label="제목" A={A}><TIn value={cfg.header.title} onChange={v=>uh("title",v)} A={A}/></F>
           <F label="지원 유형" A={A}>
             {cfg.formType==="alert"
@@ -5138,8 +5174,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <div style={{fontSize:13,fontWeight:600,color:A.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:340}}>{loadedName||"응답 및 분석"}</div>
         </div>
         <div style={{flex:1}}/>
-	        {topIconButton("trash","휴지통",()=>setShowAnalyticsTrash(true),<><path d="M3 5h10M6 5V3.5h4V5M5 7v5M8 7v5M11 7v5M4 5l.55 8.2c.04.45.4.8.85.8h5.2c.45 0 .81-.35.85-.8L12 5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/>{trashRecords.length>0&&<circle cx="13" cy="3" r="2.2" fill={A.red}/>}</>)}
-	        {topIconButton("delete-all","응답 전체 삭제",()=>setShowDeleteAllAnalytics(true),<path d="M2 4h12M6 4V2.8h4V4M5 6v6M8 6v6M11 6v6M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/>,A.red)}
+	        <div style={{position:"relative" as const}}>
+	          {topIconButton("trash-menu","응답 삭제 관리",()=>{setAnalyticsTopTip("");setShowAnalyticsDeleteMenu(v=>!v)},<><path d="M3 5h10M6 5V3.5h4V5M5 7v5M8 7v5M11 7v5M4 5l.55 8.2c.04.45.4.8.85.8h5.2c.45 0 .81-.35.85-.8L12 5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/>{trashRecords.length>0&&<circle cx="13" cy="3" r="2.2" fill={A.red}/>}</>,A.red)}
+	          {showAnalyticsDeleteMenu&&<div style={{position:"absolute" as const,top:38,right:0,width:148,padding:5,borderRadius:A.r,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow,zIndex:1002}}>
+	            <button onClick={()=>{setShowAnalyticsDeleteMenu(false);setShowDeleteAllAnalytics(true)}} style={{width:"100%",height:32,padding:"0 9px",border:"none",borderRadius:6,background:"transparent",color:A.red,fontFamily:FONT,fontSize:12.5,fontWeight:600,textAlign:"left" as const,cursor:"pointer"}}>응답 전체 삭제</button>
+	            <button onClick={()=>{setShowAnalyticsDeleteMenu(false);setShowAnalyticsTrash(true)}} style={{width:"100%",height:32,padding:"0 9px",border:"none",borderRadius:6,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,textAlign:"left" as const,cursor:"pointer"}}>휴지통{trashRecords.length>0?` ${trashRecords.length}`:""}</button>
+	          </div>}
+	        </div>
 	        {topIconButton("refresh","새로고침",loadAnalytics,<path d="M13 3v4H9M3 13V9h4M12.2 8.8A4.5 4.5 0 0 1 4.5 12M3.8 7.2A4.5 4.5 0 0 1 11.5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>)}
         <button onClick={()=>exportAnalyticsCsv()} style={{height:32,padding:"0 13px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>시트 다운로드
@@ -5643,6 +5684,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{flex:1}}/>
         <div style={{position:"relative" as const}}>
           <button
+            onMouseEnter={()=>setShowBuilderSettingsTip(true)}
+            onMouseLeave={()=>setShowBuilderSettingsTip(false)}
+            onClick={openBuilderSettings}
+            style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
+            aria-label="목록 설정">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="3.2" stroke="currentColor" strokeWidth="1.8"/>
+              <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.04 1.56v.08h-3v-.08a1.7 1.7 0 0 0-1.04-1.56 1.7 1.7 0 0 0-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 0 0 6.6 15a1.7 1.7 0 0 0-1.56-1.04h-.08v-3h.08A1.7 1.7 0 0 0 6.6 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.12-2.12.06.06a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 11.3 3.78V3.7h3v.08a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.12 2.12-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.56 1.04h.08v3h-.08A1.7 1.7 0 0 0 19.4 15Z" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          {showBuilderSettingsTip&&<div style={{position:"absolute" as const,top:"calc(100% + 7px)",left:"50%",transform:"translateX(-50%)",background:A.t1,color:A.card,padding:"5px 8px",borderRadius:6,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const,zIndex:1000,boxShadow:A.shadow}}>목록 설정</div>}
+        </div>
+        <div style={{position:"relative" as const}}>
+          <button
             onMouseEnter={()=>setShowAnalyticsTip(true)}
             onMouseLeave={()=>setShowAnalyticsTip(false)}
             onClick={()=>{
@@ -5836,13 +5891,64 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </div>
       )}
 
+      {dashboardSettings&&(()=>{
+        const settingsConfig=dashboardSettings.item.__fromBuilder?cfg:dashboardSettings.item.config
+        const program=progs.find(p=>p.id===settingsConfig?.header?.programId)
+        const recruitment=recruitmentPeriodOf(program)
+        const hasRecruitmentPeriod=!!(recruitment.start||recruitment.end)
+        return <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setDashboardSettings(null)}>
+          <div style={{width:420,padding:24,borderRadius:16,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:17,fontWeight:600,color:A.t1,marginBottom:5}}>목록 설정</div>
+            <div style={{fontSize:12.5,color:A.t3,marginBottom:20}}>브랜드, 폼 유형과 대시보드 상태 표시 기준을 정합니다.</div>
+            <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>브랜드</div>
+            <select value={dashboardSettings.brand} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,brand:e.target.value as BrandId}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
+              <option value="SNIPERFACTORY">스나이퍼팩토리</option><option value="INSIDEOUT">인사이드아웃</option><option value="SFACSPACE">스팩스페이스</option>
+            </select>
+            <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 유형</div>
+            <select value={dashboardSettings.formTypeTag} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formTypeTag:e.target.value as DashboardFormType}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
+              {DASHBOARD_FORM_TYPES.map(type=><option key={type.value} value={type.value}>{type.label}</option>)}
+            </select>
+            <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>편집 비밀번호</div>
+            {!!settingsConfig?.dashboard?.editPasswordHash&&<input type="password" value={dashboardSettings.currentEditPasswordDraft} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,currentEditPasswordDraft:e.target.value}))} placeholder="변경 또는 해제 시 현재 비밀번호" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:8,boxSizing:"border-box" as const}}/>}
+            <input type="password" value={dashboardSettings.editPasswordDraft} disabled={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,editPasswordDraft:e.target.value}))} placeholder={settingsConfig?.dashboard?.editPasswordHash?"새 비밀번호 입력 시 변경":"비밀번호 입력 시 편집 보호"} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,opacity:dashboardSettings.clearEditPassword?.55:1}}/>
+            <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,margin:"6px 0 9px"}}>설정하면 대시보드에서 편집을 열 때 비밀번호를 확인합니다. 원문 대신 해시값만 저장됩니다.</div>
+            {!!settingsConfig?.dashboard?.editPasswordHash&&<label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:16}}><input type="checkbox" checked={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,clearEditPassword:e.target.checked,editPasswordDraft:e.target.checked?"":prev.editPasswordDraft}))}/>편집 비밀번호 해제</label>}
+            {hasRecruitmentPeriod?<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB 모집 기간을 기준으로 상태가 자동 표시됩니다.<br/>{recruitment.start||"시작일 미정"} ~ {recruitment.end||"종료일 미정"}</div>:<>
+              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
+              <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
+                <input type="date" value={dashboardSettings.operationStart} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,operationStart:e.target.value}))} style={{flex:1,height:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12}}/>
+                <span style={{fontSize:12,color:A.t3}}>~</span>
+                <input type="date" value={dashboardSettings.operationEnd} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,operationEnd:e.target.value}))} style={{flex:1,height:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12}}/>
+              </div>
+              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>기간 미설정 시 상태</div>
+              <select value={dashboardSettings.manualStatus} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,manualStatus:e.target.value as DashboardManualStatus}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
+                <option value="">작성중</option><option value="active">진행중</option><option value="closed">종료</option>
+              </select>
+            </>}
+            <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+              <button onClick={()=>setDashboardSettings(null)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
+              <button onClick={saveDashboardSettings} disabled={dashboardSettingsSaving} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>{dashboardSettingsSaving?"저장 중...":"저장"}</button>
+            </div>
+          </div>
+        </div>
+      })()}
+
       {/* UPDATE MODAL */}
       {showUpdateModal&&(
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setShowUpdateModal(false)}>
-          <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:320,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
+          <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:cfg.header.programUnlinked?380:320,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
             <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:8}}>수정 사항 저장</div>
             <div style={{fontSize:13.5,color:A.t2,marginBottom:6}}><span style={{fontWeight:600,color:A.t1}}>"{loadedName}"</span>에 변경 사항을 덮어쓰시겠어요?</div>
             <div style={{fontSize:12,color:A.t3,marginBottom:22,lineHeight:1.5}}>기존 설정이 수정된 내용으로 교체됩니다.</div>
+            {cfg.header.programUnlinked&&<div style={{padding:"12px 12px 11px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`}}>
+              <div style={{fontSize:12,fontWeight:600,color:A.blue,marginBottom:5}}>폼 운영 기간</div>
+              <div style={{fontSize:11.5,color:A.t2,lineHeight:1.5,marginBottom:8}}>교육과정 연동을 하지 않는 폼은 운영 기간을 설정해야 합니다.</div>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <input type="date" value={cfg.dashboard?.operationStart||""} onChange={e=>setOperationPeriod("operationStart",e.target.value)} style={{minWidth:0,flex:1,height:34,padding:"0 7px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t1,fontFamily:FONT,fontSize:11.5}}/>
+                <span style={{fontSize:12,color:A.t3}}>~</span>
+                <input type="date" value={cfg.dashboard?.operationEnd||""} onChange={e=>setOperationPeriod("operationEnd",e.target.value)} style={{minWidth:0,flex:1,height:34,padding:"0 7px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t1,fontFamily:FONT,fontSize:11.5}}/>
+              </div>
+            </div>}
             <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
               <Btn onClick={()=>{setShowUpdateModal(false);setShowSave(true)}} sm A={A}>새 이름으로 저장</Btn>
               <Btn onClick={()=>setShowUpdateModal(false)} sm A={A}>취소</Btn>
@@ -5855,7 +5961,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       {/* SAVE MODAL */}
       {showSave&&(
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setShowSave(false)}>
-          <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:310,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
+          <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:cfg.header.programUnlinked?360:310,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
             <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:18}}>설정 저장</div>
             <div style={{marginBottom:12}}>
               <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:5}}>설정 이름</div>
@@ -5867,6 +5973,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <input value={saveSlug} onChange={e=>setSaveSlug(e.target.value)} placeholder="uxui-9th-open"
                 style={{width:"100%",background:A.card2,border:`1.5px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:13,padding:"8px 11px",outline:"none",boxSizing:"border-box" as const}}/>
             </div>
+            {cfg.header.programUnlinked&&<div style={{padding:"12px 12px 11px",marginBottom:14,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`}}>
+              <div style={{fontSize:12,fontWeight:600,color:A.blue,marginBottom:5}}>폼 운영 기간</div>
+              <div style={{fontSize:11.5,color:A.t2,lineHeight:1.5,marginBottom:8}}>교육과정 연동을 하지 않는 폼은 운영 기간을 설정해야 합니다.</div>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <input type="date" value={cfg.dashboard?.operationStart||""} onChange={e=>setOperationPeriod("operationStart",e.target.value)} style={{minWidth:0,flex:1,height:34,padding:"0 7px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t1,fontFamily:FONT,fontSize:11.5}}/>
+                <span style={{fontSize:12,color:A.t3}}>~</span>
+                <input type="date" value={cfg.dashboard?.operationEnd||""} onChange={e=>setOperationPeriod("operationEnd",e.target.value)} style={{minWidth:0,flex:1,height:34,padding:"0 7px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t1,fontFamily:FONT,fontSize:11.5}}/>
+              </div>
+            </div>}
             {saveErr&&<div style={{fontSize:12,color:A.red,marginBottom:10,padding:"8px 10px",borderRadius:A.r,background:"rgba(232,92,92,0.06)",border:"1px solid rgba(232,92,92,0.18)"}}>{saveErr}</div>}
             <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
               <Btn onClick={()=>setShowSave(false)} sm A={A}>취소</Btn>
