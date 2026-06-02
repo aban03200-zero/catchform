@@ -11,7 +11,7 @@ type Theme = "dark" | "light"
 type Opt = { label: string; value: string; isEtc: boolean; nextPage?: number }
 type Cat = { id: string; name: string }
 type Prog = { id: string; title: string; slug?: string; category?: string; [key:string]:any }
-type BrandId = "SNIPERFACTORY"|"INSIDEOUT"|"SFACSPACE"
+type BrandId = "SNIPERFACTORY"|"SESAC"|"INSIDEOUT"|"SFACSPACE"
 type DashboardFormType = "alert"|"application"|"recruit"|"survey"|"evaluation"|"other"
 type DashboardManualStatus = ""|"draft"|"active"|"closed"
 type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; manualStatus?:DashboardManualStatus; isPublished?:boolean; publishedAt?:string }
@@ -502,17 +502,36 @@ function SfacspaceLogo({height=18,dark=false}:{height?:number;dark?:boolean}){
   return <img src="/sfacspace_logo_black.png" alt="스팩스페이스" style={{display:"block",height,width:"auto",maxWidth:"100%",objectFit:"contain",filter:dark?"brightness(0) invert(1)":"none",flexShrink:0}}/>
 }
 
+function SesacLogo({height=18}:{height?:number}){
+  return <span style={{display:"inline-flex",alignItems:"center",gap:5,height,flexShrink:0,color:"#24A148",fontFamily:FONT,fontSize:Math.max(12,height-2),fontWeight:600,lineHeight:1}}>
+    <span style={{width:height-5,height:height-5,borderRadius:"50% 50% 50% 2px",background:"#43C463",transform:"rotate(-24deg)",display:"inline-block"}}/>
+    새싹
+  </span>
+}
+
 function BrandLogo({brand,height=18,dark=false}:{brand:string;height?:number;dark?:boolean}){
   if(brand==="INSIDEOUT")return <IOLogo height={height} dark={dark}/>
   if(brand==="SFACSPACE")return <SfacspaceLogo height={height} dark={dark}/>
+  if(brand==="SESAC")return <SesacLogo height={height}/>
   return <SFLogo height={height} dark={dark}/>
 }
 
 function brandDisplayName(brand:string){
   if(brand==="SNIPERFACTORY")return"스나이퍼팩토리"
+  if(brand==="SESAC")return"새싹"
   if(brand==="INSIDEOUT")return"인사이드아웃"
   if(brand==="SFACSPACE")return"스팩스페이스"
   return"기타"
+}
+
+function isSniperFamilyBrand(brand:string){
+  return brand==="SNIPERFACTORY"||brand==="SESAC"
+}
+
+// form_configs.brand is a legacy FK column. New UI brands live in config.brand
+// while this column keeps a compatible parent value for existing Supabase schemas.
+function dbBrandValue(brand:string){
+  return brand==="INSIDEOUT"?"INSIDEOUT":"SNIPERFACTORY"
 }
 
 function SelectChevron({color}:{color:string}){
@@ -756,7 +775,7 @@ function applyBrandDefaults(config:Cfg,brand:string):Cfg{
   const next=dc(config)
   const normalizedBrand=brand||next.brand||""
   next.brand=normalizedBrand||next.brand
-  if(normalizedBrand==="SNIPERFACTORY"&&(!next.modal.btnUrl||next.modal.btnUrl==="https://insideout.or.kr/program")){
+  if(isSniperFamilyBrand(normalizedBrand)&&(!next.modal.btnUrl||next.modal.btnUrl==="https://insideout.or.kr/program")){
     next.modal.btnUrl="https://sniperfactory.com/program"
   }
   return next
@@ -1202,6 +1221,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
   // ── Dashboard data ─────────────────────────────────────────────────────
   const [snList,setSnList]=React.useState<any[]>([])
+  const [sesacList,setSesacList]=React.useState<any[]>([])
   const [ioList,setIoList]=React.useState<any[]>([])
   const [sfacList,setSfacList]=React.useState<any[]>([])
   const [dashLoading,setDashLoading]=React.useState(false)
@@ -1292,6 +1312,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [analyticsResponseScope,setAnalyticsResponseScope]=React.useState<"submitted"|"draft">("submitted")
   const [qrAnalyticsScope,setQrAnalyticsScope]=React.useState<"form"|"detail">("form")
   const [analyticsRows,setAnalyticsRows]=React.useState<any[]>([])
+  const [selectedAnalyticsRowIds,setSelectedAnalyticsRowIds]=React.useState<string[]>([])
   const [analyticsEvents,setAnalyticsEvents]=React.useState<any[]>([])
   const [analyticsLoading,setAnalyticsLoading]=React.useState(false)
   const [analyticsErr,setAnalyticsErr]=React.useState("")
@@ -1468,6 +1489,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     try{
       const all=await fetchFormSummaries(sb,100)
       setSnList(all.filter((x:any)=>(x.config?.brand||x.brand)==="SNIPERFACTORY"))
+      setSesacList(all.filter((x:any)=>(x.config?.brand||x.brand)==="SESAC"))
       setIoList(all.filter((x:any)=>(x.config?.brand||x.brand)==="INSIDEOUT"))
       setSfacList(all.filter((x:any)=>(x.config?.brand||x.brand)==="SFACSPACE"))
       setSaved(all)
@@ -1533,7 +1555,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   function applyTemplate(tpl:NonNullable<Cfg["formType"]>){
     const brand=pendingBrand||"SNIPERFACTORY"
-    const ctaBg=brand==="SNIPERFACTORY"?"#529DFF":brand==="SFACSPACE"?"#073B70":"#EA594D"
+    const ctaBg=brand==="SNIPERFACTORY"?"#529DFF":brand==="SESAC"?"#24A148":brand==="SFACSPACE"?"#073B70":"#EA594D"
     const templates:Record<NonNullable<Cfg["formType"]>,Cfg>={
       alert:DEF,
       kdt:DEF_KDT,
@@ -1563,7 +1585,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const brandedCopy=applyBrandDefaults({...cfgCopy,dashboard:{...(cfgCopy.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft"}},brand)
       const newName=item.name+" 복사본"
       const newSlug=(item.slug||item.name).toLowerCase().replace(/\s+/g,"-")+"-copy-"+Date.now()
-      const{error}=await supa.from("form_configs").insert({name:newName,slug:newSlug,config:brandedCopy,brand})
+      const{error}=await supa.from("form_configs").insert({name:newName,slug:newSlug,config:brandedCopy,brand:dbBrandValue(brand)})
       if(error)throw error
       showToast(`"${newName}" 복사 완료!`)
       loadList();loadDashboard(supa)
@@ -1629,7 +1651,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         operationEnd:dashboardSettings.operationEnd,
         manualStatus:dashboardSettings.manualStatus,
       }
-      const {error}=await supa.from("form_configs").update({config:next,brand:dashboardSettings.brand,updated_at:new Date().toISOString()}).eq("id",dashboardSettings.item.id)
+      const {error}=await supa.from("form_configs").update({config:next,brand:dbBrandValue(dashboardSettings.brand),updated_at:new Date().toISOString()}).eq("id",dashboardSettings.item.id)
       if(error)throw error
       delete fullFormCache.current[dashboardSettings.item.id]
       setDashboardSettings(null)
@@ -1845,7 +1867,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     try{
       const slug=saveSlug.trim()||saveName.trim().toLowerCase().replace(/\s+/g,"-")+"-"+Date.now()
       const cfgFinal={...cfg,brand:currentBrand,dashboard:{...(cfg.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft" as DashboardManualStatus}}
-      const{data:ins,error}=await supa.from("form_configs").insert({name:saveName.trim(),slug,config:cfgFinal,brand:currentBrand}).select("id,slug").single()
+      const{data:ins,error}=await supa.from("form_configs").insert({name:saveName.trim(),slug,config:cfgFinal,brand:dbBrandValue(currentBrand)}).select("id,slug").single()
       if(error)throw error
       setShowSave(false);setSaveName("");setSaveSlug("")
       setSavedSlug(ins?.slug||slug);setLoadedId(ins?.id||"");setLoadedName(saveName.trim())
@@ -1862,12 +1884,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	    const cfgFinal={...cfg,brand:currentBrand}
 	    const updatedAt=new Date().toISOString()
 	    fullFormCache.current[loadedId]={updatedAt,data:{config:cfgFinal,slug:savedSlug,name:loadedName,brand:currentBrand}}
-	    supa.from("form_configs").update({config:cfgFinal,brand:currentBrand,updated_at:updatedAt}).eq("id",loadedId)
+	    supa.from("form_configs").update({config:cfgFinal,brand:dbBrandValue(currentBrand),updated_at:updatedAt}).eq("id",loadedId)
 		      .then(({error})=>{if(error)showToast("저장 중 오류가 발생했어요",false);else{loadList();loadDashboard(supa)}})
 		  }
 	  function onSaveClick(){if(loadedId)setShowUpdateModal(true);else setShowSave(true)}
   function getBrandFormBaseUrl(brand=currentBrand){
-    return (brand==="SNIPERFACTORY"?(sfFormBaseUrl||""):(formBaseUrl||"")).replace(/\/+$/,"")
+    return (isSniperFamilyBrand(brand)?(sfFormBaseUrl||""):(formBaseUrl||"")).replace(/\/+$/,"")
   }
   async function publishAndOpenForm(){
     const base=getBrandFormBaseUrl()
@@ -1894,7 +1916,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           manualStatus:!dashboard.manualStatus||dashboard.manualStatus==="draft"?"active":dashboard.manualStatus,
         },
       }
-      const{error}=await supa.from("form_configs").update({config:nextCfg,brand:currentBrand,updated_at:now}).eq("id",loadedId)
+      const{error}=await supa.from("form_configs").update({config:nextCfg,brand:dbBrandValue(currentBrand),updated_at:now}).eq("id",loadedId)
       if(error)throw error
       setCfg(nextCfg)
       fullFormCache.current[loadedId]={updatedAt:now,data:{config:nextCfg,slug:savedSlug,name:loadedName,brand:currentBrand}}
@@ -1925,7 +1947,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     }
     setCfg(nextCfg)
     if(supa&&loadedId){
-      await supa.from("form_configs").update({config:nextCfg,brand:currentBrand,updated_at:new Date().toISOString()}).eq("id",loadedId)
+      await supa.from("form_configs").update({config:nextCfg,brand:dbBrandValue(currentBrand),updated_at:new Date().toISOString()}).eq("id",loadedId)
     }
   }
   async function testGoogleSheetsIntegration(){
@@ -2272,12 +2294,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   React.useEffect(()=>{
     if(view==="analytics")loadAnalytics()
   },[view,loadedId])
-  function exportAnalyticsCsv(){
+  React.useEffect(()=>{setSelectedAnalyticsRowIds([])},[loadedId,analyticsResponseScope])
+  function exportAnalyticsCsv(srcRows:any[]=analyticsRows,fileSuffix="responses"){
     const fields=getAnalyticsFields()
     const headers=["날짜","시간","이름","전화번호","이메일",...fields.map(f=>f.label)]
     const csvEscape=(v:any)=>`"${String(v??"").replace(/"/g,'""')}"`
     const lines=[headers.map(csvEscape).join(",")]
-    analyticsRows.forEach(row=>{
+    srcRows.forEach(row=>{
       const [date,time]=fmtAnalyticsDate(row.created_at)
       const values=[date,time,row.name||"",row.phone||"",row.email||"",...fields.map(f=>analyticsAnswer(row,f))]
       lines.push(values.map(csvEscape).join(","))
@@ -2286,7 +2309,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const url=URL.createObjectURL(blob)
     const a=document.createElement("a")
     a.href=url
-    a.download=`${(loadedName||"form-responses").replace(/[\\/:*?"<>|]/g,"_")}_responses.csv`
+    a.download=`${(loadedName||"form-responses").replace(/[\\/:*?"<>|]/g,"_")}_${fileSuffix}.csv`
     document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url)
   }
 
@@ -2299,7 +2322,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     autoSaveTimer.current=setTimeout(()=>{
       setAutoSaving(true)
       const cfgFinal={...cfg,brand:currentBrand}
-      supa.from("form_configs").update({config:cfgFinal,brand:currentBrand,updated_at:new Date().toISOString()}).eq("id",loadedId)
+      supa.from("form_configs").update({config:cfgFinal,brand:dbBrandValue(currentBrand),updated_at:new Date().toISOString()}).eq("id",loadedId)
         .then(({error})=>{
           setAutoSaving(false)
           if(!error)setAutoSaved(true)
@@ -2540,6 +2563,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   if(view==="dashboard") {
     const BRANDS=[
       {id:"SNIPERFACTORY" as const,label:"스나이퍼팩토리",color:"#6366F1",sub:snList},
+      {id:"SESAC" as const,label:"새싹",color:"#24A148",sub:sesacList},
       {id:"INSIDEOUT" as const,label:"인사이드아웃",color:"#E85C5C",sub:ioList},
       {id:"SFACSPACE" as const,label:"스팩스페이스",color:"#073B70",sub:sfacList},
     ]
@@ -2631,6 +2655,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 <div style={{padding:"4px 6px 8px",fontSize:11.5,fontWeight:600,color:A.t3}}>브랜드</div>
                 <button onClick={()=>setDashBrandFilter("")} style={sideButton(!dashBrandFilter)}>전체 브랜드</button>
                 <button onClick={()=>setDashBrandFilter("SNIPERFACTORY")} style={sideButton(dashBrandFilter==="SNIPERFACTORY")}><SFLogo height={13} dark={adminDark}/></button>
+                <button onClick={()=>setDashBrandFilter("SESAC")} style={{...sideButton(dashBrandFilter==="SESAC"),paddingLeft:18}}><SesacLogo height={15}/></button>
                 <button onClick={()=>setDashBrandFilter("INSIDEOUT")} style={sideButton(dashBrandFilter==="INSIDEOUT")}><IOLogo height={12} dark={adminDark}/></button>
                 <button onClick={()=>setDashBrandFilter("SFACSPACE")} style={sideButton(dashBrandFilter==="SFACSPACE")}><SfacspaceLogo height={11} dark={adminDark}/></button>
               </div>
@@ -2729,7 +2754,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <div style={{fontSize:12.5,color:A.t3,marginBottom:20}}>브랜드, 폼 유형과 대시보드 상태 표시 기준을 정합니다.</div>
               <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>브랜드</div>
               <select value={dashboardSettings.brand} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,brand:e.target.value as BrandId}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
-                <option value="SNIPERFACTORY">스나이퍼팩토리</option><option value="INSIDEOUT">인사이드아웃</option><option value="SFACSPACE">스팩스페이스</option>
+                <option value="SNIPERFACTORY">스나이퍼팩토리</option><option value="SESAC">새싹</option><option value="INSIDEOUT">인사이드아웃</option><option value="SFACSPACE">스팩스페이스</option>
               </select>
               <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 유형</div>
               <select value={dashboardSettings.formTypeTag} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formTypeTag:e.target.value as DashboardFormType}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
@@ -2766,6 +2791,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.borderColor=A.border2}}
                   onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.borderColor=A.border2}}>
                   <SFLogo height={22} dark={adminDark}/>
+                </button>
+                <button onClick={()=>startNewForm("SESAC")}
+                  style={{width:"100%",padding:"22px 28px",borderRadius:12,border:`1px solid ${A.border2}`,background:"transparent",cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,transition:"all .15s"}}
+                  onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.borderColor=A.border2}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.borderColor=A.border2}}>
+                  <SesacLogo height={20}/>
                 </button>
                 <button onClick={()=>startNewForm("INSIDEOUT")}
                   style={{width:"100%",padding:"22px 28px",borderRadius:12,border:`1px solid ${A.border2}`,background:"transparent",cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,transition:"all .15s"}}
@@ -3681,7 +3712,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
 
       case "slug": {
-        const isSF=currentBrand==="SNIPERFACTORY"
+        const isSF=isSniperFamilyBrand(currentBrand)
         const base=isSF?(sfFormBaseUrl||"").replace(/\/+$/,""):(formBaseUrl||"").replace(/\/+$/,"")
         const preview=base&&slugDraft?`${base}?slug=${slugDraft}`:""
         return <div style={pd}>
@@ -3696,7 +3727,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
 
       case "qr": {
-        const isSF=currentBrand==="SNIPERFACTORY"
+        const isSF=isSniperFamilyBrand(currentBrand)
         const base=isSF?(sfFormBaseUrl||"").replace(/\/+$/,""):(formBaseUrl||"").replace(/\/+$/,"")
         const hasBase=base.length>0
         const hasSaved=savedSlug.length>0
@@ -3705,7 +3736,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         const qrName=qrMode==="form"?`${loadedName||savedSlug||"catchform"}-form-qr`:"detail-page-qr"
         const trackerBase=typeof window!=="undefined"?window.location.origin:""
         const qrLabel=loadedName||savedSlug||(qrMode==="form"?"폼 QR":"상세페이지 QR")
-        const qrBrand=currentBrand==="SNIPERFACTORY"?"sf":currentBrand==="INSIDEOUT"?"io":currentBrand==="SFACSPACE"?"sp":""
+        const qrBrand=currentBrand==="SNIPERFACTORY"?"sf":currentBrand==="SESAC"?"ss":currentBrand==="INSIDEOUT"?"io":currentBrand==="SFACSPACE"?"sp":""
         const compactLoadedId=compactFormId(loadedId)
         const qrFormRef=compactLoadedId?`i=${encodeURIComponent(compactLoadedId)}`:`s=${encodeURIComponent(savedSlug||"")}`
         const customQrCode=qrMode==="custom"&&activeQrUrl?compactQrCode(`${savedSlug||loadedId||"detail"}|${activeQrUrl}`):""
@@ -3738,7 +3769,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           if(loadedId){
             const updatedAt=new Date().toISOString()
             fullFormCache.current[loadedId]={updatedAt,data:{config:nextCfg,slug:savedSlug,name:loadedName,brand:currentBrand}}
-            const {error}=await supa!.from("form_configs").update({config:nextCfg,brand:currentBrand,updated_at:updatedAt}).eq("id",loadedId)
+            const {error}=await supa!.from("form_configs").update({config:nextCfg,brand:dbBrandValue(currentBrand),updated_at:updatedAt}).eq("id",loadedId)
             if(error)throw error
           }
         }
@@ -4489,7 +4520,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
 
     function renderLinkPanel() {
-    const isSF = currentBrand === "SNIPERFACTORY"
+    const isSF = isSniperFamilyBrand(currentBrand)
     const base = isSF
       ? (sfFormBaseUrl || "").replace(/\/+$/, "")
       : (formBaseUrl || "").replace(/\/+$/, "")
@@ -4497,7 +4528,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const hasSaved = savedSlug.length > 0
     const formUrl = hasBase && hasSaved ? `${base}?slug=${savedSlug}` : ""
     const brandLabel = brandDisplayName(currentBrand)
-    const brandColor = isSF ? "#6366F1" : currentBrand==="SFACSPACE" ? "#073B70" : A.red
+    const brandColor = currentBrand==="SESAC" ? "#24A148" : isSF ? "#6366F1" : currentBrand==="SFACSPACE" ? "#073B70" : A.red
     const urlPropName = isSF ? "SF Form Base URL" : "Form Base URL"
 
     return <div style={{flex:1,overflowY:"auto" as const,padding:20,display:"flex",flexDirection:"column" as const,gap:14}}>
@@ -4618,6 +4649,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
     }).filter(Boolean) as any[]
     const responseRows=analyticsResponseScope==="draft"?draftResponseRows:rows
+    const responseRowIds=responseRows.map((row:any)=>String(row.id))
+    const selectedResponseRows=responseRows.filter((row:any)=>selectedAnalyticsRowIds.includes(String(row.id)))
+    const allResponseRowsSelected=responseRowIds.length>0&&responseRowIds.every((id:string)=>selectedAnalyticsRowIds.includes(id))
+    const toggleAllResponseRows=()=>setSelectedAnalyticsRowIds(prev=>{
+      if(allResponseRowsSelected)return prev.filter(id=>!responseRowIds.includes(id))
+      return Array.from(new Set([...prev,...responseRowIds]))
+    })
+    const toggleResponseRow=(id:string)=>setSelectedAnalyticsRowIds(prev=>prev.includes(id)?prev.filter(item=>item!==id):[...prev,id])
     const completedSessions=sessions.filter(evs=>evs.some(e=>e.event_type==="completed")).length
     const sessionCount=sessions.length||rows.length
     const completionRate=sessionCount?Math.min(100,Math.round(((completedSessions||rows.length)/sessionCount)*10000)/100):0
@@ -4913,7 +4952,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{flex:1}}/>
 	        {topIconButton("delete-all","응답 전체 삭제",()=>setShowDeleteAllAnalytics(true),<path d="M2 4h12M6 4V2.8h4V4M5 6v6M8 6v6M11 6v6M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/>,A.red)}
 	        {topIconButton("refresh","새로고침",loadAnalytics,<path d="M13 3v4H9M3 13V9h4M12.2 8.8A4.5 4.5 0 0 1 4.5 12M3.8 7.2A4.5 4.5 0 0 1 11.5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>)}
-        <button onClick={exportAnalyticsCsv} style={{height:32,padding:"0 13px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+        <button onClick={()=>exportAnalyticsCsv()} style={{height:32,padding:"0 13px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>시트 다운로드
         </button>
       </div>
@@ -4926,27 +4965,34 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </button>
         </React.Fragment>})}
       </div>
-      <div style={{flex:1,overflow:"auto",padding:"24px 28px 36px"}}>
-        <div style={{maxWidth:1280,margin:"0 auto"}}>
+      <div style={{flex:1,minHeight:0,overflow:activeAnalyticsTab==="responses"?"hidden":"auto",padding:"24px 28px 36px",boxSizing:"border-box" as const}}>
+        <div style={{maxWidth:1280,margin:"0 auto",height:activeAnalyticsTab==="responses"?"100%":"auto"}}>
         {analyticsLoading?<div style={{fontSize:14,color:A.t2}}>불러오는 중...</div>:analyticsErr?<div style={{fontSize:14,color:A.red}}>{analyticsErr}</div>:<>
-          {activeAnalyticsTab==="responses"&&<div>
+          {activeAnalyticsTab==="responses"&&<div style={{height:"100%",minHeight:0,display:"flex",flexDirection:"column" as const}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap" as const,marginBottom:16}}>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
                 <div style={{fontSize:22,fontWeight:600,color:A.t1}}>응답별 데이터</div>
                 <div style={{height:26,padding:"0 12px",borderRadius:999,background:A.card2,border:`1px solid ${A.border}`,color:A.t2,display:"flex",alignItems:"center",fontSize:12.5,fontWeight:600}}>{responseRows.length}개</div>
               </div>
-              <div style={{display:"flex",gap:4,padding:4,borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <button onClick={()=>exportAnalyticsCsv(selectedResponseRows,"selected-responses")} disabled={selectedResponseRows.length===0}
+                  style={{height:38,padding:"0 12px",borderRadius:A.r,border:`1px solid ${selectedResponseRows.length?A.blue+"55":A.border}`,background:selectedResponseRows.length?A.blue2:A.card2,color:selectedResponseRows.length?A.blue:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:selectedResponseRows.length?"pointer":"not-allowed",display:"inline-flex",alignItems:"center",gap:6}}>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v7M5 6l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  선택 다운로드 {selectedResponseRows.length>0&&`${selectedResponseRows.length}개`}
+                </button>
+                <div style={{display:"flex",gap:4,padding:4,borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`}}>
                 {([{id:"submitted",label:`제출 완료 ${rows.length}`},{id:"draft",label:`작성 중 ${draftResponseRows.length}`} ] as const).map(item=>{const active=analyticsResponseScope===item.id;return <button key={item.id} onClick={()=>setAnalyticsResponseScope(item.id)}
                   style={{height:30,padding:"0 12px",borderRadius:A.r,border:"none",background:active?A.card:"transparent",color:active?A.blue:A.t2,boxShadow:active?A.shadow:"none",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
                   {item.label}
                 </button>})}
+                </div>
               </div>
             </div>
             {analyticsResponseScope==="draft"&&<div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,margin:"-5px 0 14px"}}>작성 중 데이터는 제출 완료 전 자동 저장된 임시 기록입니다. 파일 첨부 내용은 브라우저 보안상 제출 전에는 저장되지 않습니다.</div>}
-            {responseRows.length===0?emptyState(analyticsResponseScope==="draft"?"아직 작성 중인 응답이 없습니다.":"아직 제출 완료된 응답이 없습니다."):<div className="catchform-analytics-table-scroll" style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,overflow:"auto",boxShadow:A.shadow}}>
+            {responseRows.length===0?emptyState(analyticsResponseScope==="draft"?"아직 작성 중인 응답이 없습니다.":"아직 제출 완료된 응답이 없습니다."):<div className="catchform-analytics-table-scroll" style={{flex:1,minHeight:0,background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,overflow:"auto",boxShadow:A.shadow}}>
               <style>{`.catchform-analytics-table-scroll::-webkit-scrollbar{height:7px;width:7px}.catchform-analytics-table-scroll::-webkit-scrollbar-thumb{background:${A.border2};border-radius:999px}.catchform-analytics-table-scroll::-webkit-scrollbar-track{background:transparent}`}</style>
-              <table style={{borderCollapse:"collapse",minWidth:Math.max(1070,278+fields.length*230),width:"100%",fontSize:13}}>
-                <thead><tr><th style={{width:88,minWidth:88,padding:"13px 10px",textAlign:"center" as const,borderBottom:`1px solid ${A.border}`,color:A.t2,background:A.card2}}>관리</th><th style={{width:190,minWidth:190,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t2,background:A.card2}}>날짜</th>{fields.map(f=>{const fileCount=analyticsFieldFiles(responseRows,f).length;return <th key={f.id} style={{padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,minWidth:fileCount?260:220,background:A.card2}}>
+              <table style={{borderCollapse:"collapse",minWidth:Math.max(1100,308+fields.length*230),width:"100%",fontSize:13}}>
+                <thead><tr><th style={{position:"sticky" as const,top:0,zIndex:4,width:118,minWidth:118,padding:"13px 10px",textAlign:"center" as const,borderBottom:`1px solid ${A.border}`,color:A.t2,background:A.card2}}><label style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7,cursor:"pointer"}}><input type="checkbox" checked={allResponseRowsSelected} onChange={toggleAllResponseRows} style={{width:15,height:15,accentColor:A.blue,cursor:"pointer"}}/>관리</label></th><th style={{position:"sticky" as const,top:0,zIndex:4,width:190,minWidth:190,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t2,background:A.card2}}>날짜</th>{fields.map(f=>{const fileCount=analyticsFieldFiles(responseRows,f).length;return <th key={f.id} style={{position:"sticky" as const,top:0,zIndex:4,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,minWidth:fileCount?260:220,background:A.card2}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
                     <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{f.label}</span>
                     {fileCount>0&&<button onClick={()=>downloadAnalyticsFilesZip(f,responseRows)} title={`첨부파일 ${fileCount}개 일괄 다운로드`} style={{height:28,padding:"0 9px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,flexShrink:0,fontFamily:FONT,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const}}>
@@ -4955,7 +5001,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     </button>}
                   </div>
                 </th>})}</tr></thead>
-                <tbody>{responseRows.map(row=>{const dt=fmtAnalyticsDate(row.created_at);return <tr key={row.id}><td style={{width:88,minWidth:88,padding:"13px 10px",borderBottom:`1px solid ${A.border}`,textAlign:"center" as const}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                <tbody>{responseRows.map(row=>{const dt=fmtAnalyticsDate(row.created_at);const selected=selectedAnalyticsRowIds.includes(String(row.id));return <tr key={row.id} style={{background:selected?A.blue2:"transparent"}}><td style={{width:118,minWidth:118,padding:"13px 10px",borderBottom:`1px solid ${A.border}`,textAlign:"center" as const}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                  <input type="checkbox" checked={selected} onChange={()=>toggleResponseRow(String(row.id))} aria-label="응답 선택" style={{width:15,height:15,accentColor:A.blue,cursor:"pointer",flexShrink:0}}/>
                   {!row.__draft&&<button onClick={()=>openEditAnalyticsRow(row)} title="응답 수정" style={{width:28,height:28,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 11.5V13h1.5L12 5.5 10.5 4 3 11.5zM9.8 4.7l1.5 1.5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
                   <button onClick={()=>deleteAnalyticsRow(row)} title="응답 삭제" style={{width:28,height:28,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t3,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v6M8 6v6M11 6v6M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                 </div></td><td style={{width:190,minWidth:190,padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}><div style={{whiteSpace:"nowrap" as const,fontWeight:400}}>{dt[0]}</div><div style={{fontSize:12,color:A.t3,marginTop:4,whiteSpace:"nowrap" as const}}>{dt[1]}</div>{row.__draft&&<div style={{display:"inline-flex",alignItems:"center",height:20,padding:"0 7px",borderRadius:999,background:chartOrange+"16",color:chartOrange,fontSize:11,fontWeight:600,marginTop:7}}>작성 중 · 섹션 {row.__page}</div>}</td>{fields.map(f=><td key={f.id} style={{padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}><div style={{padding:"7px 9px",border:`1px solid ${A.border}`,borderRadius:A.r,background:A.card2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:A.t1,fontWeight:400}}>{renderAnalyticsAnswer(row,f)}</div></td>)}</tr>})}</tbody>
@@ -5499,6 +5546,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2}}
                 onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
                 <SFLogo height={20} dark={adminDark}/>
+              </button>
+              <button onClick={()=>startNewForm("SESAC")}
+                style={{padding:"18px 20px",borderRadius:10,border:`1px solid ${A.border2}`,background:"transparent",cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,transition:"all .15s"}}
+                onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2}}
+                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
+                <SesacLogo height={18}/>
               </button>
               <button onClick={()=>startNewForm("INSIDEOUT")}
                 style={{padding:"18px 20px",borderRadius:10,border:`1px solid ${A.border2}`,background:"transparent",cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,transition:"all .15s"}}

@@ -35,7 +35,7 @@ function appendQrParams(target: string, params: Record<string, string>) {
 
 function normalizeBrand(raw: string) {
   const value = (raw || "").toUpperCase()
-  return value === "SF" ? "SNIPERFACTORY" : value === "IO" ? "INSIDEOUT" : value === "SP" ? "SFACSPACE" : value
+  return value === "SF" ? "SNIPERFACTORY" : value === "SS" ? "SESAC" : value === "IO" ? "INSIDEOUT" : value === "SP" ? "SFACSPACE" : value
 }
 
 function decodeCompactFormId(value: string) {
@@ -56,7 +56,7 @@ function formUrlFromSlug(req: NextRequest, slug: string, brandOverride = "") {
   const rawBrand = brandOverride || req.nextUrl.searchParams.get("brand") || req.nextUrl.searchParams.get("b") || ""
   const brand = normalizeBrand(rawBrand)
   const base = (
-    brand === "SNIPERFACTORY"
+    brand === "SNIPERFACTORY" || brand === "SESAC"
       ? process.env.NEXT_PUBLIC_SF_FORM_BASE_URL
       : process.env.NEXT_PUBLIC_FORM_BASE_URL
   ) || ""
