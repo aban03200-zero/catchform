@@ -1264,6 +1264,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
   // ── Analytics state ───────────────────────────────────────────────────
   const [analyticsTab,setAnalyticsTab]=React.useState<"questions"|"responses"|"period"|"dropoff"|"qr">("responses")
+  const [analyticsResponseScope,setAnalyticsResponseScope]=React.useState<"submitted"|"draft">("submitted")
   const [qrAnalyticsScope,setQrAnalyticsScope]=React.useState<"form"|"detail">("form")
   const [analyticsRows,setAnalyticsRows]=React.useState<any[]>([])
   const [analyticsEvents,setAnalyticsEvents]=React.useState<any[]>([])
@@ -1571,6 +1572,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       setSavedSlug(full.slug||item.slug||"")
       setCurrentBrand(brand)
       setAnalyticsTab("responses")
+      setAnalyticsResponseScope("submitted")
       setQrAnalyticsScope("form")
       setView("analytics")
     }catch(e){showToast("응답 데이터를 불러오지 못했어요.",false)}
@@ -2147,8 +2149,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       if(res.error)throw res.error
       rows=res.data||[]
       setAnalyticsRows(rows)
-      const ev=await supa.from("form_response_events").select("*").eq("form_id",loadedId).order("created_at",{ascending:true}).limit(5000)
-      setAnalyticsEvents(ev.error?[]:(ev.data||[]))
+      const ev=await supa.from("form_response_events").select("*").eq("form_id",loadedId).order("created_at",{ascending:false}).limit(5000)
+      setAnalyticsEvents(ev.error?[]:[...(ev.data||[])].reverse())
       const fields=getAnalyticsFields()
       if(!analyticsQuestionId&&fields[0]){
         setAnalyticsQuestionId(fields[0].id)
@@ -2165,6 +2167,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   async function deleteAnalyticsRow(row:any){
     if(!supa||!row?.id)return
+    if(row.__draft){
+      if(!confirm("이 작성 중 기록을 삭제할까요?"))return
+      const {error}=await supa.from("form_response_events").delete().eq("form_id",loadedId).eq("session_id",row.__sessionId)
+      if(error){showToast("작성 중 기록 삭제 실패: "+(error.message||""),false);return}
+      setAnalyticsEvents(prev=>prev.filter(event=>event.session_id!==row.__sessionId))
+      showToast("작성 중 기록을 삭제했어요.")
+      return
+    }
     if(!confirm("이 응답을 삭제할까요?"))return
     const tableName=analyticsTableName()
     const {error}=await supa.from(tableName).delete().eq("id",row.id)
@@ -4472,6 +4482,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	    const accent=chartBlue, accentSoft=A.blue2
 	    const rows=Array.isArray(analyticsRows)?analyticsRows:[]
 	    const events=Array.isArray(analyticsEvents)?analyticsEvents:[]
+	    const eventMeta=(e:any)=>{try{return typeof e?.metadata==="string"?JSON.parse(e.metadata||"{}"):(e?.metadata||{})}catch{return{}}}
 	    const fields=getAnalyticsFields()
 	    const colors=[chartBlue,chartGreen,chartYellow,chartSlate,chartPurple,chartOrange,chartCyan,chartPink]
     const pageName=(p:any)=>{
@@ -4499,6 +4510,26 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const grouped:any={}
     events.forEach((e:any)=>{const sid=e.session_id||e.id||"unknown";(grouped[sid]=grouped[sid]||[]).push(e)})
     const sessions=Object.keys(grouped).map(k=>(grouped[k]||[]).sort((a:any,b:any)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime())) as any[][]
+    const draftResponseRows=sessions.filter(evs=>!evs.some(e=>e.event_type==="completed")).map(evs=>{
+      const latest=[...evs].reverse().find(e=>e.event_type==="draft_saved")
+      if(!latest)return null
+      const meta=eventMeta(latest)
+      const formData=Array.isArray(meta.draft_answers)?meta.draft_answers:[]
+      if(!formData.length)return null
+      const direct=(id:string)=>formData.find((item:any)=>item.answerKey===id)?.answer||""
+      return {
+        id:`draft:${latest.session_id||latest.id}`,
+        __draft:true,
+        __sessionId:latest.session_id||"",
+        __page:latest.page||1,
+        created_at:meta.draft_updated_at||latest.created_at,
+        form_data:formData,
+        name:direct("name"),
+        phone:direct("phone"),
+        email:direct("email"),
+      }
+    }).filter(Boolean) as any[]
+    const responseRows=analyticsResponseScope==="draft"?draftResponseRows:rows
     const completedSessions=sessions.filter(evs=>evs.some(e=>e.event_type==="completed")).length
     const sessionCount=sessions.length||rows.length
     const completionRate=sessionCount?Math.min(100,Math.round(((completedSessions||rows.length)/sessionCount)*10000)/100):0
@@ -4552,7 +4583,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	    const periodRows=Object.keys(byDate).map(k=>[k,byDate[k]]).sort((a:any,b:any)=>String(b[0]).localeCompare(String(a[0])))
 	    const periodChartRows=[...periodRows].sort((a:any,b:any)=>String(a[0]).localeCompare(String(b[0]))).slice(-14)
 	    const maxPeriodCount=Math.max(1,...periodChartRows.map((item:any)=>Number(item[1])||0))
-	    const eventMeta=(e:any)=>{try{return typeof e?.metadata==="string"?JSON.parse(e.metadata||"{}"):(e?.metadata||{})}catch{return{}}}
 	    const dayOf=(v:any)=>fmtAnalyticsDate(v)[0]||"날짜 없음"
 	    const countryName=(code:string)=>{
 	      const m:any={KR:"대한민국",US:"미국",JP:"일본",CN:"중국",VN:"베트남",TH:"태국",ID:"인도네시아",PH:"필리핀",SG:"싱가포르",GB:"영국",DE:"독일",FR:"프랑스",AU:"호주",CA:"캐나다"}
@@ -4812,26 +4842,35 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{maxWidth:1280,margin:"0 auto"}}>
         {analyticsLoading?<div style={{fontSize:14,color:A.t2}}>불러오는 중...</div>:analyticsErr?<div style={{fontSize:14,color:A.red}}>{analyticsErr}</div>:<>
           {activeAnalyticsTab==="responses"&&<div>
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-              <div style={{fontSize:22,fontWeight:600,color:A.t1}}>응답별 데이터</div>
-              <div style={{height:26,padding:"0 12px",borderRadius:999,background:A.card2,border:`1px solid ${A.border}`,color:A.t2,display:"flex",alignItems:"center",fontSize:12.5,fontWeight:600}}>{rows.length}개 응답</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap" as const,marginBottom:16}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{fontSize:22,fontWeight:600,color:A.t1}}>응답별 데이터</div>
+                <div style={{height:26,padding:"0 12px",borderRadius:999,background:A.card2,border:`1px solid ${A.border}`,color:A.t2,display:"flex",alignItems:"center",fontSize:12.5,fontWeight:600}}>{responseRows.length}개</div>
+              </div>
+              <div style={{display:"flex",gap:4,padding:4,borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`}}>
+                {([{id:"submitted",label:`제출 완료 ${rows.length}`},{id:"draft",label:`작성 중 ${draftResponseRows.length}`} ] as const).map(item=>{const active=analyticsResponseScope===item.id;return <button key={item.id} onClick={()=>setAnalyticsResponseScope(item.id)}
+                  style={{height:30,padding:"0 12px",borderRadius:A.r,border:"none",background:active?A.card:"transparent",color:active?A.blue:A.t2,boxShadow:active?A.shadow:"none",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
+                  {item.label}
+                </button>})}
+              </div>
             </div>
-            {rows.length===0?emptyState("아직 수집된 응답이 없습니다."):<div className="catchform-analytics-table-scroll" style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,overflow:"auto",boxShadow:A.shadow}}>
+            {analyticsResponseScope==="draft"&&<div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,margin:"-5px 0 14px"}}>작성 중 데이터는 제출 완료 전 자동 저장된 임시 기록입니다. 파일 첨부 내용은 브라우저 보안상 제출 전에는 저장되지 않습니다.</div>}
+            {responseRows.length===0?emptyState(analyticsResponseScope==="draft"?"아직 작성 중인 응답이 없습니다.":"아직 제출 완료된 응답이 없습니다."):<div className="catchform-analytics-table-scroll" style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,overflow:"auto",boxShadow:A.shadow}}>
               <style>{`.catchform-analytics-table-scroll::-webkit-scrollbar{height:7px;width:7px}.catchform-analytics-table-scroll::-webkit-scrollbar-thumb{background:${A.border2};border-radius:999px}.catchform-analytics-table-scroll::-webkit-scrollbar-track{background:transparent}`}</style>
               <table style={{borderCollapse:"collapse",minWidth:Math.max(1070,278+fields.length*230),width:"100%",fontSize:13}}>
-                <thead><tr><th style={{width:88,minWidth:88,padding:"13px 10px",textAlign:"center" as const,borderBottom:`1px solid ${A.border}`,color:A.t2,background:A.card2}}>관리</th><th style={{width:190,minWidth:190,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t2,background:A.card2}}>날짜</th>{fields.map(f=>{const fileCount=analyticsFieldFiles(rows,f).length;return <th key={f.id} style={{padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,minWidth:fileCount?260:220,background:A.card2}}>
+                <thead><tr><th style={{width:88,minWidth:88,padding:"13px 10px",textAlign:"center" as const,borderBottom:`1px solid ${A.border}`,color:A.t2,background:A.card2}}>관리</th><th style={{width:190,minWidth:190,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t2,background:A.card2}}>날짜</th>{fields.map(f=>{const fileCount=analyticsFieldFiles(responseRows,f).length;return <th key={f.id} style={{padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,minWidth:fileCount?260:220,background:A.card2}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
                     <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{f.label}</span>
-                    {fileCount>0&&<button onClick={()=>downloadAnalyticsFilesZip(f,rows)} title={`첨부파일 ${fileCount}개 일괄 다운로드`} style={{height:28,padding:"0 9px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,flexShrink:0,fontFamily:FONT,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const}}>
+                    {fileCount>0&&<button onClick={()=>downloadAnalyticsFilesZip(f,responseRows)} title={`첨부파일 ${fileCount}개 일괄 다운로드`} style={{height:28,padding:"0 9px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,flexShrink:0,fontFamily:FONT,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const}}>
                       <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v7M5 6l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                       모두 다운로드
                     </button>}
                   </div>
                 </th>})}</tr></thead>
-                <tbody>{rows.map(row=>{const dt=fmtAnalyticsDate(row.created_at);return <tr key={row.id}><td style={{width:88,minWidth:88,padding:"13px 10px",borderBottom:`1px solid ${A.border}`,textAlign:"center" as const}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-                  <button onClick={()=>openEditAnalyticsRow(row)} title="응답 수정" style={{width:28,height:28,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 11.5V13h1.5L12 5.5 10.5 4 3 11.5zM9.8 4.7l1.5 1.5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                <tbody>{responseRows.map(row=>{const dt=fmtAnalyticsDate(row.created_at);return <tr key={row.id}><td style={{width:88,minWidth:88,padding:"13px 10px",borderBottom:`1px solid ${A.border}`,textAlign:"center" as const}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                  {!row.__draft&&<button onClick={()=>openEditAnalyticsRow(row)} title="응답 수정" style={{width:28,height:28,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 11.5V13h1.5L12 5.5 10.5 4 3 11.5zM9.8 4.7l1.5 1.5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
                   <button onClick={()=>deleteAnalyticsRow(row)} title="응답 삭제" style={{width:28,height:28,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t3,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v6M8 6v6M11 6v6M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
-                </div></td><td style={{width:190,minWidth:190,padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}><div style={{whiteSpace:"nowrap" as const,fontWeight:400}}>{dt[0]}</div><div style={{fontSize:12,color:A.t3,marginTop:4,whiteSpace:"nowrap" as const}}>{dt[1]}</div></td>{fields.map(f=><td key={f.id} style={{padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}><div style={{padding:"7px 9px",border:`1px solid ${A.border}`,borderRadius:A.r,background:A.card2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:A.t1,fontWeight:400}}>{renderAnalyticsAnswer(row,f)}</div></td>)}</tr>})}</tbody>
+                </div></td><td style={{width:190,minWidth:190,padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}><div style={{whiteSpace:"nowrap" as const,fontWeight:400}}>{dt[0]}</div><div style={{fontSize:12,color:A.t3,marginTop:4,whiteSpace:"nowrap" as const}}>{dt[1]}</div>{row.__draft&&<div style={{display:"inline-flex",alignItems:"center",height:20,padding:"0 7px",borderRadius:999,background:chartOrange+"16",color:chartOrange,fontSize:11,fontWeight:600,marginTop:7}}>작성 중 · 섹션 {row.__page}</div>}</td>{fields.map(f=><td key={f.id} style={{padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}><div style={{padding:"7px 9px",border:`1px solid ${A.border}`,borderRadius:A.r,background:A.card2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:A.t1,fontWeight:400}}>{renderAnalyticsAnswer(row,f)}</div></td>)}</tr>})}</tbody>
               </table>
             </div>}
           </div>}

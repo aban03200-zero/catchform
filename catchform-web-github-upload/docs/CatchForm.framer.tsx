@@ -355,6 +355,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const startedTrackedRef = React.useRef(false)
     const qrScanTrackedRef = React.useRef(false)
     const draftLoadedRef = React.useRef(false)
+    const remoteDraftTimerRef = React.useRef<any>(null)
+    const [draftLastFieldId, setDraftLastFieldId] = React.useState("")
 
     const draftKey = React.useMemo(() => {
         const raw = formId || formSlug || cfg.header?.programId || cfg.header?.title || "form"
@@ -365,6 +367,20 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const setVal = (id: string, v: string) => setVals(p => ({ ...p, [id]: v }))
     const setErr = (id: string, msg: string) => setErrors(p => ({ ...p, [id]: msg }))
     const clearErr = (id: string) => setErrors(p => { const n = { ...p }; delete n[id]; return n })
+
+    const persistLocalDraft = React.useCallback((nextPage = page) => {
+        if (typeof window === "undefined") return
+        try {
+            window.localStorage.setItem(draftKey, JSON.stringify({
+                vals,
+                checked,
+                consentOk,
+                page: nextPage,
+                lastFieldId: draftLastFieldId,
+                updatedAt: new Date().toISOString(),
+            }))
+        } catch {}
+    }, [draftKey, vals, checked, consentOk, page, draftLastFieldId])
 
     const clearDraft = React.useCallback(() => {
         try { window.localStorage.removeItem(draftKey) } catch {}
@@ -565,6 +581,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const trackFieldTouch = (field: any) => {
         if (!field?.id) return
         lastTouchedFieldRef.current = field
+        setDraftLastFieldId(field.id)
         if (touchedFieldRef.current[field.id]) return
         touchedFieldRef.current[field.id] = true
         trackEvent("field_touch", { field })
@@ -599,6 +616,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 if (draft?.vals && typeof draft.vals === "object") setVals(draft.vals)
                 if (draft?.checked && typeof draft.checked === "object") setChecked(draft.checked)
                 if (Array.isArray(draft?.consentOk)) setConsentOk(draft.consentOk)
+                if (typeof draft?.lastFieldId === "string") setDraftLastFieldId(draft.lastFieldId)
                 const savedPage = Number(draft?.page)
                 if (Number.isFinite(savedPage) && savedPage >= 1 && savedPage <= formPages) setPage(savedPage)
             }
@@ -609,18 +627,24 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     React.useEffect(() => {
         if (!draftLoadedRef.current || typeof window === "undefined") return
         const timer = window.setTimeout(() => {
-            try {
-                window.localStorage.setItem(draftKey, JSON.stringify({
-                    vals,
-                    checked,
-                    consentOk,
-                    page,
-                    updatedAt: new Date().toISOString(),
-                }))
-            } catch {}
+            persistLocalDraft()
         }, 150)
         return () => window.clearTimeout(timer)
-    }, [draftKey, vals, checked, consentOk, page])
+    }, [persistLocalDraft])
+
+    React.useEffect(() => {
+        if (typeof window === "undefined") return
+        const persistBeforeExit = () => persistLocalDraft()
+        const persistWhenHidden = () => {
+            if (document.visibilityState === "hidden") persistLocalDraft()
+        }
+        window.addEventListener("beforeunload", persistBeforeExit)
+        document.addEventListener("visibilitychange", persistWhenHidden)
+        return () => {
+            window.removeEventListener("beforeunload", persistBeforeExit)
+            document.removeEventListener("visibilitychange", persistWhenHidden)
+        }
+    }, [persistLocalDraft])
 
     const isQrLanding = () => {
         if (typeof window === "undefined") return false
@@ -833,6 +857,53 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         const selectedOpt = fieldOpts.find(o => o.value === answer)
         return selectedOpt?.isEtc && etcValue ? `${selectedOpt.label}: ${etcValue}` : answer
     }
+
+    const getDraftAnswers = () => {
+        const allFields: any[] = isKdt ? (cfg.kdtFields || []) as any[] : cfg.form.fields as any[]
+        return allFields
+            .filter(field => field.type !== "info" && field.type !== "section_desc")
+            .map(field => {
+                const answer = field.type === "file" ? (fileNames[field.id] || []) : getFieldAnswer(field)
+                return { question: field.label || field.id, answer, answerKey: field.id }
+            })
+            .filter(item => Array.isArray(item.answer) ? item.answer.length > 0 : String(item.answer || "").trim().length > 0)
+    }
+
+    const saveRemoteDraft = (keepalive = false, nextPage = page) => {
+        if (!draftLoadedRef.current) return
+        const draftAnswers = getDraftAnswers()
+        if (!draftAnswers.length && !consentOk.some(Boolean)) return
+        trackEvent("draft_saved", {
+            page: nextPage,
+            field: lastTouchedFieldRef.current,
+            keepalive,
+            metadata: {
+                draft_status: "in_progress",
+                draft_answers: draftAnswers,
+                draft_consents: consentOk,
+                draft_last_field_id: draftLastFieldId,
+                draft_updated_at: new Date().toISOString(),
+            }
+        })
+    }
+
+    React.useEffect(() => {
+        if (!draftLoadedRef.current) return
+        if (remoteDraftTimerRef.current) window.clearTimeout(remoteDraftTimerRef.current)
+        remoteDraftTimerRef.current = window.setTimeout(() => saveRemoteDraft(false), 900)
+        return () => {
+            if (remoteDraftTimerRef.current) window.clearTimeout(remoteDraftTimerRef.current)
+        }
+    }, [vals, checked, consentOk, fileNames, page, draftLastFieldId])
+
+    React.useEffect(() => {
+        if (typeof document === "undefined") return
+        const saveWhenHidden = () => {
+            if (document.visibilityState === "hidden") saveRemoteDraft(true)
+        }
+        document.addEventListener("visibilitychange", saveWhenHidden)
+        return () => document.removeEventListener("visibilitychange", saveWhenHidden)
+    }, [vals, checked, consentOk, fileNames, page, draftLastFieldId])
 
     const validateCurrentPage = (): boolean => {
         const newErrors: Record<string, string> = {}
@@ -1607,7 +1678,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 {isMultiPage && page < formPages
                     ? <button
                         disabled={!isPageComplete}
-                        onClick={() => setPage(p => p + 1)}
+                        onClick={() => { persistLocalDraft(page + 1); saveRemoteDraft(false, page + 1); setPage(p => p + 1) }}
                         style={{ flex: 2, height: cfg.cta.height, borderRadius: fr, border: "none", background: isPageComplete ? accentBg : accentBg + "55", color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: isPageComplete ? "pointer" : "not-allowed" }}>
                         다음
                       </button>
