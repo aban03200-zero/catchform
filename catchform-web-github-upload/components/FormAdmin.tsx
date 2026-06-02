@@ -11,7 +11,7 @@ type Theme = "dark" | "light"
 type Opt = { label: string; value: string; isEtc: boolean; nextPage?: number }
 type Cat = { id: string; name: string }
 type Prog = { id: string; title: string; slug?: string; category?: string; [key:string]:any }
-type BrandId = "SNIPERFACTORY"|"SESAC"|"INSIDEOUT"|"SFACSPACE"
+type BrandId = "SNIPERFACTORY"|"INSIDEOUT"|"SFACSPACE"
 type DashboardFormType = "alert"|"application"|"recruit"|"survey"|"evaluation"|"other"
 type DashboardManualStatus = ""|"draft"|"active"|"closed"
 type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; manualStatus?:DashboardManualStatus; isPublished?:boolean; publishedAt?:string }
@@ -502,36 +502,29 @@ function SfacspaceLogo({height=18,dark=false}:{height?:number;dark?:boolean}){
   return <img src="/sfacspace_logo_black.png" alt="스팩스페이스" style={{display:"block",height,width:"auto",maxWidth:"100%",objectFit:"contain",filter:dark?"brightness(0) invert(1)":"none",flexShrink:0}}/>
 }
 
-function SesacLogo({height=18}:{height?:number}){
-  return <span style={{display:"inline-flex",alignItems:"center",gap:5,height,flexShrink:0,color:"#24A148",fontFamily:FONT,fontSize:Math.max(12,height-2),fontWeight:600,lineHeight:1}}>
-    <span style={{width:height-5,height:height-5,borderRadius:"50% 50% 50% 2px",background:"#43C463",transform:"rotate(-24deg)",display:"inline-block"}}/>
-    새싹
-  </span>
-}
-
 function BrandLogo({brand,height=18,dark=false}:{brand:string;height?:number;dark?:boolean}){
   if(brand==="INSIDEOUT")return <IOLogo height={height} dark={dark}/>
   if(brand==="SFACSPACE")return <SfacspaceLogo height={height} dark={dark}/>
-  if(brand==="SESAC")return <SesacLogo height={height}/>
   return <SFLogo height={height} dark={dark}/>
 }
 
 function brandDisplayName(brand:string){
   if(brand==="SNIPERFACTORY")return"스나이퍼팩토리"
-  if(brand==="SESAC")return"새싹"
   if(brand==="INSIDEOUT")return"인사이드아웃"
   if(brand==="SFACSPACE")return"스팩스페이스"
   return"기타"
 }
 
-function isSniperFamilyBrand(brand:string){
-  return brand==="SNIPERFACTORY"||brand==="SESAC"
+function canonicalBrand(brand:string):BrandId{
+  if(brand==="INSIDEOUT")return"INSIDEOUT"
+  if(brand==="SFACSPACE")return"SFACSPACE"
+  return"SNIPERFACTORY"
 }
 
 // form_configs.brand is a legacy FK column. New UI brands live in config.brand
 // while this column keeps a compatible parent value for existing Supabase schemas.
 function dbBrandValue(brand:string){
-  return brand==="INSIDEOUT"?"INSIDEOUT":"SNIPERFACTORY"
+  return canonicalBrand(brand)==="INSIDEOUT"?"INSIDEOUT":"SNIPERFACTORY"
 }
 
 function SelectChevron({color}:{color:string}){
@@ -773,9 +766,9 @@ function mergeCfg(raw:any):Cfg {
 }
 function applyBrandDefaults(config:Cfg,brand:string):Cfg{
   const next=dc(config)
-  const normalizedBrand=brand||next.brand||""
+  const normalizedBrand=canonicalBrand(brand||next.brand||"")
   next.brand=normalizedBrand||next.brand
-  if(isSniperFamilyBrand(normalizedBrand)&&(!next.modal.btnUrl||next.modal.btnUrl==="https://insideout.or.kr/program")){
+  if(normalizedBrand==="SNIPERFACTORY"&&(!next.modal.btnUrl||next.modal.btnUrl==="https://insideout.or.kr/program")){
     next.modal.btnUrl="https://sniperfactory.com/program"
   }
   return next
@@ -1221,7 +1214,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
   // ── Dashboard data ─────────────────────────────────────────────────────
   const [snList,setSnList]=React.useState<any[]>([])
-  const [sesacList,setSesacList]=React.useState<any[]>([])
   const [ioList,setIoList]=React.useState<any[]>([])
   const [sfacList,setSfacList]=React.useState<any[]>([])
   const [dashLoading,setDashLoading]=React.useState(false)
@@ -1390,7 +1382,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
 
   function normalizeFormSummary(row:any){
-    const brand=row.config_brand||row.config?.brand||row.brand||""
+    const brand=canonicalBrand(row.config_brand||row.config?.brand||row.brand||"")
     const title=row.header_title||row.config?.header?.title||""
     const programId=row.program_id||row.config?.header?.programId||""
     const formType=row.form_type||row.config?.formType||""
@@ -1489,7 +1481,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     try{
       const all=await fetchFormSummaries(sb,100)
       setSnList(all.filter((x:any)=>(x.config?.brand||x.brand)==="SNIPERFACTORY"))
-      setSesacList(all.filter((x:any)=>(x.config?.brand||x.brand)==="SESAC"))
       setIoList(all.filter((x:any)=>(x.config?.brand||x.brand)==="INSIDEOUT"))
       setSfacList(all.filter((x:any)=>(x.config?.brand||x.brand)==="SFACSPACE"))
       setSaved(all)
@@ -1523,7 +1514,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
   function applyCustomTemplate(t:{id:string;name:string;config:any;brand:string}){
     const merged=mergeCfg(t.config||{})
-    const brand=t.brand||pendingBrand||""
+    const brand=canonicalBrand(t.brand||pendingBrand||"")
     const branded=applyBrandDefaults({...merged,dashboard:{...(merged.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft"}},brand)
     setCfg(branded)
     setCurrentBrand(brand)
@@ -1534,9 +1525,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   function editCustomTemplate(t:{id:string;name:string;config:any;brand:string}){
     const merged=mergeCfg(t.config||{})
-    const branded=applyBrandDefaults(merged,t.brand||"")
+    const brand=canonicalBrand(t.brand||"")
+    const branded=applyBrandDefaults(merged,brand)
     setCfg(branded)
-    setCurrentBrand(t.brand||"")
+    setCurrentBrand(brand)
     setEditingTemplateId(t.id)
     setShowTemplateModal(false)
     setPendingBrand(null)
@@ -1555,7 +1547,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   function applyTemplate(tpl:NonNullable<Cfg["formType"]>){
     const brand=pendingBrand||"SNIPERFACTORY"
-    const ctaBg=brand==="SNIPERFACTORY"?"#529DFF":brand==="SESAC"?"#24A148":brand==="SFACSPACE"?"#073B70":"#EA594D"
+    const ctaBg=brand==="SNIPERFACTORY"?"#529DFF":brand==="SFACSPACE"?"#073B70":"#EA594D"
     const templates:Record<NonNullable<Cfg["formType"]>,Cfg>={
       alert:DEF,
       kdt:DEF_KDT,
@@ -1581,7 +1573,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     try{
       const full=await getFullFormRow(item)
       const cfgCopy=mergeCfg(full.config||{})
-      const brand=cfgCopy.brand||full.brand||item.brand||currentBrand
+      const brand=canonicalBrand(cfgCopy.brand||full.brand||item.brand||currentBrand)
       const brandedCopy=applyBrandDefaults({...cfgCopy,dashboard:{...(cfgCopy.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft"}},brand)
       const newName=item.name+" 복사본"
       const newSlug=(item.slug||item.name).toLowerCase().replace(/\s+/g,"-")+"-copy-"+Date.now()
@@ -1597,7 +1589,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     try{
       const full=await getFullFormRow(item)
       const merged=mergeCfg(full.config||{})
-      const brand=merged.brand||full.brand||item.brand||""
+      const brand=canonicalBrand(merged.brand||full.brand||item.brand||"")
       const branded=applyBrandDefaults(merged,brand)
       setCfg(branded)
       setLoadedId(item.id||"")
@@ -1614,7 +1606,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     try{
       const full=await getFullFormRow(item)
       const merged=mergeCfg(full.config||{})
-      const brand=merged.brand||full.brand||item.brand||""
+      const brand=canonicalBrand(merged.brand||full.brand||item.brand||"")
       setCfg(applyBrandDefaults(merged,brand))
       setLoadedId(item.id||"")
       setLoadedName(full.name||item.name||"")
@@ -1631,7 +1623,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const dashboard=item.config?.dashboard||{}
     setDashboardSettings({
       item,
-      brand:(item.config?.brand||item.brand||"SNIPERFACTORY") as BrandId,
+      brand:canonicalBrand(item.config?.brand||item.brand||"SNIPERFACTORY"),
       formTypeTag:dashboard.formTypeTag||legacyDashboardFormType(item.config?.formType),
       operationStart:dashboard.operationStart||"",
       operationEnd:dashboard.operationEnd||"",
@@ -1889,7 +1881,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 		  }
 	  function onSaveClick(){if(loadedId)setShowUpdateModal(true);else setShowSave(true)}
   function getBrandFormBaseUrl(brand=currentBrand){
-    return (isSniperFamilyBrand(brand)?(sfFormBaseUrl||""):(formBaseUrl||"")).replace(/\/+$/,"")
+    return (canonicalBrand(brand)==="SNIPERFACTORY"?(sfFormBaseUrl||""):(formBaseUrl||"")).replace(/\/+$/,"")
   }
   async function publishAndOpenForm(){
     const base=getBrandFormBaseUrl()
@@ -2563,7 +2555,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   if(view==="dashboard") {
     const BRANDS=[
       {id:"SNIPERFACTORY" as const,label:"스나이퍼팩토리",color:"#6366F1",sub:snList},
-      {id:"SESAC" as const,label:"새싹",color:"#24A148",sub:sesacList},
       {id:"INSIDEOUT" as const,label:"인사이드아웃",color:"#E85C5C",sub:ioList},
       {id:"SFACSPACE" as const,label:"스팩스페이스",color:"#073B70",sub:sfacList},
     ]
@@ -2626,9 +2617,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             return{label:"작성중",color:"#8B5CF6",bg:"rgba(139,92,246,0.10)"}
           }
           const typeLabel=(type:DashboardFormType)=>DASHBOARD_FORM_TYPES.find(x=>x.value===type)?.label||"기타"
-          const brandOf=(item:any)=>item.config?.brand||item.brand||""
+          const brandOf=(item:any)=>canonicalBrand(item.config?.brand||item.brand||"")
           const brandLabel=(brand:string)=>brandDisplayName(brand)
-          const categoryNameOf=(prog?:Prog)=>cats.find(c=>c.id===prog?.category)?.name||"기타"
+          const categoryNameOf=(prog?:Prog)=>{
+            const name=cats.find(c=>c.id===prog?.category)?.name||"기타"
+            return name==="새싹(SeSAC)"?"새싹":name
+          }
           const sidebarItems=saved.filter((item:any)=>!dashBrandFilter||brandOf(item)===dashBrandFilter)
           const sidebarProgramIds=new Set(sidebarItems.map((item:any)=>item.config?.header?.programId).filter(Boolean))
           const sidebarPrograms=progs.filter(program=>sidebarProgramIds.has(program.id))
@@ -2637,6 +2631,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             ;(acc[key]||(acc[key]=[])).push(program)
             return acc
           },{})
+          const internshipPrograms=programGroups["인턴형"]||[]
+          const sesacPrograms=programGroups["새싹"]||[]
+          const remainingProgramGroups=Object.entries(programGroups).filter(([group])=>group!=="인턴형"&&group!=="새싹")
           const filtered=saved.filter((item:any)=>{
             const type=typeOf(item)
             const status=statusOf(item)
@@ -2655,14 +2652,35 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 <div style={{padding:"4px 6px 8px",fontSize:11.5,fontWeight:600,color:A.t3}}>브랜드</div>
                 <button onClick={()=>setDashBrandFilter("")} style={sideButton(!dashBrandFilter)}>전체 브랜드</button>
                 <button onClick={()=>setDashBrandFilter("SNIPERFACTORY")} style={sideButton(dashBrandFilter==="SNIPERFACTORY")}><SFLogo height={13} dark={adminDark}/></button>
-                <button onClick={()=>setDashBrandFilter("SESAC")} style={{...sideButton(dashBrandFilter==="SESAC"),paddingLeft:18}}><SesacLogo height={15}/></button>
                 <button onClick={()=>setDashBrandFilter("INSIDEOUT")} style={sideButton(dashBrandFilter==="INSIDEOUT")}><IOLogo height={12} dark={adminDark}/></button>
                 <button onClick={()=>setDashBrandFilter("SFACSPACE")} style={sideButton(dashBrandFilter==="SFACSPACE")}><SfacspaceLogo height={11} dark={adminDark}/></button>
               </div>
               <div style={{border:`1px solid ${A.border}`,borderRadius:A.r2,padding:8,marginBottom:12}}>
                 <div style={{padding:"4px 6px 8px",fontSize:11.5,fontWeight:600,color:A.t3}}>교육과정</div>
                 <button onClick={()=>setDashProgramFilter("")} style={sideButton(!dashProgramFilter)}>전체 교육과정</button>
-                {Object.entries(programGroups).sort(([a],[b])=>a.localeCompare(b,"ko")).map(([group,programs])=>{
+                {(internshipPrograms.length>0||sesacPrograms.length>0)&&(()=>{
+                  const open=dashOpenGroups["인턴형"]!==false
+                  const sesacOpen=dashOpenGroups["인턴형/새싹"]!==false
+                  return <div>
+                    <button onClick={()=>setDashOpenGroups(prev=>({...prev,"인턴형":!open}))} style={{...sideButton(false),justifyContent:"space-between",color:A.t1,fontWeight:600}}>
+                      <span>인턴형</span>
+                      <span style={{fontSize:12,color:A.t3}}>{open?"−":"+"}</span>
+                    </button>
+                    {open&&internshipPrograms.sort((a,b)=>a.title.localeCompare(b.title,"ko")).map(program=><button key={program.id} onClick={()=>setDashProgramFilter(program.id)} style={{...sideButton(dashProgramFilter===program.id),paddingLeft:18}}>
+                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{program.title}</span>
+                    </button>)}
+                    {open&&sesacPrograms.length>0&&<>
+                      <button onClick={()=>setDashOpenGroups(prev=>({...prev,"인턴형/새싹":!sesacOpen}))} style={{...sideButton(false),paddingLeft:18,justifyContent:"space-between",color:A.t2,fontWeight:600}}>
+                        <span>새싹</span>
+                        <span style={{fontSize:12,color:A.t3}}>{sesacOpen?"−":"+"}</span>
+                      </button>
+                      {sesacOpen&&sesacPrograms.sort((a,b)=>a.title.localeCompare(b.title,"ko")).map(program=><button key={program.id} onClick={()=>setDashProgramFilter(program.id)} style={{...sideButton(dashProgramFilter===program.id),paddingLeft:30}}>
+                        <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{program.title}</span>
+                      </button>)}
+                    </>}
+                  </div>
+                })()}
+                {remainingProgramGroups.sort(([a],[b])=>a.localeCompare(b,"ko")).map(([group,programs])=>{
                   const open=dashOpenGroups[group]!==false
                   return <div key={group}>
                     <button onClick={()=>setDashOpenGroups(prev=>({...prev,[group]:!open}))} style={{...sideButton(false),justifyContent:"space-between",color:A.t1,fontWeight:600}}>
@@ -2754,7 +2772,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <div style={{fontSize:12.5,color:A.t3,marginBottom:20}}>브랜드, 폼 유형과 대시보드 상태 표시 기준을 정합니다.</div>
               <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>브랜드</div>
               <select value={dashboardSettings.brand} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,brand:e.target.value as BrandId}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
-                <option value="SNIPERFACTORY">스나이퍼팩토리</option><option value="SESAC">새싹</option><option value="INSIDEOUT">인사이드아웃</option><option value="SFACSPACE">스팩스페이스</option>
+                <option value="SNIPERFACTORY">스나이퍼팩토리</option><option value="INSIDEOUT">인사이드아웃</option><option value="SFACSPACE">스팩스페이스</option>
               </select>
               <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 유형</div>
               <select value={dashboardSettings.formTypeTag} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formTypeTag:e.target.value as DashboardFormType}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
@@ -2791,12 +2809,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.borderColor=A.border2}}
                   onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.borderColor=A.border2}}>
                   <SFLogo height={22} dark={adminDark}/>
-                </button>
-                <button onClick={()=>startNewForm("SESAC")}
-                  style={{width:"100%",padding:"22px 28px",borderRadius:12,border:`1px solid ${A.border2}`,background:"transparent",cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,transition:"all .15s"}}
-                  onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.borderColor=A.border2}}
-                  onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.borderColor=A.border2}}>
-                  <SesacLogo height={20}/>
                 </button>
                 <button onClick={()=>startNewForm("INSIDEOUT")}
                   style={{width:"100%",padding:"22px 28px",borderRadius:12,border:`1px solid ${A.border2}`,background:"transparent",cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,transition:"all .15s"}}
@@ -3712,7 +3724,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
 
       case "slug": {
-        const isSF=isSniperFamilyBrand(currentBrand)
+        const isSF=canonicalBrand(currentBrand)==="SNIPERFACTORY"
         const base=isSF?(sfFormBaseUrl||"").replace(/\/+$/,""):(formBaseUrl||"").replace(/\/+$/,"")
         const preview=base&&slugDraft?`${base}?slug=${slugDraft}`:""
         return <div style={pd}>
@@ -3727,7 +3739,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
 
       case "qr": {
-        const isSF=isSniperFamilyBrand(currentBrand)
+        const isSF=canonicalBrand(currentBrand)==="SNIPERFACTORY"
         const base=isSF?(sfFormBaseUrl||"").replace(/\/+$/,""):(formBaseUrl||"").replace(/\/+$/,"")
         const hasBase=base.length>0
         const hasSaved=savedSlug.length>0
@@ -3736,7 +3748,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         const qrName=qrMode==="form"?`${loadedName||savedSlug||"catchform"}-form-qr`:"detail-page-qr"
         const trackerBase=typeof window!=="undefined"?window.location.origin:""
         const qrLabel=loadedName||savedSlug||(qrMode==="form"?"폼 QR":"상세페이지 QR")
-        const qrBrand=currentBrand==="SNIPERFACTORY"?"sf":currentBrand==="SESAC"?"ss":currentBrand==="INSIDEOUT"?"io":currentBrand==="SFACSPACE"?"sp":""
+        const qrBrand=currentBrand==="SNIPERFACTORY"?"sf":currentBrand==="INSIDEOUT"?"io":currentBrand==="SFACSPACE"?"sp":""
         const compactLoadedId=compactFormId(loadedId)
         const qrFormRef=compactLoadedId?`i=${encodeURIComponent(compactLoadedId)}`:`s=${encodeURIComponent(savedSlug||"")}`
         const customQrCode=qrMode==="custom"&&activeQrUrl?compactQrCode(`${savedSlug||loadedId||"detail"}|${activeQrUrl}`):""
@@ -4520,7 +4532,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
 
     function renderLinkPanel() {
-    const isSF = isSniperFamilyBrand(currentBrand)
+    const isSF = canonicalBrand(currentBrand)==="SNIPERFACTORY"
     const base = isSF
       ? (sfFormBaseUrl || "").replace(/\/+$/, "")
       : (formBaseUrl || "").replace(/\/+$/, "")
@@ -4528,7 +4540,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const hasSaved = savedSlug.length > 0
     const formUrl = hasBase && hasSaved ? `${base}?slug=${savedSlug}` : ""
     const brandLabel = brandDisplayName(currentBrand)
-    const brandColor = currentBrand==="SESAC" ? "#24A148" : isSF ? "#6366F1" : currentBrand==="SFACSPACE" ? "#073B70" : A.red
+    const brandColor = isSF ? "#6366F1" : currentBrand==="SFACSPACE" ? "#073B70" : A.red
     const urlPropName = isSF ? "SF Form Base URL" : "Form Base URL"
 
     return <div style={{flex:1,overflowY:"auto" as const,padding:20,display:"flex",flexDirection:"column" as const,gap:14}}>
@@ -5546,12 +5558,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2}}
                 onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
                 <SFLogo height={20} dark={adminDark}/>
-              </button>
-              <button onClick={()=>startNewForm("SESAC")}
-                style={{padding:"18px 20px",borderRadius:10,border:`1px solid ${A.border2}`,background:"transparent",cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,transition:"all .15s"}}
-                onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2}}
-                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
-                <SesacLogo height={18}/>
               </button>
               <button onClick={()=>startNewForm("INSIDEOUT")}
                 style={{padding:"18px 20px",borderRadius:10,border:`1px solid ${A.border2}`,background:"transparent",cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,transition:"all .15s"}}
