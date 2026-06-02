@@ -66,6 +66,7 @@ type Cfg = {
     styles: { theme: "dark"|"light"; fieldH: number; qGap: number; maxW: number; labelGap?: number }
     auth: { enabled: boolean; loginUrl: string; errText: string }
     integrations?: { googleSheets?: { enabled: boolean; mode: "existing"|"new"; accountEmail: string; sheetUrl: string; sheetName: string; webhookUrl: string; lastSyncStatus?: "idle"|"sent"|"error"; lastSyncAt?: string; lastSyncMessage?: string } }
+    dashboard?: { isPublished?: boolean; publishedAt?: string }
     brand: string
     formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"
     kdtFields?: KdtField[]
@@ -300,6 +301,7 @@ export function CatchForm(props: {
     if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200, fontFamily: FONT, fontSize: 14, color: "#9EA8C0" }}>불러오는 중...</div>
     if (loadErr) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200, fontFamily: FONT, fontSize: 14, color: "#FF4747" }}>{loadErr}</div>
     if (!cfg) return null
+    if (cfg.dashboard?.isPublished === false) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 240, padding: 24, fontFamily: FONT, fontSize: 14, color: "#9EA8C0", textAlign: "center" }}>아직 공개되지 않은 폼이에요.</div>
 
     const resolvedSlug = (() => {
         try { const p=new URLSearchParams(window.location.search); return p.get("slug")||propSlug } catch { return propSlug }

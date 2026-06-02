@@ -11,9 +11,10 @@ type Theme = "dark" | "light"
 type Opt = { label: string; value: string; isEtc: boolean; nextPage?: number }
 type Cat = { id: string; name: string }
 type Prog = { id: string; title: string; slug?: string; category?: string; [key:string]:any }
+type BrandId = "SNIPERFACTORY"|"INSIDEOUT"|"SFACSPACE"
 type DashboardFormType = "alert"|"application"|"recruit"|"survey"|"evaluation"|"other"
 type DashboardManualStatus = ""|"draft"|"active"|"closed"
-type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; manualStatus?:DashboardManualStatus }
+type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; manualStatus?:DashboardManualStatus; isPublished?:boolean; publishedAt?:string }
 type KdtFieldType = FieldType|"section_desc"
 type KdtField = { id:string; label:string; type:KdtFieldType; required?:boolean; page?:number; options?:string[]; placeholder?:string; desc?:string }
 type FieldType = "text"|"name"|"phone"|"email"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"
@@ -494,6 +495,29 @@ function SFLogo({height=28,dark=false}:{height?:number;dark?:boolean}){
     <rect fill="#f3bdd6" y="11.56" width="15.58" height="3.95" rx="1.33" ry="1.33"/>
     <rect fill="#4bd6a1" x="-3.25" y="3.25" width="10.46" height="3.95" rx="1.33" ry="1.33" transform="translate(-3.25 7.21) rotate(-90)"/>
     <path fill="#358bfc" d="M6.26,0h0C11.4,0,15.58,4.18,15.58,9.32h0c0,.63-.51,1.14-1.14,1.14H6.26c-.63,0-1.14-.51-1.14-1.14V1.14C5.13.52,5.64,0,6.26,0Z"/>
+  </svg>
+}
+
+function SfacspaceLogo({height=18,dark=false}:{height?:number;dark?:boolean}){
+  return <img src="/sfacspace_logo_black.png" alt="스팩스페이스" style={{display:"block",height,width:"auto",maxWidth:"100%",objectFit:"contain",filter:dark?"brightness(0) invert(1)":"none",flexShrink:0}}/>
+}
+
+function BrandLogo({brand,height=18,dark=false}:{brand:string;height?:number;dark?:boolean}){
+  if(brand==="INSIDEOUT")return <IOLogo height={height} dark={dark}/>
+  if(brand==="SFACSPACE")return <SfacspaceLogo height={height} dark={dark}/>
+  return <SFLogo height={height} dark={dark}/>
+}
+
+function brandDisplayName(brand:string){
+  if(brand==="SNIPERFACTORY")return"스나이퍼팩토리"
+  if(brand==="INSIDEOUT")return"인사이드아웃"
+  if(brand==="SFACSPACE")return"스팩스페이스"
+  return"기타"
+}
+
+function SelectChevron({color}:{color:string}){
+  return <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}>
+    <path d="m4 6 4 4 4-4" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 }
 
@@ -1179,10 +1203,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   // ── Dashboard data ─────────────────────────────────────────────────────
   const [snList,setSnList]=React.useState<any[]>([])
   const [ioList,setIoList]=React.useState<any[]>([])
+  const [sfacList,setSfacList]=React.useState<any[]>([])
   const [dashLoading,setDashLoading]=React.useState(false)
   const [showBrandModal,setShowBrandModal]=React.useState(false)
   const [showGuide,setShowGuide]=React.useState(false)
-  const [dashTab,setDashTab]=React.useState<"SNIPERFACTORY"|"INSIDEOUT">("SNIPERFACTORY")
+  const [dashTab,setDashTab]=React.useState<BrandId>("SNIPERFACTORY")
   const [dashBrandFilter,setDashBrandFilter]=React.useState("")
   const [dashProgramFilter,setDashProgramFilter]=React.useState("")
   const [dashSideTypeFilter,setDashSideTypeFilter]=React.useState<DashboardFormType|"" >("")
@@ -1191,13 +1216,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [dashQuery,setDashQuery]=React.useState("")
   const [dashOpenGroups,setDashOpenGroups]=React.useState<Record<string,boolean>>({})
   const [dashResponseCounts,setDashResponseCounts]=React.useState<Record<string,number>>({})
-  const [dashboardSettings,setDashboardSettings]=React.useState<null|{item:any;formTypeTag:DashboardFormType;operationStart:string;operationEnd:string;manualStatus:DashboardManualStatus}>(null)
+  const [dashboardSettings,setDashboardSettings]=React.useState<null|{item:any;brand:BrandId;formTypeTag:DashboardFormType;operationStart:string;operationEnd:string;manualStatus:DashboardManualStatus}>(null)
   const [dashboardSettingsSaving,setDashboardSettingsSaving]=React.useState(false)
   const [guideData,setGuideData]=React.useState<{topics:any[]}|null>(null)
   const [guideLoading,setGuideLoading]=React.useState(false)
   const [guideTopic,setGuideTopic]=React.useState(0)
   const [guidePage,setGuidePage]=React.useState(0)
-  const [pendingBrand,setPendingBrand]=React.useState<"SNIPERFACTORY"|"INSIDEOUT"|null>(null)
+  const [pendingBrand,setPendingBrand]=React.useState<BrandId|null>(null)
   const [showTemplateModal,setShowTemplateModal]=React.useState(false)
 
   // ── Builder cfg ────────────────────────────────────────────────────────
@@ -1444,6 +1469,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const all=await fetchFormSummaries(sb,100)
       setSnList(all.filter((x:any)=>(x.config?.brand||x.brand)==="SNIPERFACTORY"))
       setIoList(all.filter((x:any)=>(x.config?.brand||x.brand)==="INSIDEOUT"))
+      setSfacList(all.filter((x:any)=>(x.config?.brand||x.brand)==="SFACSPACE"))
       setSaved(all)
       loadDashboardResponseCounts(sb,all)
       const warm=()=>all.slice(0,16).forEach((item:any)=>prefetchFullFormRow(item))
@@ -1467,7 +1493,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     }catch{}
   }
 
-  function startNewForm(brand:"SNIPERFACTORY"|"INSIDEOUT"){
+  function startNewForm(brand:BrandId){
     setShowBrandModal(false)
     setPendingBrand(brand)
     setShowTemplateModal(true)
@@ -1476,7 +1502,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   function applyCustomTemplate(t:{id:string;name:string;config:any;brand:string}){
     const merged=mergeCfg(t.config||{})
     const brand=t.brand||pendingBrand||""
-    const branded=applyBrandDefaults(merged,brand)
+    const branded=applyBrandDefaults({...merged,dashboard:{...(merged.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft"}},brand)
     setCfg(branded)
     setCurrentBrand(brand)
     setShowTemplateModal(false)
@@ -1507,7 +1533,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   function applyTemplate(tpl:NonNullable<Cfg["formType"]>){
     const brand=pendingBrand||"SNIPERFACTORY"
-    const ctaBg=brand==="SNIPERFACTORY"?"#529DFF":"#EA594D"
+    const ctaBg=brand==="SNIPERFACTORY"?"#529DFF":brand==="SFACSPACE"?"#073B70":"#EA594D"
     const templates:Record<NonNullable<Cfg["formType"]>,Cfg>={
       alert:DEF,
       kdt:DEF_KDT,
@@ -1519,6 +1545,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const base=dc(templates[tpl]||DEF)
     base.brand=brand
     base.cta.bg=ctaBg
+    base.dashboard={...(base.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft"}
     const branded=applyBrandDefaults(base,brand)
     setShowTemplateModal(false);setPendingBrand(null)
     setCfg(branded);setLoadedId("");setLoadedName("");setSavedSlug("");setCurrentBrand(brand)
@@ -1533,7 +1560,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const full=await getFullFormRow(item)
       const cfgCopy=mergeCfg(full.config||{})
       const brand=cfgCopy.brand||full.brand||item.brand||currentBrand
-      const brandedCopy=applyBrandDefaults(cfgCopy,brand)
+      const brandedCopy=applyBrandDefaults({...cfgCopy,dashboard:{...(cfgCopy.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft"}},brand)
       const newName=item.name+" 복사본"
       const newSlug=(item.slug||item.name).toLowerCase().replace(/\s+/g,"-")+"-copy-"+Date.now()
       const{error}=await supa.from("form_configs").insert({name:newName,slug:newSlug,config:brandedCopy,brand})
@@ -1582,6 +1609,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const dashboard=item.config?.dashboard||{}
     setDashboardSettings({
       item,
+      brand:(item.config?.brand||item.brand||"SNIPERFACTORY") as BrandId,
       formTypeTag:dashboard.formTypeTag||legacyDashboardFormType(item.config?.formType),
       operationStart:dashboard.operationStart||"",
       operationEnd:dashboard.operationEnd||"",
@@ -1593,7 +1621,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setDashboardSettingsSaving(true)
     try{
       const full=await getFullFormRow(dashboardSettings.item)
-      const next=mergeCfg(full.config||{})
+      const next=applyBrandDefaults(mergeCfg(full.config||{}),dashboardSettings.brand)
       next.dashboard={
         ...(next.dashboard||{}),
         formTypeTag:dashboardSettings.formTypeTag,
@@ -1601,7 +1629,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         operationEnd:dashboardSettings.operationEnd,
         manualStatus:dashboardSettings.manualStatus,
       }
-      const {error}=await supa.from("form_configs").update({config:next,updated_at:new Date().toISOString()}).eq("id",dashboardSettings.item.id)
+      const {error}=await supa.from("form_configs").update({config:next,brand:dashboardSettings.brand,updated_at:new Date().toISOString()}).eq("id",dashboardSettings.item.id)
       if(error)throw error
       delete fullFormCache.current[dashboardSettings.item.id]
       setDashboardSettings(null)
@@ -1816,7 +1844,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setSaving(true);setSaveErr("")
     try{
       const slug=saveSlug.trim()||saveName.trim().toLowerCase().replace(/\s+/g,"-")+"-"+Date.now()
-      const cfgFinal={...cfg,brand:currentBrand}
+      const cfgFinal={...cfg,brand:currentBrand,dashboard:{...(cfg.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft" as DashboardManualStatus}}
       const{data:ins,error}=await supa.from("form_configs").insert({name:saveName.trim(),slug,config:cfgFinal,brand:currentBrand}).select("id,slug").single()
       if(error)throw error
       setShowSave(false);setSaveName("");setSaveSlug("")
@@ -1838,6 +1866,47 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 		      .then(({error})=>{if(error)showToast("저장 중 오류가 발생했어요",false);else{loadList();loadDashboard(supa)}})
 		  }
 	  function onSaveClick(){if(loadedId)setShowUpdateModal(true);else setShowSave(true)}
+  function getBrandFormBaseUrl(brand=currentBrand){
+    return (brand==="SNIPERFACTORY"?(sfFormBaseUrl||""):(formBaseUrl||"")).replace(/\/+$/,"")
+  }
+  async function publishAndOpenForm(){
+    const base=getBrandFormBaseUrl()
+    if(!base){showToast("환경변수 NEXT_PUBLIC_FORM_BASE_URL을 먼저 설정해주세요",false);return}
+    if(!savedSlug||!loadedId){showToast("폼을 먼저 저장해주세요",false);return}
+    const target=`${base}?slug=${savedSlug}`
+    const popup=typeof window!=="undefined"?window.open("about:blank","_blank"):null
+    if(!supa){
+      if(popup)popup.location.href=target
+      else window.open(target,"_blank")
+      return
+    }
+    setActionLoading("폼을 공개하는 중이에요.")
+    try{
+      const now=new Date().toISOString()
+      const dashboard=cfg.dashboard||{}
+      const nextCfg:Cfg={
+        ...cfg,
+        brand:currentBrand,
+        dashboard:{
+          ...dashboard,
+          isPublished:true,
+          publishedAt:dashboard.publishedAt||now,
+          manualStatus:!dashboard.manualStatus||dashboard.manualStatus==="draft"?"active":dashboard.manualStatus,
+        },
+      }
+      const{error}=await supa.from("form_configs").update({config:nextCfg,brand:currentBrand,updated_at:now}).eq("id",loadedId)
+      if(error)throw error
+      setCfg(nextCfg)
+      fullFormCache.current[loadedId]={updatedAt:now,data:{config:nextCfg,slug:savedSlug,name:loadedName,brand:currentBrand}}
+      loadList();loadDashboard(supa)
+      if(popup)popup.location.href=target
+      else window.open(target,"_blank")
+      showToast("폼을 공개하고 새 창에서 열었어요.")
+    }catch(e){
+      popup?.close()
+      showToast("폼 공개 실패: "+((e as any)?.message||"오류"),false)
+    }finally{setActionLoading("")}
+  }
   async function setGoogleSheetsSyncStatus(status:"sent"|"error",message:string,patch:Partial<NonNullable<NonNullable<Cfg["integrations"]>["googleSheets"]>>={}){
     const nextCfg={
       ...cfg,
@@ -2472,6 +2541,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const BRANDS=[
       {id:"SNIPERFACTORY" as const,label:"스나이퍼팩토리",color:"#6366F1",sub:snList},
       {id:"INSIDEOUT" as const,label:"인사이드아웃",color:"#E85C5C",sub:ioList},
+      {id:"SFACSPACE" as const,label:"스팩스페이스",color:"#073B70",sub:sfacList},
     ]
     return (
       <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,fontFamily:FONT,overflow:"hidden",position:"relative" as const}}>
@@ -2514,6 +2584,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           const typeOf=(item:any):DashboardFormType=>item.config?.dashboard?.formTypeTag||legacyDashboardFormType(item.config?.formType)
           const statusOf=(item:any):DashboardManualStatus=>{
             const dashboard=item.config?.dashboard||{}
+            if(dashboard.isPublished===false)return"draft"
             const dbPeriod=recruitmentPeriodOf(programOf(item))
             const start=dbPeriod.start||dashboard.operationStart||""
             const end=dbPeriod.end||dashboard.operationEnd||""
@@ -2528,11 +2599,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           const statusInfo=(status:DashboardManualStatus)=>{
             if(status==="active")return{label:"진행중",color:A.green,bg:"rgba(23,201,100,0.10)"}
             if(status==="closed")return{label:"종료",color:A.t2,bg:A.card2}
-            return{label:"임시저장",color:"#8B5CF6",bg:"rgba(139,92,246,0.10)"}
+            return{label:"작성중",color:"#8B5CF6",bg:"rgba(139,92,246,0.10)"}
           }
           const typeLabel=(type:DashboardFormType)=>DASHBOARD_FORM_TYPES.find(x=>x.value===type)?.label||"기타"
           const brandOf=(item:any)=>item.config?.brand||item.brand||""
-          const brandLabel=(brand:string)=>brand==="SNIPERFACTORY"?"스나이퍼팩토리":brand==="INSIDEOUT"?"인사이드아웃":"기타"
+          const brandLabel=(brand:string)=>brandDisplayName(brand)
           const categoryNameOf=(prog?:Prog)=>cats.find(c=>c.id===prog?.category)?.name||"기타"
           const sidebarItems=saved.filter((item:any)=>!dashBrandFilter||brandOf(item)===dashBrandFilter)
           const sidebarProgramIds=new Set(sidebarItems.map((item:any)=>item.config?.header?.programId).filter(Boolean))
@@ -2561,6 +2632,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 <button onClick={()=>setDashBrandFilter("")} style={sideButton(!dashBrandFilter)}>전체 브랜드</button>
                 <button onClick={()=>setDashBrandFilter("SNIPERFACTORY")} style={sideButton(dashBrandFilter==="SNIPERFACTORY")}><SFLogo height={13} dark={adminDark}/></button>
                 <button onClick={()=>setDashBrandFilter("INSIDEOUT")} style={sideButton(dashBrandFilter==="INSIDEOUT")}><IOLogo height={12} dark={adminDark}/></button>
+                <button onClick={()=>setDashBrandFilter("SFACSPACE")} style={sideButton(dashBrandFilter==="SFACSPACE")}><SfacspaceLogo height={11} dark={adminDark}/></button>
               </div>
               <div style={{border:`1px solid ${A.border}`,borderRadius:A.r2,padding:8,marginBottom:12}}>
                 <div style={{padding:"4px 6px 8px",fontSize:11.5,fontWeight:600,color:A.t3}}>교육과정</div>
@@ -2591,26 +2663,32 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   <div style={{fontSize:12.5,color:A.t3,marginTop:4}}>필요한 폼을 빠르게 찾고 응답 현황을 확인할 수 있어요.</div>
                 </div>
                 <div style={{flex:1}}/>
-                <select value={dashTopTypeFilter} onChange={e=>setDashTopTypeFilter(e.target.value as DashboardFormType|"")} style={{height:36,padding:"0 28px 0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,outline:"none"}}>
-                  <option value="">폼 유형 전체</option>
-                  {DASHBOARD_FORM_TYPES.map(type=><option key={type.value} value={type.value}>{type.label}</option>)}
-                </select>
-                <select value={dashTopStatusFilter} onChange={e=>setDashTopStatusFilter(e.target.value as DashboardManualStatus|"")} style={{height:36,padding:"0 28px 0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,outline:"none"}}>
-                  <option value="">상태 전체</option>
-                  <option value="draft">임시저장</option>
-                  <option value="active">진행중</option>
-                  <option value="closed">종료</option>
-                </select>
+                <div style={{position:"relative" as const}}>
+                  <select value={dashTopTypeFilter} onChange={e=>setDashTopTypeFilter(e.target.value as DashboardFormType|"")} style={{height:36,minWidth:132,padding:"0 38px 0 12px",appearance:"none" as any,WebkitAppearance:"none" as any,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,outline:"none"}}>
+                    <option value="">폼 유형 전체</option>
+                    {DASHBOARD_FORM_TYPES.map(type=><option key={type.value} value={type.value}>{type.label}</option>)}
+                  </select>
+                  <SelectChevron color={A.t2}/>
+                </div>
+                <div style={{position:"relative" as const}}>
+                  <select value={dashTopStatusFilter} onChange={e=>setDashTopStatusFilter(e.target.value as DashboardManualStatus|"")} style={{height:36,minWidth:116,padding:"0 38px 0 12px",appearance:"none" as any,WebkitAppearance:"none" as any,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,outline:"none"}}>
+                    <option value="">상태 전체</option>
+                    <option value="draft">작성중</option>
+                    <option value="active">진행중</option>
+                    <option value="closed">종료</option>
+                  </select>
+                  <SelectChevron color={A.t2}/>
+                </div>
                 <div style={{width:220,height:36,display:"flex",alignItems:"center",gap:7,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card}}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{color:A.t3,flexShrink:0}}><circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8"/><path d="m20 20-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
                   <input value={dashQuery} onChange={e=>setDashQuery(e.target.value)} placeholder="폼 이름 검색" style={{width:"100%",border:"none",outline:"none",background:"transparent",color:A.t1,fontFamily:FONT,fontSize:12.5}}/>
                 </div>
               </div>
               <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,boxShadow:A.shadow,overflowX:"auto" as const,overflowY:"hidden" as const}}>
-                <div style={{display:"grid",gridTemplateColumns:"minmax(240px,1.7fr) 110px minmax(160px,1fr) 92px 80px 74px 100px 148px",alignItems:"center",minWidth:1050,padding:"11px 14px",borderBottom:`1px solid ${A.border}`,background:A.card2,fontSize:11.5,fontWeight:600,color:A.t3}}>
+                <div style={{display:"grid",gridTemplateColumns:"minmax(210px,1.35fr) 132px minmax(160px,1fr) 92px 80px 74px 100px 148px",alignItems:"center",minWidth:1080,padding:"11px 14px",borderBottom:`1px solid ${A.border}`,background:A.card2,fontSize:11.5,fontWeight:600,color:A.t3}}>
                   <span>폼 이름</span><span>브랜드</span><span>교육과정</span><span>폼 유형</span><span>상태</span><span>응답 수</span><span>수정일</span><span style={{textAlign:"right"}}>관리</span>
                 </div>
-                <div style={{minWidth:1050}}>
+                <div style={{minWidth:1080}}>
                   {dashLoading?<div style={{padding:14}}>{[1,2,3,4,5].map(i=><div key={i} style={{height:50,borderRadius:A.r,background:A.card2,marginBottom:8,animation:"skeletonPulse 1.4s ease-in-out infinite"}}/>)}</div>
                   :filtered.length===0?<div style={{padding:"56px 20px",textAlign:"center" as const,fontSize:13,color:A.t3}}>조건에 맞는 폼이 없어요.</div>
                   :filtered.map((item:any)=>{
@@ -2618,8 +2696,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     const status=statusInfo(statusOf(item))
                     const program=programOf(item)
                     return <div key={item.id} onMouseEnter={()=>prefetchFullFormRow(item)} onContextMenu={e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,item,source:"dashboard"})}}
-                      style={{display:"grid",gridTemplateColumns:"minmax(240px,1.7fr) 110px minmax(160px,1fr) 92px 80px 74px 100px 148px",alignItems:"center",minHeight:58,padding:"0 14px",borderBottom:`1px solid ${A.border}`,fontSize:12.5,color:A.t2}}>
-                      <div style={{minWidth:0}}>
+                      style={{display:"grid",gridTemplateColumns:"minmax(210px,1.35fr) 132px minmax(160px,1fr) 92px 80px 74px 100px 148px",alignItems:"center",minHeight:58,padding:"0 14px",borderBottom:`1px solid ${A.border}`,fontSize:12.5,color:A.t2}}>
+                      <div style={{minWidth:0,paddingRight:20}}>
                         <div style={{fontSize:13,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name||"이름 없는 폼"}</div>
                         <div style={{fontSize:11.5,color:A.t3,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.config?.header?.title||""}</div>
                       </div>
@@ -2631,7 +2709,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       <span>{item.updated_at?new Date(item.updated_at).toLocaleDateString("ko-KR"):"-"}</span>
                       <div style={{display:"flex",justifyContent:"flex-end",gap:4}}>
                         <button onClick={()=>openFormAnalytics(item)} title="응답 및 분석" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg></button>
-                        <button onClick={()=>openDashboardSettings(item)} title="목록 설정" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V20.3h-3v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 0 0 7.08 15a1.7 1.7 0 0 0-1.55-1H5.4v-3h.13a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06L8.8 5.94l.06.06a1.7 1.7 0 0 0 1.88.34 1.7 1.7 0 0 0 1-1.55V4.7h3v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.12 2.12-.06.06A1.7 1.7 0 0 0 19.4 10a1.7 1.7 0 0 0 1.55 1h.13v3h-.13a1.7 1.7 0 0 0-1.55 1Z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                        <button onClick={()=>openDashboardSettings(item)} title="목록 설정" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                         <button onClick={()=>openFormForEdit(item)} title="편집" style={{height:30,padding:"0 9px",borderRadius:6,border:`1px solid ${A.border}`,background:A.card,color:A.t1,cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:600}}>편집</button>
                       </div>
                     </div>
@@ -2648,7 +2726,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           return <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={()=>setDashboardSettings(null)}>
             <div style={{width:420,padding:24,borderRadius:16,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
               <div style={{fontSize:17,fontWeight:600,color:A.t1,marginBottom:5}}>목록 설정</div>
-              <div style={{fontSize:12.5,color:A.t3,marginBottom:20}}>폼 유형과 대시보드 상태 표시 기준을 정합니다.</div>
+              <div style={{fontSize:12.5,color:A.t3,marginBottom:20}}>브랜드, 폼 유형과 대시보드 상태 표시 기준을 정합니다.</div>
+              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>브랜드</div>
+              <select value={dashboardSettings.brand} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,brand:e.target.value as BrandId}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
+                <option value="SNIPERFACTORY">스나이퍼팩토리</option><option value="INSIDEOUT">인사이드아웃</option><option value="SFACSPACE">스팩스페이스</option>
+              </select>
               <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 유형</div>
               <select value={dashboardSettings.formTypeTag} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formTypeTag:e.target.value as DashboardFormType}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
                 {DASHBOARD_FORM_TYPES.map(type=><option key={type.value} value={type.value}>{type.label}</option>)}
@@ -2662,7 +2744,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 </div>
                 <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>기간 미설정 시 상태</div>
                 <select value={dashboardSettings.manualStatus} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,manualStatus:e.target.value as DashboardManualStatus}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
-                  <option value="">임시저장</option><option value="active">진행중</option><option value="closed">종료</option>
+                  <option value="">작성중</option><option value="active">진행중</option><option value="closed">종료</option>
                 </select>
               </>}
               <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
@@ -2691,6 +2773,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.borderColor=A.border2}}>
                   <IOLogo height={18} dark={adminDark}/>
                 </button>
+                <button onClick={()=>startNewForm("SFACSPACE")}
+                  style={{width:"100%",padding:"22px 28px",borderRadius:12,border:`1px solid ${A.border2}`,background:"transparent",cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,transition:"all .15s"}}
+                  onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.borderColor=A.border2}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.borderColor=A.border2}}>
+                  <SfacspaceLogo height={18} dark={adminDark}/>
+                </button>
               </div>
             </div>
           </div>
@@ -2704,7 +2792,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:18,fontWeight:600,color:A.t1,marginBottom:6,letterSpacing:"-0.3px"}}>어떤 형식의 폼을 만들까요?</div>
               <div style={{fontSize:13,color:A.t3,marginBottom:20}}>
-                {pendingBrand==="SNIPERFACTORY"?"스나이퍼팩토리":"인사이드아웃"} 브랜드 폼
+                {brandDisplayName(pendingBrand||"")} 브랜드 폼
               </div>
               <div style={{display:"flex",flexDirection:"column" as const,gap:10}}>
               {[
@@ -3617,7 +3705,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         const qrName=qrMode==="form"?`${loadedName||savedSlug||"catchform"}-form-qr`:"detail-page-qr"
         const trackerBase=typeof window!=="undefined"?window.location.origin:""
         const qrLabel=loadedName||savedSlug||(qrMode==="form"?"폼 QR":"상세페이지 QR")
-        const qrBrand=currentBrand==="SNIPERFACTORY"?"sf":currentBrand==="INSIDEOUT"?"io":""
+        const qrBrand=currentBrand==="SNIPERFACTORY"?"sf":currentBrand==="INSIDEOUT"?"io":currentBrand==="SFACSPACE"?"sp":""
         const compactLoadedId=compactFormId(loadedId)
         const qrFormRef=compactLoadedId?`i=${encodeURIComponent(compactLoadedId)}`:`s=${encodeURIComponent(savedSlug||"")}`
         const customQrCode=qrMode==="custom"&&activeQrUrl?compactQrCode(`${savedSlug||loadedId||"detail"}|${activeQrUrl}`):""
@@ -4408,9 +4496,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const hasBase = base.length > 0
     const hasSaved = savedSlug.length > 0
     const formUrl = hasBase && hasSaved ? `${base}?slug=${savedSlug}` : ""
-    const brandLabel = isSF ? "스나이퍼팩토리" : "인사이드아웃"
-    const brandColor = isSF ? "#6366F1" : A.red
-    const urlPropName = isSF ? "SF Form Base URL" : "IO Form Base URL"
+    const brandLabel = brandDisplayName(currentBrand)
+    const brandColor = isSF ? "#6366F1" : currentBrand==="SFACSPACE" ? "#073B70" : A.red
+    const urlPropName = isSF ? "SF Form Base URL" : "Form Base URL"
 
     return <div style={{flex:1,overflowY:"auto" as const,padding:20,display:"flex",flexDirection:"column" as const,gap:14}}>
 
@@ -4462,7 +4550,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M6.5 9.5a4.24 4.24 0 0 0 6 0l2-2a4.24 4.24 0 0 0-6-6L7 3M9.5 6.5a4.24 4.24 0 0 0-6 0l-2 2a4.24 4.24 0 0 0 6 6L9 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
               복사
             </button>
-            <button onClick={()=>window.open(formUrl,"_blank")}
+            <button onClick={publishAndOpenForm}
               style={{display:"flex",alignItems:"center",gap:5,height:30,padding:"0 12px",borderRadius:A.r,border:"none",background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:500,transition:"background .1s"}}
               onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2}}
               onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
@@ -5267,7 +5355,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         {currentBrand&&<>
           <div style={{width:1,height:16,background:A.border}}/>
           <div style={{display:"flex",alignItems:"center"}}>
-            {currentBrand==="INSIDEOUT"?<IOLogo height={15} dark={adminDark}/>:<SFLogo height={20} dark={adminDark}/>}
+            <BrandLogo brand={currentBrand} height={currentBrand==="SNIPERFACTORY"?20:15} dark={adminDark}/>
           </div>
         </>}
         {loadedName&&<span style={{fontSize:12.5,fontWeight:600,color:A.t1}}>{loadedName}</span>}
@@ -5298,13 +5386,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           {showAnalyticsTip&&<div style={{position:"absolute" as const,top:"calc(100% + 7px)",left:"50%",transform:"translateX(-50%)",background:A.t1,color:A.card,padding:"5px 8px",borderRadius:6,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const,zIndex:1000,boxShadow:A.shadow}}>응답 및 분석</div>}
         </div>
         <Btn onClick={onSaveClick} sm A={A}>저장</Btn>
-        <Btn onClick={()=>{
-          const isSF=currentBrand==="SNIPERFACTORY"
-          const base=isSF?(sfFormBaseUrl||"").replace(/\/+$/,""):(formBaseUrl||"").replace(/\/+$/,"")
-          if(!base){showToast("환경변수 NEXT_PUBLIC_FORM_BASE_URL을 먼저 설정해주세요",false);return}
-          if(!savedSlug){showToast("폼을 먼저 저장해주세요",false);return}
-          window.open(`${base}?slug=${savedSlug}`,"_blank")
-        }} variant="blue" sm A={A}>
+        <Btn onClick={publishAndOpenForm} variant="blue" sm A={A}>
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><path d="M10 2h4v4M14 2l-7 7M6 4H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           폼 열기
         </Btn>
@@ -5424,6 +5506,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
                 <IOLogo height={16} dark={adminDark}/>
               </button>
+              <button onClick={()=>startNewForm("SFACSPACE")}
+                style={{padding:"18px 20px",borderRadius:10,border:`1px solid ${A.border2}`,background:"transparent",cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,transition:"all .15s"}}
+                onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2}}
+                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
+                <SfacspaceLogo height={16} dark={adminDark}/>
+              </button>
             </div>
           </div>
         </div>
@@ -5436,7 +5524,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <button onClick={()=>{setShowTemplateModal(false);setPendingBrand(null)}} style={{position:"absolute",top:14,right:14,width:28,height:28,borderRadius:"50%",border:`1px solid ${A.border}`,background:A.card2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:A.t3,lineHeight:1}}>×</button>
             <div style={{fontSize:18,fontWeight:600,color:A.t1,marginBottom:6,letterSpacing:"-0.3px"}}>어떤 형식의 폼을 만들까요?</div>
             <div style={{fontSize:13,color:A.t3,marginBottom:20}}>
-              {pendingBrand==="SNIPERFACTORY"?"스나이퍼팩토리":"인사이드아웃"} 브랜드 폼
+              {brandDisplayName(pendingBrand||"")} 브랜드 폼
             </div>
             <div style={{display:"flex",flexDirection:"column" as const,gap:10}}>
               {[

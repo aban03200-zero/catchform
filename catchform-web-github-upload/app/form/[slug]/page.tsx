@@ -13,7 +13,7 @@ async function getInitialForm(slug: string) {
         apikey: publicEnv.supabaseAnonKey,
         authorization: `Bearer ${publicEnv.supabaseAnonKey}`,
       },
-      next: { revalidate: 30 },
+      cache: "no-store",
     })
     if (!res.ok) return null
     const rows = (await res.json()) as Array<{ id: string; config: unknown }>

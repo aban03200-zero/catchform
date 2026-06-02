@@ -35,7 +35,7 @@ function appendQrParams(target: string, params: Record<string, string>) {
 
 function normalizeBrand(raw: string) {
   const value = (raw || "").toUpperCase()
-  return value === "SF" ? "SNIPERFACTORY" : value === "IO" ? "INSIDEOUT" : value
+  return value === "SF" ? "SNIPERFACTORY" : value === "IO" ? "INSIDEOUT" : value === "SP" ? "SFACSPACE" : value
 }
 
 function decodeCompactFormId(value: string) {
