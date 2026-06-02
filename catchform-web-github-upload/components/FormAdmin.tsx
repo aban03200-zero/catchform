@@ -1116,7 +1116,7 @@ function ConsentBodyPreview({body,accentColor,FC,noBorder,noAccordion}:{body:str
 
 // ─── ProgramPicker — category grid → program list ────────────────────────
 const IO_CAT_NAMES = ["인턴형", "프로젝트형"]
-const SF_CAT_NAMES = ["새싹(SeSAC)", "새싹", "중소기업 인재키움", "KDT"]
+const SF_CAT_NAMES = ["새싹(SeSAC)", "새싹", "KDT", "중소기업 인재키움", "인턴형"]
 
 function ProgramPicker({progs,cats,brand,value,onChange,A}:{progs:Prog[];cats:Cat[];brand:string;value:string;onChange:(p:Prog)=>void;A:AT}) {
   const [selCat,setSelCat]=React.useState<string|null>(null)
@@ -2621,19 +2621,32 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           const brandLabel=(brand:string)=>brandDisplayName(brand)
           const categoryNameOf=(prog?:Prog)=>{
             const name=cats.find(c=>c.id===prog?.category)?.name||"기타"
-            return name==="새싹(SeSAC)"?"새싹":name
+            if(name==="새싹(SeSAC)")return"새싹"
+            if(name==="중소기업 인재키움")return"인재키움"
+            return name
           }
           const sidebarItems=saved.filter((item:any)=>!dashBrandFilter||brandOf(item)===dashBrandFilter)
           const sidebarProgramIds=new Set(sidebarItems.map((item:any)=>item.config?.header?.programId).filter(Boolean))
           const sidebarPrograms=progs.filter(program=>sidebarProgramIds.has(program.id))
+          const sfProgramGroups=["새싹","KDT","인재키움","인턴형"]
+          const ioProgramGroups=["인턴형","프로젝트형"]
+          const defaultProgramGroups=dashBrandFilter==="SNIPERFACTORY"
+            ?sfProgramGroups
+            :dashBrandFilter==="INSIDEOUT"
+              ?ioProgramGroups
+              :dashBrandFilter==="SFACSPACE"
+                ?[]
+                :[...sfProgramGroups,...ioProgramGroups.filter(group=>!sfProgramGroups.includes(group))]
+          const visibleProgramGroups=sidebarPrograms.reduce((acc:string[],program)=>{
+            const key=categoryNameOf(program)
+            if(dashBrandFilter!=="SFACSPACE"&&!acc.includes(key))acc.push(key)
+            return acc
+          },[...defaultProgramGroups])
           const programGroups=sidebarPrograms.reduce((acc:Record<string,Prog[]>,program)=>{
             const key=categoryNameOf(program)
             ;(acc[key]||(acc[key]=[])).push(program)
             return acc
-          },{})
-          const internshipPrograms=programGroups["인턴형"]||[]
-          const sesacPrograms=programGroups["새싹"]||[]
-          const remainingProgramGroups=Object.entries(programGroups).filter(([group])=>group!=="인턴형"&&group!=="새싹")
+          },Object.fromEntries(visibleProgramGroups.map(group=>[group,[]])) as Record<string,Prog[]>)
           const filtered=saved.filter((item:any)=>{
             const type=typeOf(item)
             const status=statusOf(item)
@@ -2650,37 +2663,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <aside style={{width:252,flexShrink:0,overflowY:"auto" as const,padding:16,borderRight:`1px solid ${A.border}`,background:A.card}}>
               <div style={{border:`1px solid ${A.border}`,borderRadius:A.r2,padding:8,marginBottom:12}}>
                 <div style={{padding:"4px 6px 8px",fontSize:11.5,fontWeight:600,color:A.t3}}>브랜드</div>
-                <button onClick={()=>setDashBrandFilter("")} style={sideButton(!dashBrandFilter)}>전체 브랜드</button>
-                <button onClick={()=>setDashBrandFilter("SNIPERFACTORY")} style={sideButton(dashBrandFilter==="SNIPERFACTORY")}><SFLogo height={13} dark={adminDark}/></button>
-                <button onClick={()=>setDashBrandFilter("INSIDEOUT")} style={sideButton(dashBrandFilter==="INSIDEOUT")}><IOLogo height={12} dark={adminDark}/></button>
-                <button onClick={()=>setDashBrandFilter("SFACSPACE")} style={sideButton(dashBrandFilter==="SFACSPACE")}><SfacspaceLogo height={11} dark={adminDark}/></button>
+                <button onClick={()=>{setDashBrandFilter("");setDashProgramFilter("")}} style={sideButton(!dashBrandFilter)}>전체 브랜드</button>
+                <button onClick={()=>{setDashBrandFilter("SNIPERFACTORY");setDashProgramFilter("")}} style={sideButton(dashBrandFilter==="SNIPERFACTORY")}><SFLogo height={13} dark={adminDark}/></button>
+                <button onClick={()=>{setDashBrandFilter("INSIDEOUT");setDashProgramFilter("")}} style={sideButton(dashBrandFilter==="INSIDEOUT")}><IOLogo height={12} dark={adminDark}/></button>
+                <button onClick={()=>{setDashBrandFilter("SFACSPACE");setDashProgramFilter("")}} style={sideButton(dashBrandFilter==="SFACSPACE")}><SfacspaceLogo height={11} dark={adminDark}/></button>
               </div>
               <div style={{border:`1px solid ${A.border}`,borderRadius:A.r2,padding:8,marginBottom:12}}>
                 <div style={{padding:"4px 6px 8px",fontSize:11.5,fontWeight:600,color:A.t3}}>교육과정</div>
                 <button onClick={()=>setDashProgramFilter("")} style={sideButton(!dashProgramFilter)}>전체 교육과정</button>
-                {(internshipPrograms.length>0||sesacPrograms.length>0)&&(()=>{
-                  const open=dashOpenGroups["인턴형"]!==false
-                  const sesacOpen=dashOpenGroups["인턴형/새싹"]!==false
-                  return <div>
-                    <button onClick={()=>setDashOpenGroups(prev=>({...prev,"인턴형":!open}))} style={{...sideButton(false),justifyContent:"space-between",color:A.t1,fontWeight:600}}>
-                      <span>인턴형</span>
-                      <span style={{fontSize:12,color:A.t3}}>{open?"−":"+"}</span>
-                    </button>
-                    {open&&internshipPrograms.sort((a,b)=>a.title.localeCompare(b.title,"ko")).map(program=><button key={program.id} onClick={()=>setDashProgramFilter(program.id)} style={{...sideButton(dashProgramFilter===program.id),paddingLeft:18}}>
-                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{program.title}</span>
-                    </button>)}
-                    {open&&sesacPrograms.length>0&&<>
-                      <button onClick={()=>setDashOpenGroups(prev=>({...prev,"인턴형/새싹":!sesacOpen}))} style={{...sideButton(false),paddingLeft:18,justifyContent:"space-between",color:A.t2,fontWeight:600}}>
-                        <span>새싹</span>
-                        <span style={{fontSize:12,color:A.t3}}>{sesacOpen?"−":"+"}</span>
-                      </button>
-                      {sesacOpen&&sesacPrograms.sort((a,b)=>a.title.localeCompare(b.title,"ko")).map(program=><button key={program.id} onClick={()=>setDashProgramFilter(program.id)} style={{...sideButton(dashProgramFilter===program.id),paddingLeft:30}}>
-                        <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{program.title}</span>
-                      </button>)}
-                    </>}
-                  </div>
-                })()}
-                {remainingProgramGroups.sort(([a],[b])=>a.localeCompare(b,"ko")).map(([group,programs])=>{
+                {visibleProgramGroups.length===0&&<div style={{padding:"10px 10px 8px",fontSize:12,color:A.t3,lineHeight:1.5}}>등록된 교육과정이 없어요.</div>}
+                {visibleProgramGroups.map(group=>{
+                  const programs=programGroups[group]||[]
                   const open=dashOpenGroups[group]!==false
                   return <div key={group}>
                     <button onClick={()=>setDashOpenGroups(prev=>({...prev,[group]:!open}))} style={{...sideButton(false),justifyContent:"space-between",color:A.t1,fontWeight:600}}>
