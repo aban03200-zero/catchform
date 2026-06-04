@@ -79,12 +79,19 @@ if(typeof document!=="undefined"&&!document.getElementById("catchform-keyframes"
   document.head.appendChild(s)
 }
 const FONT = "'Pretendard Variable','Pretendard','Noto Sans KR',-apple-system,'Apple SD Gothic Neo',sans-serif"
+const DASHBOARD_PAGE_SIZE = 60
 function normalizeAdminRole(role:any):AdminRole{
   const normalized=String(role||"").trim().toLowerCase()
   return normalized==="admin"||normalized==="master"?normalized:""
 }
 function canUseAdmin(role:any){return normalizeAdminRole(role)==="admin"||normalizeAdminRole(role)==="master"}
 function canMasterReset(role:any){return normalizeAdminRole(role)==="master"}
+function mergeFormRows(existing:any[],incoming:any[]){
+  const map=new Map<string,any>()
+  existing.forEach(item=>map.set(String(item.id),item))
+  incoming.forEach(item=>map.set(String(item.id),item))
+  return Array.from(map.values())
+}
 const FILE_MAX_COUNT = 5
 const FILE_MAX_SIZE_MB = 10
 const FILE_LIMIT_TEXT = `최대 ${FILE_MAX_COUNT}개, 파일당 ${FILE_MAX_SIZE_MB}MB`
@@ -1272,6 +1279,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [ioList,setIoList]=React.useState<any[]>([])
   const [sfacList,setSfacList]=React.useState<any[]>([])
   const [dashLoading,setDashLoading]=React.useState(false)
+  const [dashLoadingMore,setDashLoadingMore]=React.useState(false)
+  const [dashHasMore,setDashHasMore]=React.useState(true)
+  const [dashNextOffset,setDashNextOffset]=React.useState(0)
+  const dashTableScrollRef=React.useRef<HTMLDivElement|null>(null)
   const [showBrandModal,setShowBrandModal]=React.useState(false)
   const [showGuide,setShowGuide]=React.useState(false)
   const [dashTab,setDashTab]=React.useState<BrandId>("SNIPERFACTORY")
@@ -1465,15 +1476,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       __summary:true,
     }
   }
-  async function fetchFormSummaries(sb:any,limit=100){
+  async function fetchFormSummaries(sb:any,limit=DASHBOARD_PAGE_SIZE,offset=0){
+    const from=offset
+    const to=offset+limit-1
     const light:any=await withTimeout(
-      sb.from("form_configs").select(FORM_SUMMARY_SELECT).order("updated_at",{ascending:false}).limit(limit),
+      sb.from("form_configs").select(FORM_SUMMARY_SELECT).order("updated_at",{ascending:false}).range(from,to),
       10000,
       "폼 목록 조회 시간이 초과됐어요."
     )
     if(!light.error)return (light.data||[]).map(normalizeFormSummary)
     const full:any=await withTimeout(
-      sb.from("form_configs").select("id,name,slug,updated_at,config,brand").order("updated_at",{ascending:false}).limit(limit),
+      sb.from("form_configs").select("id,name,slug,updated_at,config,brand").order("updated_at",{ascending:false}).range(from,to),
       10000,
       "폼 목록 전체 조회 시간이 초과됐어요."
     )
@@ -1567,10 +1580,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
   async function loadDashboard(sb:any){
     setDashLoading(true)
+    setDashLoadingMore(false)
+    setDashHasMore(true)
+    setDashNextOffset(0)
     try{
-      const all=await fetchFormSummaries(sb,100)
+      const all=await fetchFormSummaries(sb,DASHBOARD_PAGE_SIZE,0)
       const trashed=all.filter(isFormTrashed)
       const active=all.filter((item:any)=>!isFormTrashed(item))
+      setDashNextOffset(all.length)
+      setDashHasMore(all.length===DASHBOARD_PAGE_SIZE)
       setFormTrashItems(trashed)
       setSnList(active.filter((x:any)=>(x.config?.brand||x.brand)==="SNIPERFACTORY"))
       setIoList(active.filter((x:any)=>(x.config?.brand||x.brand)==="INSIDEOUT"))
@@ -1584,9 +1602,37 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     finally {setDashLoading(false)}
   }
 
-  async function loadDashboardResponseCounts(sb:any,items:any[]){
+  async function loadMoreDashboard(){
+    if(!supa||dashLoading||dashLoadingMore||!dashHasMore)return
+    const offset=dashNextOffset
+    setDashLoadingMore(true)
+    try{
+      const all=await fetchFormSummaries(supa,DASHBOARD_PAGE_SIZE,offset)
+      const trashed=all.filter(isFormTrashed)
+      const active=all.filter((item:any)=>!isFormTrashed(item))
+      setDashNextOffset(offset+all.length)
+      setDashHasMore(all.length===DASHBOARD_PAGE_SIZE)
+      setFormTrashItems(prev=>mergeFormRows(prev,trashed))
+      setSaved(prev=>mergeFormRows(prev,active))
+      setSnList(prev=>mergeFormRows(prev,active.filter((x:any)=>(x.config?.brand||x.brand)==="SNIPERFACTORY")))
+      setIoList(prev=>mergeFormRows(prev,active.filter((x:any)=>(x.config?.brand||x.brand)==="INSIDEOUT")))
+      setSfacList(prev=>mergeFormRows(prev,active.filter((x:any)=>(x.config?.brand||x.brand)==="SFACSPACE")))
+      loadDashboardResponseCounts(supa,active,true)
+      const warm=()=>active.slice(0,8).forEach((item:any)=>prefetchFullFormRow(item))
+      if(typeof window!=="undefined"&&"requestIdleCallback" in window)(window as any).requestIdleCallback(warm,{timeout:1200})
+      else setTimeout(warm,350)
+    }catch(e){showToast((e as any)?.message||"추가 폼 목록을 불러오지 못했어요.",false)}
+    finally{setDashLoadingMore(false)}
+  }
+
+  function onDashboardTableScroll(e:React.UIEvent<HTMLDivElement>){
+    const el=e.currentTarget
+    if(el.scrollHeight-el.scrollTop-el.clientHeight<220)loadMoreDashboard()
+  }
+
+  async function loadDashboardResponseCounts(sb:any,items:any[],merge=false){
     const ids=items.map((item:any)=>item.id).filter(Boolean)
-    if(!ids.length){setDashResponseCounts({});return}
+    if(!ids.length){if(!merge)setDashResponseCounts({});return}
     try{
       const [normal,company]=await Promise.all([
         sb.from("applications").select("form_id").in("form_id",ids).limit(10000),
@@ -1594,7 +1640,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       ])
       const counts:Record<string,number>={}
       ;[...(normal.data||[]),...(company.data||[])].forEach((row:any)=>{if(row.form_id)counts[row.form_id]=(counts[row.form_id]||0)+1})
-      setDashResponseCounts(counts)
+      setDashResponseCounts(prev=>merge?{...prev,...counts}:counts)
     }catch{}
   }
 
@@ -2003,11 +2049,22 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       showToast(`"${name}" 불러옴`)
     } finally{setActionLoading("")}
   }
+  async function confirmEditPasswordForDelete(passwordHash:string,name:string){
+    if(!passwordHash)return true
+    const password=window.prompt(`"${name}"을 삭제하려면 편집 비밀번호를 입력해주세요.`)
+    if(password===null)return false
+    if(!password||await sha256Text(password)!==passwordHash){
+      showToast("편집 비밀번호가 맞지 않아 삭제할 수 없어요.",false)
+      return false
+    }
+    return true
+  }
   async function delCfg(id:string,name:string){
     if(!supa||!confirm(`"${name}"을 폼 휴지통으로 이동할까요?`))return
     try{
       const full=await getFullFormRow({id,name})
       const next=mergeCfg(full.config||{})
+      if(!await confirmEditPasswordForDelete(next.dashboard?.editPasswordHash||"",name))return
       next.dashboard={...(next.dashboard||{}),formTrashedAt:new Date().toISOString()}
       const{data,error}=await supa.from("form_configs").update({config:next,updated_at:new Date().toISOString()}).eq("id",id).select("id")
       if(error)throw error
@@ -3042,8 +3099,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 {DASHBOARD_FORM_TYPES.map(type=><button key={type.value} onClick={()=>setDashSideTypeFilter(type.value)} style={sideButton(dashSideTypeFilter===type.value)}>{type.label}</button>)}
               </div>
             </aside>
-            <main style={{flex:1,minWidth:0,overflowY:"auto" as const,padding:24}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18}}>
+            <main style={{flex:1,minWidth:0,overflow:"hidden",padding:24,display:"flex",flexDirection:"column" as const}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18,flexShrink:0}}>
                 <div>
                   <div style={{fontSize:20,fontWeight:600,color:A.t1}}>전체 폼</div>
                   <div style={{fontSize:12.5,color:A.t3,marginTop:4}}>필요한 폼을 빠르게 찾고 응답 현황을 확인할 수 있어요.</div>
@@ -3070,11 +3127,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   <input value={dashQuery} onChange={e=>setDashQuery(e.target.value)} placeholder="폼 이름 검색" style={{width:"100%",border:"none",outline:"none",background:"transparent",color:A.t1,fontFamily:FONT,fontSize:12.5}}/>
                 </div>
               </div>
-              <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,boxShadow:A.shadow,overflowX:"auto" as const,overflowY:"hidden" as const}}>
-                <div style={{display:"grid",gridTemplateColumns:"minmax(210px,1.35fr) 132px minmax(160px,1fr) 92px 80px 74px 100px 148px",alignItems:"center",minWidth:1080,padding:"11px 14px",borderBottom:`1px solid ${A.border}`,background:A.card2,fontSize:11.5,fontWeight:600,color:A.t3}}>
-                  <span>폼 이름</span><span>브랜드</span><span>교육과정</span><span>폼 유형</span><span>상태</span><span>응답 수</span><span>수정일</span><span style={{textAlign:"right"}}>관리</span>
-                </div>
-                <div style={{minWidth:1080}}>
+              <div style={{flex:1,minHeight:0,background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,boxShadow:A.shadow,overflow:"hidden"}}>
+                <div ref={dashTableScrollRef} onScroll={onDashboardTableScroll} style={{height:"100%",overflow:"auto"}}>
+                <div style={{display:"grid",gridTemplateColumns:"minmax(210px,1.35fr) 132px minmax(160px,1fr) 92px 80px 74px 100px 148px",alignItems:"center",minWidth:1080,padding:"11px 14px",borderBottom:`1px solid ${A.border}`,background:A.card2,fontSize:11.5,fontWeight:600,color:A.t3,position:"sticky" as const,top:0,zIndex:4}}>
+                    <span>폼 이름</span><span>브랜드</span><span>교육과정</span><span>폼 유형</span><span>상태</span><span>응답 수</span><span>수정일</span><span style={{textAlign:"right"}}>관리</span>
+                  </div>
+                  <div style={{minWidth:1080}}>
                   {dashLoading?<div style={{padding:14}}>{[1,2,3,4,5].map(i=><div key={i} style={{height:50,borderRadius:A.r,background:A.card2,marginBottom:8,animation:"skeletonPulse 1.4s ease-in-out infinite"}}/>)}</div>
                   :filtered.length===0?<div style={{padding:"56px 20px",textAlign:"center" as const,fontSize:13,color:A.t3}}>조건에 맞는 폼이 없어요.</div>
                   :filtered.map((item:any)=>{
@@ -3104,6 +3162,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       </div>
                     </div>
                   })}
+                  {!dashLoading&&dashLoadingMore&&<div style={{height:48,display:"flex",alignItems:"center",justifyContent:"center",gap:8,color:A.t3,fontSize:12.5,borderTop:`1px solid ${A.border}`}}>
+                    <span style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${A.border}`,borderTopColor:A.blue,animation:"actionSpin .8s linear infinite"}}/>
+                    추가 폼을 불러오는 중이에요.
+                  </div>}
+                  {!dashLoading&&!dashLoadingMore&&!dashHasMore&&filtered.length>0&&<div style={{height:42,display:"flex",alignItems:"center",justifyContent:"center",color:A.t3,fontSize:12,borderTop:`1px solid ${A.border}`}}>모든 폼을 불러왔어요.</div>}
+                  </div>
                 </div>
               </div>
             </main>
