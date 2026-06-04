@@ -1437,6 +1437,22 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const toastRef=React.useRef<any>(null)
   const [deletedField,setDeletedField]=React.useState<{field:FormField;idx:number}|null>(null)
   React.useEffect(()=>{setSlugDraft(savedSlug||saveSlug||"")},[savedSlug,saveSlug])
+  React.useEffect(()=>{
+    if(!optionDrag||typeof window==="undefined")return
+    const clear=()=>{
+      setOptionDrag(null)
+      setOptionDragOver(null)
+      setPanelDragIdx(null)
+      setPanelDragOver(null)
+      setEditIdx(optionDrag.fieldIdx)
+    }
+    window.addEventListener("dragend",clear)
+    window.addEventListener("drop",clear)
+    return()=>{
+      window.removeEventListener("dragend",clear)
+      window.removeEventListener("drop",clear)
+    }
+  },[optionDrag])
   function showToast(msg:string,ok=true,undo?:()=>void){
     setToastLeaving(false)
     setToast({msg,ok,undo})
@@ -3847,7 +3863,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {pageFields.map((field,idx)=>(
               <div key={(field as any).id||idx}
                 draggable
-                onDragStart={()=>{setPanelDragIdx(idx);setEditIdx(null)}}
+                onDragStart={e=>{
+                  if((e.target as HTMLElement)?.closest?.("[data-option-drag-handle='true']")){e.stopPropagation();return}
+                  setPanelDragIdx(idx);setEditIdx(null)
+                }}
                 onDragOver={e=>{e.preventDefault();setPanelDragOver(idx)}}
                 onDragLeave={()=>setPanelDragOver(null)}
                 onDrop={()=>{
@@ -3864,7 +3883,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	                  </div>
                   <div
                     style={{flex:1,display:"flex",alignItems:"center",gap:6,padding:"7px 8px",borderRadius:A.r,border:`1px solid ${editIdx===idx?A.blue:"transparent"}`,background:editIdx===idx?A.blue2:"transparent",cursor:"pointer",transition:"all .1s",minWidth:0}}
-                    onClick={()=>setEditIdx(editIdx===idx?null:idx)}>
+                    onClick={()=>{setPanelDragIdx(null);setPanelDragOver(null);setOptionDrag(null);setOptionDragOver(null);setEditIdx(editIdx===idx?null:idx)}}>
                     <div style={{width:22,height:22,borderRadius:5,background:A.card2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:`1px solid ${A.border}`,color:A.t2}}>
                       {FTYPE_ICONS[(field as any).type as string]||FTYPE_ICONS.text}
                     </div>
@@ -3998,13 +4017,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                           const dragging=optionDrag?.fieldIdx===idx&&optionDrag.optIdx===oi
                           const over=optionDragOver?.fieldIdx===idx&&optionDragOver.optIdx===oi
                           return <div key={oi}
-                            onDragOver={e=>{e.preventDefault();setOptionDragOver({fieldIdx:idx,optIdx:oi})}}
-                            onDragLeave={()=>setOptionDragOver(null)}
-                            onDrop={e=>{e.preventDefault();if(optionDrag&&optionDrag.fieldIdx===idx)reorderActiveFieldOption(idx,optionDrag.optIdx,oi);setOptionDrag(null);setOptionDragOver(null)}}
+                            onDragOver={e=>{e.preventDefault();e.stopPropagation();setOptionDragOver({fieldIdx:idx,optIdx:oi})}}
+                            onDragLeave={e=>{e.stopPropagation();setOptionDragOver(null)}}
+                            onDrop={e=>{e.preventDefault();e.stopPropagation();if(optionDrag&&optionDrag.fieldIdx===idx)reorderActiveFieldOption(idx,optionDrag.optIdx,oi);setOptionDrag(null);setOptionDragOver(null);setPanelDragIdx(null);setPanelDragOver(null);setEditIdx(idx)}}
                             style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",borderRadius:A.r,background:A.card,border:`1px solid ${over&&!dragging?A.blue:A.border2}`,fontSize:12,color:A.t1,opacity:dragging?0.45:1,transition:"border-color .12s, opacity .12s"}}>
-                            <div draggable title="드래그해서 순서 변경"
-                              onDragStart={e=>{setOptionDrag({fieldIdx:idx,optIdx:oi});e.dataTransfer.effectAllowed="move";try{e.dataTransfer.setData("text/plain",String(oi))}catch{}}}
-                              onDragEnd={()=>{setOptionDrag(null);setOptionDragOver(null)}}
+                            <div draggable data-option-drag-handle="true" title="드래그해서 순서 변경"
+                              onMouseDown={e=>{e.stopPropagation();setPanelDragIdx(null);setPanelDragOver(null)}}
+                              onClick={e=>e.stopPropagation()}
+                              onDragStart={e=>{e.stopPropagation();setPanelDragIdx(null);setPanelDragOver(null);setEditIdx(idx);setOptionDrag({fieldIdx:idx,optIdx:oi});e.dataTransfer.effectAllowed="move";try{e.dataTransfer.setData("text/plain",String(oi))}catch{}}}
+                              onDragEnd={e=>{e.stopPropagation();setOptionDrag(null);setOptionDragOver(null);setPanelDragIdx(null);setPanelDragOver(null);setEditIdx(idx)}}
                               style={{width:18,height:26,display:"flex",alignItems:"center",justifyContent:"center",cursor:"grab",color:A.t3,flexShrink:0}}>
                               <DragHandleIcon size={13}/>
                             </div>
