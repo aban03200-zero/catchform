@@ -15,6 +15,7 @@ type BrandId = "SNIPERFACTORY"|"INSIDEOUT"|"SFACSPACE"
 type DashboardFormType = "alert"|"application"|"recruit"|"survey"|"evaluation"|"other"
 type DashboardManualStatus = ""|"draft"|"active"|"closed"
 type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; manualStatus?:DashboardManualStatus; isPublished?:boolean; publishedAt?:string; editPasswordHash?:string; formTrashedAt?:string }
+type AdminRole = ""|"admin"|"master"
 type KdtFieldType = FieldType|"section_desc"
 type KdtField = { id:string; label:string; type:KdtFieldType; required?:boolean; page?:number; options?:string[]; placeholder?:string; desc?:string }
 type FieldType = "text"|"name"|"phone"|"email"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"
@@ -78,6 +79,12 @@ if(typeof document!=="undefined"&&!document.getElementById("catchform-keyframes"
   document.head.appendChild(s)
 }
 const FONT = "'Pretendard Variable','Pretendard','Noto Sans KR',-apple-system,'Apple SD Gothic Neo',sans-serif"
+function normalizeAdminRole(role:any):AdminRole{
+  const normalized=String(role||"").trim().toLowerCase()
+  return normalized==="admin"||normalized==="master"?normalized:""
+}
+function canUseAdmin(role:any){return normalizeAdminRole(role)==="admin"||normalizeAdminRole(role)==="master"}
+function canMasterReset(role:any){return normalizeAdminRole(role)==="master"}
 const FILE_MAX_COUNT = 5
 const FILE_MAX_SIZE_MB = 10
 const FILE_LIMIT_TEXT = `최대 ${FILE_MAX_COUNT}개, 파일당 ${FILE_MAX_SIZE_MB}MB`
@@ -1251,6 +1258,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
   // ── Auth ──────────────────────────────────────────────────────────────
   const [authUser,setAuthUser]=React.useState<any>(null)
+  const [authRole,setAuthRole]=React.useState<AdminRole>("")
   const [loginEmail,setLoginEmail]=React.useState("")
   const [loginPw,setLoginPw]=React.useState("")
   const [loginErr,setLoginErr]=React.useState("")
@@ -1480,6 +1488,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       .then(({data,error})=>{if(!error&&data)fullFormCache.current[item.id]={updatedAt:item.updated_at,data}})
   }
 
+  async function resolveAdminRole(sb:any,userId:string):Promise<AdminRole>{
+    const roleRes:any=await withTimeout<any>(
+      sb.from("users").select("role").eq("id",userId).single(),
+      10000,
+      "관리자 권한 확인 시간이 초과됐어요. Supabase 연결 상태를 확인해주세요."
+    )
+    const userRow=roleRes?.data
+    const roleErr=roleRes?.error
+    const role=normalizeAdminRole(userRow?.role)
+    if(roleErr||!userRow)throw new Error("사용자 정보를 확인할 수 없어요.")
+    if(!canUseAdmin(role))throw new Error("관리자 권한이 없어요. admin 또는 master 계정으로 로그인해주세요.")
+    return role
+  }
+
   // ── Sidebar scroll ────────────────────────────────────────────────────
   const sbRef=React.useRef<HTMLDivElement>(null)
   const myPos=React.useRef(0)
@@ -1494,8 +1516,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   React.useEffect(()=>{
     if(!supabaseUrl||!supabaseAnonKey)return
     const sb=getSB(supabaseUrl,supabaseAnonKey);if(!sb)return
-    withTimeout(sb.auth.getSession(),8000,"세션 확인 시간이 초과됐어요.").then(({data})=>{
-      if(data?.session){setAuthUser(data.session.user);setSbSt("ok");loadDashboard(sb);setView("dashboard")}
+    withTimeout(sb.auth.getSession(),8000,"세션 확인 시간이 초과됐어요.").then(async ({data})=>{
+      if(!data?.session)return
+      try{
+        const role=await resolveAdminRole(sb,data.session.user.id)
+        setAuthUser(data.session.user);setAuthRole(role);setSbSt("ok");loadDashboard(sb);setView("dashboard")
+      }catch(e){
+        await withTimeout(sb.auth.signOut(),6000,"로그아웃 처리 시간이 초과됐어요.").catch(()=>{})
+        setAuthUser(null);setAuthRole("");setView("login");setSbSt("idle")
+      }
     }).catch(()=>{})
     withTimeout(sb.from("programs").select("*").eq("is_archived",false).order("title"),8000,"프로그램 목록 확인 시간이 초과됐어요.").then(({data})=>{if(data)setProgs(data)}).catch(()=>{})
     withTimeout(sb.from("categories").select("id,name"),8000,"카테고리 목록 확인 시간이 초과됐어요.").then(({data})=>{if(data)setCats(data)}).catch(()=>{})
@@ -1513,23 +1542,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         "로그인 요청 시간이 초과됐어요. 인터넷 연결 또는 Supabase 설정을 확인해주세요."
       )
       if(error)throw error
-      // 권한 체크: users 테이블에서 role이 MASTER 또는 ADMIN인지 확인
-      const{data:userRow,error:roleErr}=await withTimeout(
-        supa.from("users").select("role").eq("id",data.user.id).single(),
-        10000,
-        "관리자 권한 확인 시간이 초과됐어요. Supabase 연결 상태를 확인해주세요."
-      )
-      if(roleErr||!userRow){await withTimeout(supa.auth.signOut(),6000,"로그아웃 처리 시간이 초과됐어요.").catch(()=>{});throw new Error("사용자 정보를 확인할 수 없어요.")}
-      if(userRow.role!=="MASTER"&&userRow.role!=="ADMIN"){await withTimeout(supa.auth.signOut(),6000,"로그아웃 처리 시간이 초과됐어요.").catch(()=>{});throw new Error("관리자 권한이 없어요. MASTER 또는 ADMIN 계정으로 로그인해주세요.")}
-      setAuthUser(data.user);setSbSt("ok")
+      const role=await resolveAdminRole(supa,data.user.id)
+      setAuthUser(data.user);setAuthRole(role);setSbSt("ok")
       setView("dashboard")
       loadDashboard(supa)
       withTimeout(supa.from("programs").select("*").eq("is_archived",false).order("title"),8000,"프로그램 목록 확인 시간이 초과됐어요.").then(({data:pd})=>{if(pd)setProgs(pd)}).catch(()=>{})
       withTimeout(supa.from("categories").select("id,name"),8000,"카테고리 목록 확인 시간이 초과됐어요.").then(({data:cd})=>{if(cd)setCats(cd)}).catch(()=>{})
-    } catch(e){const err=(e as any);setLoginErr(err.message==="Invalid login credentials"?"이메일 또는 비밀번호가 올바르지 않아요.":err.message||"로그인 실패")}
+    } catch(e){
+      await withTimeout(supa.auth.signOut(),6000,"로그아웃 처리 시간이 초과됐어요.").catch(()=>{})
+      setAuthUser(null);setAuthRole("")
+      const err=(e as any);setLoginErr(err.message==="Invalid login credentials"?"이메일 또는 비밀번호가 올바르지 않아요.":err.message||"로그인 실패")
+    }
     finally {setLoginLoading(false)}
   }
-  async function doLogout(){if(supa)await supa.auth.signOut();setAuthUser(null);setView("login");setSbSt("idle");setLoginEmail("");setLoginPw("")}
+  async function doLogout(){if(supa)await supa.auth.signOut();setAuthUser(null);setAuthRole("");setView("login");setSbSt("idle");setLoginEmail("");setLoginPw("")}
 
   async function loadDashboard(sb:any){
     setDashLoading(true)
@@ -1686,6 +1712,29 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       setEditPasswordPrompt(prev=>prev&&({...prev,checking:false,error:(e as any)?.message||"비밀번호를 확인하지 못했어요."}))
     }
   }
+  async function resetEditPasswordFromPrompt(){
+    if(!supa||!editPasswordPrompt?.item)return
+    if(!canMasterReset(authRole)){
+      setEditPasswordPrompt(prev=>prev&&({...prev,error:"비밀번호 원문은 복구할 수 없어요. master 권한 계정으로 비밀번호를 초기화해주세요."}))
+      return
+    }
+    setEditPasswordPrompt(prev=>prev&&({...prev,checking:true,error:""}))
+    try{
+      const item=editPasswordPrompt.item
+      const full=await getFullFormRow(item)
+      const next=mergeCfg(full.config||{})
+      next.dashboard={...(next.dashboard||{}),editPasswordHash:""}
+      const{error}=await supa.from("form_configs").update({config:next,updated_at:new Date().toISOString()}).eq("id",item.id)
+      if(error)throw error
+      delete fullFormCache.current[item.id]
+      if(loadedId===item.id)setCfg(prev=>({...prev,dashboard:{...(prev.dashboard||{}),editPasswordHash:""}}))
+      setEditPasswordPrompt(null)
+      await loadDashboard(supa)
+      showToast("편집 비밀번호를 초기화했어요.")
+    }catch(e){
+      setEditPasswordPrompt(prev=>prev&&({...prev,checking:false,error:(e as any)?.message||"비밀번호를 초기화하지 못했어요."}))
+    }
+  }
   async function returnToBuilderFromAnalytics(){
     const expected=cfg.dashboard?.editPasswordHash||""
     if(expected){
@@ -1740,7 +1789,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const previousEditPasswordHash=next.dashboard?.editPasswordHash||""
       let editPasswordHash=previousEditPasswordHash
       const changingEditPassword=!!dashboardSettings.editPasswordDraft||dashboardSettings.clearEditPassword
-      if(changingEditPassword&&previousEditPasswordHash){
+      if(changingEditPassword&&previousEditPasswordHash&&!canMasterReset(authRole)){
         if(!dashboardSettings.currentEditPasswordDraft)throw new Error("현재 편집 비밀번호를 입력해주세요.")
         if(await sha256Text(dashboardSettings.currentEditPasswordDraft)!==previousEditPasswordHash)throw new Error("현재 편집 비밀번호가 맞지 않아요.")
       }
@@ -3069,9 +3118,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 {DASHBOARD_FORM_TYPES.map(type=><option key={type.value} value={type.value}>{type.label}</option>)}
               </select>
               <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>편집 비밀번호</div>
-              {!!dashboardSettings.item.config?.dashboard?.editPasswordHash&&<input type="password" value={dashboardSettings.currentEditPasswordDraft} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,currentEditPasswordDraft:e.target.value}))} placeholder="변경 또는 해제 시 현재 비밀번호" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:8,boxSizing:"border-box" as const}}/>}
+              {!!dashboardSettings.item.config?.dashboard?.editPasswordHash&&!canMasterReset(authRole)&&<input type="password" value={dashboardSettings.currentEditPasswordDraft} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,currentEditPasswordDraft:e.target.value}))} placeholder="변경 또는 해제 시 현재 비밀번호" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:8,boxSizing:"border-box" as const}}/>}
               <input type="password" value={dashboardSettings.editPasswordDraft} disabled={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,editPasswordDraft:e.target.value}))} placeholder={dashboardSettings.item.config?.dashboard?.editPasswordHash?"새 비밀번호 입력 시 변경":"비밀번호 입력 시 편집 보호"} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,opacity:dashboardSettings.clearEditPassword?.55:1}}/>
-              <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,margin:"6px 0 9px"}}>설정하면 대시보드에서 편집을 열 때 비밀번호를 확인합니다. 원문 대신 해시값만 저장됩니다.</div>
+              <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,margin:"6px 0 9px"}}>{canMasterReset(authRole)&&dashboardSettings.item.config?.dashboard?.editPasswordHash?"master 권한 계정은 현재 비밀번호 없이 편집 비밀번호를 변경하거나 해제할 수 있어요.":"설정하면 대시보드에서 편집을 열 때 비밀번호를 확인합니다. 원문 대신 해시값만 저장됩니다."}</div>
               {!!dashboardSettings.item.config?.dashboard?.editPasswordHash&&<label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:16}}><input type="checkbox" checked={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,clearEditPassword:e.target.checked,editPasswordDraft:e.target.checked?"":prev.editPasswordDraft}))}/>편집 비밀번호 해제</label>}
               {hasRecruitmentPeriod?<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB 모집 기간을 기준으로 상태가 자동 표시됩니다.<br/>{recruitment.start||"시작일 미정"} ~ {recruitment.end||"종료일 미정"}</div>:<>
                 <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
@@ -3103,7 +3152,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <input autoFocus type="password" value={editPasswordPrompt.password} onChange={e=>setEditPasswordPrompt(prev=>prev&&({...prev,password:e.target.value,error:""}))} onKeyDown={e=>e.key==="Enter"&&verifyEditPassword()} placeholder="비밀번호 입력" style={{width:"100%",height:40,padding:"0 11px",borderRadius:A.r,border:`1px solid ${editPasswordPrompt.error?A.red:A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,outline:"none"}}/>
               {editPasswordPrompt.error&&<div style={{fontSize:12,color:A.red,marginTop:7}}>{editPasswordPrompt.error}</div>}
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginTop:18}}>
-                <button onClick={()=>setEditPasswordPrompt(prev=>prev&&({...prev,error:"보안을 위해 비밀번호 원문은 저장하지 않아요. 만든 사람 또는 관리자에게 목록 설정에서 비밀번호 해제/재설정을 요청해주세요."}))} disabled={editPasswordPrompt.checking} style={{height:38,padding:"0 4px",border:"none",background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12.5,cursor:"pointer"}}>비밀번호 찾기</button>
+                <button onClick={()=>canMasterReset(authRole)?resetEditPasswordFromPrompt():setEditPasswordPrompt(prev=>prev&&({...prev,error:"비밀번호 원문은 복구할 수 없어요. master 권한 계정으로 비밀번호를 초기화해주세요."}))} disabled={editPasswordPrompt.checking} style={{height:38,padding:"0 4px",border:"none",background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12.5,cursor:"pointer"}}>{canMasterReset(authRole)?"비밀번호 초기화":"비밀번호 찾기"}</button>
                 <div style={{display:"flex",gap:8}}>
                 <button onClick={()=>setEditPasswordPrompt(null)} disabled={editPasswordPrompt.checking} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
                 <button onClick={verifyEditPassword} disabled={editPasswordPrompt.checking} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>{editPasswordPrompt.checking?"확인 중...":"편집 열기"}</button>
@@ -6057,9 +6106,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               {DASHBOARD_FORM_TYPES.map(type=><option key={type.value} value={type.value}>{type.label}</option>)}
             </select>
             <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>편집 비밀번호</div>
-            {!!settingsConfig?.dashboard?.editPasswordHash&&<input type="password" value={dashboardSettings.currentEditPasswordDraft} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,currentEditPasswordDraft:e.target.value}))} placeholder="변경 또는 해제 시 현재 비밀번호" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:8,boxSizing:"border-box" as const}}/>}
+            {!!settingsConfig?.dashboard?.editPasswordHash&&!canMasterReset(authRole)&&<input type="password" value={dashboardSettings.currentEditPasswordDraft} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,currentEditPasswordDraft:e.target.value}))} placeholder="변경 또는 해제 시 현재 비밀번호" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:8,boxSizing:"border-box" as const}}/>}
             <input type="password" value={dashboardSettings.editPasswordDraft} disabled={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,editPasswordDraft:e.target.value}))} placeholder={settingsConfig?.dashboard?.editPasswordHash?"새 비밀번호 입력 시 변경":"비밀번호 입력 시 편집 보호"} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,opacity:dashboardSettings.clearEditPassword?.55:1}}/>
-            <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,margin:"6px 0 9px"}}>설정하면 대시보드에서 편집을 열 때 비밀번호를 확인합니다. 원문 대신 해시값만 저장됩니다.</div>
+            <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,margin:"6px 0 9px"}}>{canMasterReset(authRole)&&settingsConfig?.dashboard?.editPasswordHash?"master 권한 계정은 현재 비밀번호 없이 편집 비밀번호를 변경하거나 해제할 수 있어요.":"설정하면 대시보드에서 편집을 열 때 비밀번호를 확인합니다. 원문 대신 해시값만 저장됩니다."}</div>
             {!!settingsConfig?.dashboard?.editPasswordHash&&<label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:16}}><input type="checkbox" checked={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,clearEditPassword:e.target.checked,editPasswordDraft:e.target.checked?"":prev.editPasswordDraft}))}/>편집 비밀번호 해제</label>}
             {hasRecruitmentPeriod?<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB 모집 기간을 기준으로 상태가 자동 표시됩니다.<br/>{recruitment.start||"시작일 미정"} ~ {recruitment.end||"종료일 미정"}</div>:<>
               <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
