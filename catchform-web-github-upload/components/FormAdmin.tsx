@@ -359,6 +359,9 @@ function makeQrMatrix(text:string){
   }
   return modules
 }
+function safeMakeQrMatrix(text:string){
+  try{return text?makeQrMatrix(text):null}catch{return null}
+}
 function qrMatrixToSvgMarkup(matrix:boolean[][],px=1024){
   const margin=4
   const n=matrix.length+margin*2
@@ -1432,6 +1435,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       setTimeout(()=>{setToast(null);setToastLeaving(false)},300)
     },4000)
   }
+  React.useEffect(()=>{
+    if(sec!=="qr"||qrMode!=="custom"||qrCustomUrl.trim())return
+    const savedDetailQr=(cfg.integrations?.qrLinks||[]).find(link=>link.type==="detail"&&link.url)
+    if(savedDetailQr?.url)setQrCustomUrl(savedDetailQr.url)
+  },[sec,qrMode,qrCustomUrl,cfg.integrations?.qrLinks])
 
   function renderActionLoading(){
     if(!actionLoading)return null
@@ -3016,7 +3024,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 {visibleProgramGroups.length===0&&<div style={{padding:"10px 10px 8px",fontSize:12,color:A.t3,lineHeight:1.5}}>등록된 교육과정이 없어요.</div>}
                 {visibleProgramGroups.map(group=>{
                   const programs=programGroups[group]||[]
-                  const open=dashOpenGroups[group]!==false
+                  const open=dashOpenGroups[group]===true
                   return <div key={group}>
                     <button onClick={()=>setDashOpenGroups(prev=>({...prev,[group]:!open}))} style={{...sideButton(false),justifyContent:"space-between",color:A.t1,fontWeight:600}}>
                       <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{group}</span>
@@ -4168,21 +4176,30 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               ? `${trackerBase}/qr?${qrFormRef}&q=${encodeURIComponent(customQrCode)}${qrBrand?`&b=${qrBrand}`:""}&d=1`
               : `${trackerBase}/qr?u=${encodeURIComponent(activeQrUrl)}${savedSlug?`&s=${encodeURIComponent(savedSlug)}`:""}${qrBrand?`&b=${qrBrand}`:""}&d=1`
           : activeQrUrl
-        const qrMatrix=qrGeneratedUrl===trackedQrUrl?qrGeneratedMatrix:null
+        const existingQrLinks=Array.isArray(cfg.integrations?.qrLinks)?cfg.integrations!.qrLinks!:[]
+        const formQrCode=savedSlug||loadedId?compactQrCode(`${savedSlug||loadedId}|form`):""
+        const persistedQrLink=qrMode==="form"
+          ? existingQrLinks.find(link=>link.type==="form"&&link.code===formQrCode&&link.url===activeQrUrl)
+          : existingQrLinks.find(link=>link.type==="detail"&&link.code===customQrCode&&link.url===activeQrUrl)
+        const qrMatrix=qrGeneratedUrl===trackedQrUrl?qrGeneratedMatrix:(persistedQrLink?safeMakeQrMatrix(trackedQrUrl):null)
         const qrError=qrGeneratedUrl===trackedQrUrl?qrGeneratedError:""
         const ensureQrLinkSaved=async()=>{
-          if(qrMode!=="custom"||!canUseShortCustomQr||!activeQrUrl||!customQrCode)return
+          if(!loadedId||!supa||!activeQrUrl)return
+          if(qrMode==="custom"&&(!canUseShortCustomQr||!customQrCode))return
+          const code=qrMode==="form"?formQrCode:customQrCode
+          if(!code)return
+          const type=qrMode==="form"?"form":"detail"
           const existing=Array.isArray(cfg.integrations?.qrLinks)?cfg.integrations!.qrLinks!:[]
-          const current=existing.find(link=>link.code===customQrCode)
+          const current=existing.find(link=>link.code===code&&link.type===type)
           if(current?.url===activeQrUrl)return
-          const link:QrLink={code:customQrCode,url:activeQrUrl,label:qrLabel,type:"detail",createdAt:new Date().toISOString()}
+          const link:QrLink={code,url:activeQrUrl,label:qrLabel,type,createdAt:new Date().toISOString()}
           const nextCfg:Cfg={
             ...cfg,
             brand:currentBrand,
             integrations:{
               ...(cfg.integrations||{}),
               googleSheets:{...DEFAULT_GOOGLE_SHEETS,...(cfg.integrations?.googleSheets||{})},
-              qrLinks:[link,...existing.filter(item=>item.code!==customQrCode)].slice(0,80),
+              qrLinks:[link,...existing.filter(item=>!(item.code===code&&item.type===type))].slice(0,80),
             },
           }
           setCfg(nextCfg)
