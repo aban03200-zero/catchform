@@ -14,7 +14,7 @@ type Prog = { id: string; title: string; slug?: string; category?: string; [key:
 type BrandId = "SNIPERFACTORY"|"INSIDEOUT"|"SFACSPACE"
 type DashboardFormType = "alert"|"application"|"recruit"|"survey"|"evaluation"|"other"
 type DashboardManualStatus = ""|"draft"|"active"|"closed"
-type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; manualStatus?:DashboardManualStatus; isPublished?:boolean; publishedAt?:string; editPasswordHash?:string }
+type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; manualStatus?:DashboardManualStatus; isPublished?:boolean; publishedAt?:string; editPasswordHash?:string; formTrashedAt?:string }
 type KdtFieldType = FieldType|"section_desc"
 type KdtField = { id:string; label:string; type:KdtFieldType; required?:boolean; page?:number; options?:string[]; placeholder?:string; desc?:string }
 type FieldType = "text"|"name"|"phone"|"email"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"
@@ -121,6 +121,31 @@ function operationTimeMs(value:string,edge:"start"|"end"="start"){
   const normalized=/^\d{4}-\d{2}-\d{2}$/.test(raw)?`${raw}T${edge==="end"?"23:59:59":"00:00:00"}`:raw
   const time=new Date(normalized).getTime()
   return Number.isFinite(time)?time:0
+}
+function formTrashedAtOf(item:any){
+  return item?.config?.dashboard?.formTrashedAt||item?.dashboard_meta?.formTrashedAt||""
+}
+function isFormTrashed(item:any){
+  return !!formTrashedAtOf(item)
+}
+function GearIcon({size=16}:{size?:number}){
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.7"/>
+  </svg>
+}
+function LockIcon({size=13}:{size?:number}){
+  return <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <rect x="3" y="7" width="10" height="7" rx="2" stroke="currentColor" strokeWidth="1.4"/>
+    <path d="M5 7V5a3 3 0 0 1 6 0v2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+  </svg>
+}
+function DragHandleIcon({size=14}:{size?:number}){
+  return <svg width={size} height={size} viewBox="0 0 10 14" fill="none" aria-hidden="true">
+    <circle cx="3" cy="2.5" r="1" fill="currentColor"/><circle cx="7" cy="2.5" r="1" fill="currentColor"/>
+    <circle cx="3" cy="7" r="1" fill="currentColor"/><circle cx="7" cy="7" r="1" fill="currentColor"/>
+    <circle cx="3" cy="11.5" r="1" fill="currentColor"/><circle cx="7" cy="11.5" r="1" fill="currentColor"/>
+  </svg>
 }
 function postAppsScriptPayload(url:string,payload:any,opts:{allowDirectFallback?:boolean}={}){
   const allowDirectFallback=opts.allowDirectFallback!==false
@@ -1250,6 +1275,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [dashboardSettings,setDashboardSettings]=React.useState<null|{item:any;brand:BrandId;formTypeTag:DashboardFormType;operationStart:string;operationEnd:string;manualStatus:DashboardManualStatus;currentEditPasswordDraft:string;editPasswordDraft:string;clearEditPassword:boolean}>(null)
   const [dashboardSettingsSaving,setDashboardSettingsSaving]=React.useState(false)
   const [editPasswordPrompt,setEditPasswordPrompt]=React.useState<null|{item:any;password:string;error:string;checking:boolean}>(null)
+  const [formTrashOpen,setFormTrashOpen]=React.useState(false)
+  const [formTrashItems,setFormTrashItems]=React.useState<any[]>([])
+  const [formTrashBusy,setFormTrashBusy]=React.useState("")
   const [guideData,setGuideData]=React.useState<{topics:any[]}|null>(null)
   const [guideLoading,setGuideLoading]=React.useState(false)
   const [guideTopic,setGuideTopic]=React.useState(0)
@@ -1368,6 +1396,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [showAddField,setShowAddField]=React.useState(false)
   const [panelDragIdx,setPanelDragIdx]=React.useState<number|null>(null)
   const [panelDragOver,setPanelDragOver]=React.useState<number|null>(null)
+  const [optionDrag,setOptionDrag]=React.useState<null|{fieldIdx:number;optIdx:number}>(null)
+  const [optionDragOver,setOptionDragOver]=React.useState<null|{fieldIdx:number;optIdx:number}>(null)
   // Consent body editor states (one per consent slot, using index 0-2)
   const [consentLinkShow,setConsentLinkShow]=React.useState<boolean[]>([false,false,false])
   const [consentLinkUrl,setConsentLinkUrl]=React.useState<string[]>(["","",""])
@@ -1505,12 +1535,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setDashLoading(true)
     try{
       const all=await fetchFormSummaries(sb,100)
-      setSnList(all.filter((x:any)=>(x.config?.brand||x.brand)==="SNIPERFACTORY"))
-      setIoList(all.filter((x:any)=>(x.config?.brand||x.brand)==="INSIDEOUT"))
-      setSfacList(all.filter((x:any)=>(x.config?.brand||x.brand)==="SFACSPACE"))
-      setSaved(all)
-      loadDashboardResponseCounts(sb,all)
-      const warm=()=>all.slice(0,16).forEach((item:any)=>prefetchFullFormRow(item))
+      const trashed=all.filter(isFormTrashed)
+      const active=all.filter((item:any)=>!isFormTrashed(item))
+      setFormTrashItems(trashed)
+      setSnList(active.filter((x:any)=>(x.config?.brand||x.brand)==="SNIPERFACTORY"))
+      setIoList(active.filter((x:any)=>(x.config?.brand||x.brand)==="INSIDEOUT"))
+      setSfacList(active.filter((x:any)=>(x.config?.brand||x.brand)==="SFACSPACE"))
+      setSaved(active)
+      loadDashboardResponseCounts(sb,active)
+      const warm=()=>active.slice(0,16).forEach((item:any)=>prefetchFullFormRow(item))
       if(typeof window!=="undefined"&&"requestIdleCallback" in window)(window as any).requestIdleCallback(warm,{timeout:1200})
       else setTimeout(warm,350)
     } catch(e){showToast((e as any)?.message||"폼 목록을 불러오지 못했어요.",false)}
@@ -1599,7 +1632,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const full=await getFullFormRow(item)
       const cfgCopy=mergeCfg(full.config||{})
       const brand=canonicalBrand(cfgCopy.brand||full.brand||item.brand||currentBrand)
-      const brandedCopy=applyBrandDefaults({...cfgCopy,dashboard:{...(cfgCopy.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft"}},brand)
+      const copiedDashboard:DashboardMeta={...(cfgCopy.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft"}
+      delete (copiedDashboard as any).formTrashedAt
+      const brandedCopy=applyBrandDefaults({...cfgCopy,dashboard:copiedDashboard},brand)
       const newName=item.name+" 복사본"
       const newSlug=(item.slug||item.name).toLowerCase().replace(/\s+/g,"-")+"-copy-"+Date.now()
       const{error}=await supa.from("form_configs").insert({name:newName,slug:newSlug,config:brandedCopy,brand:dbBrandValue(brand)})
@@ -1646,7 +1681,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         return
       }
       setEditPasswordPrompt(null)
-      await openFormForEdit(full)
+      await openFormForEdit(editPasswordPrompt.item)
     }catch(e){
       setEditPasswordPrompt(prev=>prev&&({...prev,checking:false,error:(e as any)?.message||"비밀번호를 확인하지 못했어요."}))
     }
@@ -1748,6 +1783,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(operationTimeMs(start,"start")>operationTimeMs(end,"end"))return"폼 운영 기간의 종료일은 시작일보다 빠를 수 없어요."
     return""
   }
+  function mergeRecruitmentPeriodIntoConfig(source:Cfg){
+    if(source.header.programUnlinked||!source.header.programId)return source
+    const program=progs.find(p=>p.id===source.header.programId)
+    const period=recruitmentPeriodOf(program)
+    if(!period.start&&!period.end)return source
+    return {
+      ...source,
+      dashboard:{
+        ...(source.dashboard||{}),
+        operationStart:period.start||source.dashboard?.operationStart||"",
+        operationEnd:period.end||source.dashboard?.operationEnd||"",
+      },
+    }
+  }
   function updateField(idx:number,patch:Partial<FormField>){setCfg(p=>({...p,form:{...p.form,fields:p.form.fields.map((f,i)=>i===idx?{...f,...patch}:f)}}))}
   function addField(type:FieldType="text"){
     const fieldDefs:Record<string,{id:string;label:string;placeholder:string;helper?:string;required:boolean}> = {
@@ -1830,15 +1879,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setCfg(prev=>{const arr=[...(prev.form.pageLabels||Array.from({length:formPages},(_,i)=>""))];arr[p-1]=label;return{...prev,form:{...prev.form,pageLabels:arr}}})
   }
   function moveActiveField(from:number,to:number){if(isKdt){const kf=cfg.kdtFields||[];const pageFields=kf.filter(f=>f.page===pvPage);const gFrom=kf.indexOf(pageFields[from]);const gTo=kf.indexOf(pageFields[to]);moveKdtField(gFrom,gTo)}else if(isMultiPage){const pageF=cfg.form.fields.filter(f=>(f.page||1)===pvPage);const gFrom=cfg.form.fields.indexOf(pageF[from]);const gTo=cfg.form.fields.indexOf(pageF[to]);moveField(gFrom,gTo)}else{moveField(from,to)}}
-  function moveActiveFieldOption(fieldIdx:number,optIdx:number,dir:-1|1){
+  function reorderActiveFieldOption(fieldIdx:number,from:number,to:number){
     const field=(getActiveFields() as any[])[fieldIdx]
     if(!field)return
     const raw=(field.opts&&field.opts.length)?field.opts:(field.options||[]).map((o:any)=>({label:String(o),value:String(o),isEtc:String(o)==="기타"}))
-    const target=optIdx+dir
-    if(target<0||target>=raw.length)return
+    if(from===to||from<0||to<0||from>=raw.length||to>=raw.length)return
     const next=[...raw]
-    const [moved]=next.splice(optIdx,1)
-    next.splice(target,0,moved)
+    const [moved]=next.splice(from,1)
+    next.splice(to,0,moved)
     patchActiveField(fieldIdx,{opts:next})
   }
   function uc<K extends keyof Cfg["consents"][0]>(idx:number,k:K,v:Cfg["consents"][0][K]){setCfg(p=>({...p,consents:p.consents.map((c,i)=>i===idx?{...c,[k]:v}:c)}))}
@@ -1884,7 +1932,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   async function loadList(){
     if(!supa)return
-    setSaved(await fetchFormSummaries(supa,20))
+    const list=await fetchFormSummaries(supa,20)
+    setSaved(list.filter((item:any)=>!isFormTrashed(item)))
   }
   async function loadCfgById(id:string,name:string,item?:any){
     if(!supa)return
@@ -1898,16 +1947,41 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     } finally{setActionLoading("")}
   }
   async function delCfg(id:string,name:string){
-    if(!supa||!confirm(`"${name}"을 삭제할까요?`))return
-    const{data,error}=await supa.from("form_configs").delete().eq("id",id).select("id")
-    if(error){
-      const msg=String(error.message||"")
-      showToast("삭제 실패: "+msg,false)
-      return
+    if(!supa||!confirm(`"${name}"을 폼 휴지통으로 이동할까요?`))return
+    try{
+      const full=await getFullFormRow({id,name})
+      const next=mergeCfg(full.config||{})
+      next.dashboard={...(next.dashboard||{}),formTrashedAt:new Date().toISOString()}
+      const{data,error}=await supa.from("form_configs").update({config:next,updated_at:new Date().toISOString()}).eq("id",id).select("id")
+      if(error)throw error
+      if(!data||data.length===0){showToast("휴지통으로 이동할 폼을 찾지 못했거나 권한이 없어요.",false);return}
+      delete fullFormCache.current[id]
+      if(loadedId===id){setLoadedId("");setLoadedName("");setSavedSlug("")}
+      showToast(`"${name}"을 폼 휴지통으로 이동했어요.`)
+      loadList();loadDashboard(supa)
+    }catch(error){
+      showToast("휴지통 이동 실패: "+((error as any)?.message||"오류"),false)
     }
-    if(!data||data.length===0){showToast("삭제할 폼을 찾지 못했거나 삭제 권한이 없어요.",false);return}
-    if(loadedId===id){setLoadedId("");setLoadedName("");setSavedSlug("")}
-    showToast(`"${name}" 삭제됨`);loadList();loadDashboard(supa)
+  }
+  async function restoreFormFromTrash(item:any){
+    if(!supa||!item?.id)return
+    setFormTrashBusy(item.id)
+    try{
+      const full=await getFullFormRow(item)
+      const next=mergeCfg(full.config||{})
+      const dashboard={...(next.dashboard||{})}
+      delete (dashboard as any).formTrashedAt
+      next.dashboard=dashboard
+      const{error}=await supa.from("form_configs").update({config:next,updated_at:new Date().toISOString()}).eq("id",item.id)
+      if(error)throw error
+      delete fullFormCache.current[item.id]
+      showToast(`"${item.name||full.name||"폼"}"을 복구했어요.`)
+      loadList();loadDashboard(supa)
+    }catch(error){
+      showToast("폼 복구 실패: "+((error as any)?.message||"오류"),false)
+    }finally{
+      setFormTrashBusy("")
+    }
   }
   async function renameCfg(id:string,newName:string){
     if(!supa||!newName.trim())return
@@ -2008,7 +2082,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     try{
       const now=new Date().toISOString()
       const dashboard=cfg.dashboard||{}
-      const nextCfg:Cfg={
+      const nextCfg:Cfg=mergeRecruitmentPeriodIntoConfig({
         ...cfg,
         brand:currentBrand,
         dashboard:{
@@ -2017,7 +2091,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           publishedAt:dashboard.publishedAt||now,
           manualStatus:!dashboard.manualStatus||dashboard.manualStatus==="draft"?"active":dashboard.manualStatus,
         },
-      }
+      })
       const{error}=await supa.from("form_configs").update({config:nextCfg,brand:dbBrandValue(currentBrand),updated_at:now}).eq("id",loadedId)
       if(error)throw error
       setCfg(nextCfg)
@@ -2788,6 +2862,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <div style={{width:1,height:20,background:A.border}}/>
           <span style={{fontSize:12.5,color:A.t3}}>{authUser?.email}</span>
           <button onClick={doLogout} style={{fontSize:12.5,fontWeight:500,padding:"5px 12px",borderRadius:8,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,cursor:"pointer",fontFamily:FONT}}>로그아웃</button>
+          <button onClick={()=>setFormTrashOpen(true)}
+            style={{height:36,padding:"0 12px",borderRadius:8,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}
+            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=A.red;(e.currentTarget as HTMLElement).style.color=A.red}}
+            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=A.border;(e.currentTarget as HTMLElement).style.color=A.t2}}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v8M8 6v8M11 6v8M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            폼 휴지통{formTrashItems.length?` ${formTrashItems.length}`:""}
+          </button>
           <button onClick={()=>setShowBrandModal(true)}
             style={{height:36,padding:"0 16px",borderRadius:8,border:"none",background:"#3182F6",color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
             <span style={{fontSize:17,lineHeight:1,marginTop:-1}}>+</span> 새 폼 만들기
@@ -2943,10 +3024,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     const type=typeOf(item)
                     const status=statusInfo(statusOf(item))
                     const program=programOf(item)
+                    const locked=!!item.config?.dashboard?.editPasswordHash
                     return <div key={item.id} onMouseEnter={()=>prefetchFullFormRow(item)} onContextMenu={e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,item,source:"dashboard"})}}
                       style={{display:"grid",gridTemplateColumns:"minmax(210px,1.35fr) 132px minmax(160px,1fr) 92px 80px 74px 100px 148px",alignItems:"center",minHeight:58,padding:"0 14px",borderBottom:`1px solid ${A.border}`,fontSize:12.5,color:A.t2}}>
                       <div style={{minWidth:0,paddingRight:20}}>
-                        <div style={{fontSize:13,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name||"이름 없는 폼"}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
+                          <span style={{fontSize:13,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name||"이름 없는 폼"}</span>
+                          {locked&&<span title="편집 비밀번호 설정됨" style={{color:A.t3,display:"inline-flex",alignItems:"center",flexShrink:0}}><LockIcon/></span>}
+                        </div>
                         <div style={{fontSize:11.5,color:A.t3,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.config?.header?.title||""}</div>
                       </div>
                       <span>{brandLabel(brandOf(item))}</span>
@@ -2957,7 +3042,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       <span>{item.updated_at?new Date(item.updated_at).toLocaleDateString("ko-KR"):"-"}</span>
                       <div style={{display:"flex",justifyContent:"flex-end",gap:4}}>
                         <button onClick={()=>openFormAnalytics(item)} title="응답 및 분석" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg></button>
-                        <button onClick={()=>openDashboardSettings(item)} title="목록 설정" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.2" stroke="currentColor" strokeWidth="1.8"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.04 1.56v.08h-3v-.08a1.7 1.7 0 0 0-1.04-1.56 1.7 1.7 0 0 0-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 0 0 6.6 15a1.7 1.7 0 0 0-1.56-1.04h-.08v-3h.08A1.7 1.7 0 0 0 6.6 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.12-2.12.06.06a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 11.3 3.78V3.7h3v.08a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.12 2.12-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.56 1.04h.08v3h-.08A1.7 1.7 0 0 0 19.4 15Z" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                        <button onClick={()=>openDashboardSettings(item)} title="목록 설정" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><GearIcon size={15}/></button>
                         <button onClick={()=>requestOpenFormForEdit(item)} title="편집" style={{height:30,padding:"0 9px",borderRadius:6,border:`1px solid ${A.border}`,background:A.card,color:A.t1,cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:600}}>편집</button>
                       </div>
                     </div>
@@ -3017,9 +3102,46 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <div style={{fontSize:12.5,color:A.t3,lineHeight:1.55,marginBottom:15}}>이 폼은 편집 보호가 설정되어 있어요.</div>
               <input autoFocus type="password" value={editPasswordPrompt.password} onChange={e=>setEditPasswordPrompt(prev=>prev&&({...prev,password:e.target.value,error:""}))} onKeyDown={e=>e.key==="Enter"&&verifyEditPassword()} placeholder="비밀번호 입력" style={{width:"100%",height:40,padding:"0 11px",borderRadius:A.r,border:`1px solid ${editPasswordPrompt.error?A.red:A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,outline:"none"}}/>
               {editPasswordPrompt.error&&<div style={{fontSize:12,color:A.red,marginTop:7}}>{editPasswordPrompt.error}</div>}
-              <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginTop:18}}>
+                <button onClick={()=>setEditPasswordPrompt(prev=>prev&&({...prev,error:"보안을 위해 비밀번호 원문은 저장하지 않아요. 만든 사람 또는 관리자에게 목록 설정에서 비밀번호 해제/재설정을 요청해주세요."}))} disabled={editPasswordPrompt.checking} style={{height:38,padding:"0 4px",border:"none",background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12.5,cursor:"pointer"}}>비밀번호 찾기</button>
+                <div style={{display:"flex",gap:8}}>
                 <button onClick={()=>setEditPasswordPrompt(null)} disabled={editPasswordPrompt.checking} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
                 <button onClick={verifyEditPassword} disabled={editPasswordPrompt.checking} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>{editPasswordPrompt.checking?"확인 중...":"편집 열기"}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {formTrashOpen&&(
+          <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}} onClick={()=>!formTrashBusy&&setFormTrashOpen(false)}>
+            <div style={{width:560,maxWidth:"92vw",maxHeight:"78vh",background:A.card,border:`1px solid ${A.border}`,borderRadius:16,boxShadow:A.shadow,display:"flex",flexDirection:"column" as const,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+              <div style={{height:58,padding:"0 18px",borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+                <div style={{width:34,height:34,borderRadius:A.r,background:"rgba(232,92,92,0.10)",color:A.red,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v8M8 6v8M11 6v8M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:16,fontWeight:600,color:A.t1}}>폼 휴지통</div>
+                  <div style={{fontSize:12,color:A.t3,marginTop:2}}>삭제한 폼을 다시 복구할 수 있어요.</div>
+                </div>
+                <button onClick={()=>setFormTrashOpen(false)} disabled={!!formTrashBusy} style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,cursor:formTrashBusy?"not-allowed":"pointer",fontSize:18,lineHeight:1}}>×</button>
+              </div>
+              <div style={{padding:14,overflowY:"auto" as const}}>
+                {formTrashItems.length===0
+                  ? <div style={{padding:"44px 12px",textAlign:"center" as const,color:A.t3,fontSize:13}}>폼 휴지통이 비어 있어요.</div>
+                  : formTrashItems.map((item:any)=>{
+                    const trashedAt=formTrashedAtOf(item)
+                    const busy=formTrashBusy===item.id
+                    return <div key={item.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,marginBottom:8}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name||"이름 없는 폼"}</div>
+                        <div style={{fontSize:11.5,color:A.t3,marginTop:4,display:"flex",gap:8,flexWrap:"wrap" as const}}>
+                          <span>{brandDisplayName(item.config?.brand||item.brand||"")}</span>
+                          {trashedAt&&<span>{new Date(trashedAt).toLocaleString("ko-KR")}</span>}
+                        </div>
+                      </div>
+                      <button onClick={()=>restoreFormFromTrash(item)} disabled={busy} style={{height:34,padding:"0 12px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:busy?"wait":"pointer",flexShrink:0}}>{busy?"복구 중...":"복구"}</button>
+                    </div>
+                  })}
               </div>
             </div>
           </div>
@@ -3183,7 +3305,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=A.card2}
               onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              삭제
+              휴지통으로 이동
             </button>
           </>}
         </div>
@@ -3261,7 +3383,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=A.card2}
               onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              삭제
+              휴지통으로 이동
             </button>
           </>}
         </div>
@@ -3615,10 +3737,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 style={{opacity:panelDragIdx===idx?0.4:1,transition:"opacity .15s"}}>
                 {panelDragOver===idx&&panelDragIdx!==idx&&<div style={{height:2,borderRadius:1,background:A.blue,marginBottom:2}}/>}
                 <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}>
-                  {/* Drag handle */}
-                  <div style={{width:16,display:"flex",alignItems:"center",justifyContent:"center",cursor:"grab",color:A.t4,flexShrink:0}}>
-                    <svg width="10" height="14" viewBox="0 0 10 14" fill="none"><circle cx="3" cy="2.5" r="1" fill="currentColor"/><circle cx="7" cy="2.5" r="1" fill="currentColor"/><circle cx="3" cy="7" r="1" fill="currentColor"/><circle cx="7" cy="7" r="1" fill="currentColor"/><circle cx="3" cy="11.5" r="1" fill="currentColor"/><circle cx="7" cy="11.5" r="1" fill="currentColor"/></svg>
-                  </div>
+	                  {/* Drag handle */}
+	                  <div style={{width:16,display:"flex",alignItems:"center",justifyContent:"center",cursor:"grab",color:A.t4,flexShrink:0}}>
+	                    <DragHandleIcon size={13}/>
+	                  </div>
                   <div
                     style={{flex:1,display:"flex",alignItems:"center",gap:6,padding:"7px 8px",borderRadius:A.r,border:`1px solid ${editIdx===idx?A.blue:"transparent"}`,background:editIdx===idx?A.blue2:"transparent",cursor:"pointer",transition:"all .1s",minWidth:0}}
                     onClick={()=>setEditIdx(editIdx===idx?null:idx)}>
@@ -3751,13 +3873,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                         </div>}
                       </div>
                       <div style={{display:"flex",flexDirection:"column" as const,gap:4,marginBottom:8}}>
-                        {((field as any).opts||[]).map((o:any,oi:number)=>(
-                          <div key={oi} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px 5px 10px",borderRadius:A.r,background:A.card,border:`1px solid ${A.border2}`,fontSize:12,color:A.t1}}>
-                            <div style={{display:"flex",flexDirection:"column" as const,gap:1,flexShrink:0}}>
-                              <button onClick={()=>moveActiveFieldOption(idx,oi,-1)} disabled={oi===0} title="위로 이동"
-                                style={{width:18,height:13,border:"none",borderRadius:3,background:oi===0?"transparent":A.card2,color:oi===0?A.t3:A.t2,cursor:oi===0?"default":"pointer",fontSize:9,lineHeight:1,padding:0,opacity:oi===0?0.35:1}}>▲</button>
-                              <button onClick={()=>moveActiveFieldOption(idx,oi,1)} disabled={oi===(((field as any).opts||[]).length-1)} title="아래로 이동"
-                                style={{width:18,height:13,border:"none",borderRadius:3,background:oi===(((field as any).opts||[]).length-1)?"transparent":A.card2,color:oi===(((field as any).opts||[]).length-1)?A.t3:A.t2,cursor:oi===(((field as any).opts||[]).length-1)?"default":"pointer",fontSize:9,lineHeight:1,padding:0,opacity:oi===(((field as any).opts||[]).length-1)?0.35:1}}>▼</button>
+                        {((field as any).opts||[]).map((o:any,oi:number)=>{
+                          const dragging=optionDrag?.fieldIdx===idx&&optionDrag.optIdx===oi
+                          const over=optionDragOver?.fieldIdx===idx&&optionDragOver.optIdx===oi
+                          return <div key={oi}
+                            onDragOver={e=>{e.preventDefault();setOptionDragOver({fieldIdx:idx,optIdx:oi})}}
+                            onDragLeave={()=>setOptionDragOver(null)}
+                            onDrop={e=>{e.preventDefault();if(optionDrag&&optionDrag.fieldIdx===idx)reorderActiveFieldOption(idx,optionDrag.optIdx,oi);setOptionDrag(null);setOptionDragOver(null)}}
+                            style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",borderRadius:A.r,background:A.card,border:`1px solid ${over&&!dragging?A.blue:A.border2}`,fontSize:12,color:A.t1,opacity:dragging?0.45:1,transition:"border-color .12s, opacity .12s"}}>
+                            <div draggable title="드래그해서 순서 변경"
+                              onDragStart={e=>{setOptionDrag({fieldIdx:idx,optIdx:oi});e.dataTransfer.effectAllowed="move";try{e.dataTransfer.setData("text/plain",String(oi))}catch{}}}
+                              onDragEnd={()=>{setOptionDrag(null);setOptionDragOver(null)}}
+                              style={{width:18,height:26,display:"flex",alignItems:"center",justifyContent:"center",cursor:"grab",color:A.t3,flexShrink:0}}>
+                              <DragHandleIcon size={13}/>
                             </div>
                             <span onDoubleClick={e=>{const s=e.currentTarget;s.contentEditable="true";s.focus();const r=document.createRange();r.selectNodeContents(s);window.getSelection()?.removeAllRanges();window.getSelection()?.addRange(r)}}
                               onBlur={e=>{e.currentTarget.contentEditable="false";const newOpts=[...((field as any).opts||[])];newOpts[oi]={...newOpts[oi],label:e.currentTarget.textContent||o.label,value:newOpts[oi].value||e.currentTarget.textContent||o.label};patchActiveField(idx,{opts:newOpts})}}
@@ -3775,7 +3903,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                             <button onClick={()=>patchActiveField(idx,{opts:((field as any).opts||[]).filter((_:any,i:number)=>i!==oi)})}
                               style={{fontSize:14,color:A.t3,border:"none",background:"none",cursor:"pointer",padding:0,lineHeight:1,display:"flex",alignItems:"center",flexShrink:0}}>×</button>
                           </div>
-                        ))}
+                        })}
                       </div>
                       <FieldOptAdder fieldIdx={idx} onAdd={(lbl:string,val:string)=>{const cur=(field as any).opts||[];const v=val||lbl;patchActiveField(idx,{opts:[...cur,{label:lbl,value:v,isEtc:lbl==="기타"}]})}} A={A}/>
                     </div>
@@ -5709,10 +5837,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             onClick={openBuilderSettings}
             style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
             aria-label="목록 설정">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="3.2" stroke="currentColor" strokeWidth="1.8"/>
-              <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.04 1.56v.08h-3v-.08a1.7 1.7 0 0 0-1.04-1.56 1.7 1.7 0 0 0-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 0 0 6.6 15a1.7 1.7 0 0 0-1.56-1.04h-.08v-3h.08A1.7 1.7 0 0 0 6.6 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.12-2.12.06.06a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 11.3 3.78V3.7h3v.08a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.12 2.12-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.56 1.04h.08v3h-.08A1.7 1.7 0 0 0 19.4 15Z" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+            <GearIcon size={16}/>
           </button>
           {showBuilderSettingsTip&&<div style={{position:"absolute" as const,top:"calc(100% + 7px)",left:"50%",transform:"translateX(-50%)",background:A.t1,color:A.card,padding:"5px 8px",borderRadius:6,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const,zIndex:1000,boxShadow:A.shadow}}>목록 설정</div>}
         </div>
@@ -5775,10 +5900,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	                  onMouseEnter={e=>{prefetchFullFormRow(item);if(loadedId!==item.id){(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.borderColor=A.border}}}
                   onMouseLeave={e=>{if(loadedId!==item.id){(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.borderColor="transparent"}}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,fontWeight:loadedId===item.id?600:600,color:loadedId===item.id?A.blue:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:4,minWidth:0}}>
+                      <span style={{fontSize:12,fontWeight:600,color:loadedId===item.id?A.blue:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name}</span>
+                      {!!item.config?.dashboard?.editPasswordHash&&<span title="편집 비밀번호 설정됨" style={{color:A.t3,display:"inline-flex",alignItems:"center",flexShrink:0}}><LockIcon size={12}/></span>}
+                    </div>
                     <div style={{fontSize:10.5,color:A.t3}}>{new Date(item.updated_at).toLocaleDateString("ko-KR")}</div>
                   </div>
-                  <button onClick={e=>{e.stopPropagation();delCfg(item.id,item.name)}} style={{width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center",border:"none",borderRadius:6,background:"none",cursor:"pointer",flexShrink:0,color:A.t4}} onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.color=A.red;(e.currentTarget as HTMLElement).style.background="rgba(232,92,92,0.08)"}} onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.color=A.t4;(e.currentTarget as HTMLElement).style.background="none"}}><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                  <button onClick={e=>{e.stopPropagation();delCfg(item.id,item.name)}} title="휴지통으로 이동" style={{width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center",border:"none",borderRadius:6,background:"none",cursor:"pointer",flexShrink:0,color:A.t4}} onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.color=A.red;(e.currentTarget as HTMLElement).style.background="rgba(232,92,92,0.08)"}} onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.color=A.t4;(e.currentTarget as HTMLElement).style.background="none"}}><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                 </div>
               ))
             })()}

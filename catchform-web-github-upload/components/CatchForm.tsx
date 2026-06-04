@@ -49,7 +49,7 @@ type KdtField = {
 }
 type Cfg = {
     header: {
-        imageUrl: string; programId?: string; overline: string; title: string
+        imageUrl: string; programId?: string; programUnlinked?: boolean; overline: string; title: string
         educationStart: string; educationEnd: string
         tuitionFree: boolean; tuitionFreeText: string; tuitionAmount: string; stipend: string
         noticeEnabled: boolean; noticeIconEnabled: boolean; noticeIconText: string; noticeText: string
@@ -231,6 +231,44 @@ function operationTimeMs(value?: string, edge: "start" | "end" = "start") {
     const time = new Date(normalized).getTime()
     return Number.isFinite(time) ? time : 0
 }
+function firstDateValue(source: any, keys: string[]) {
+    for (const key of keys) {
+        const value = source?.[key]
+        if (typeof value === "string" && value.trim()) return value.trim()
+    }
+    return ""
+}
+function recruitmentPeriodOf(program?: any) {
+    if (!program) return { start: "", end: "" }
+    return {
+        start: firstDateValue(program, [
+            "recruitment_start",
+            "recruitment_start_at",
+            "recruitment_start_date",
+            "recruit_start",
+            "recruit_start_at",
+            "recruit_start_date",
+            "application_start",
+            "application_start_at",
+            "application_start_date",
+            "apply_start",
+            "apply_start_at",
+        ]),
+        end: firstDateValue(program, [
+            "recruitment_end",
+            "recruitment_end_at",
+            "recruitment_end_date",
+            "recruit_end",
+            "recruit_end_at",
+            "recruit_end_date",
+            "application_end",
+            "application_end_at",
+            "application_end_date",
+            "apply_end",
+            "apply_end_at",
+        ]),
+    }
+}
 function getOperationGate(cfg: Cfg) {
     const start = cfg.dashboard?.operationStart || ""
     const end = cfg.dashboard?.operationEnd || ""
@@ -322,9 +360,29 @@ export function CatchForm(props: {
                 }
                 return
             }
+            let nextConfig = data.config as Cfg
+            const programId = nextConfig?.header?.programUnlinked ? "" : String(nextConfig?.header?.programId || "")
+            if (programId) {
+                let program: any = null
+                try {
+                    const programRes = await supa.from("programs").select("*").eq("id", programId).maybeSingle()
+                    program = programRes.data
+                } catch {}
+                const period = recruitmentPeriodOf(program)
+                if (period.start || period.end) {
+                    nextConfig = {
+                        ...nextConfig,
+                        dashboard: {
+                            ...(nextConfig.dashboard || {}),
+                            operationStart: period.start || nextConfig.dashboard?.operationStart || "",
+                            operationEnd: period.end || nextConfig.dashboard?.operationEnd || "",
+                        },
+                    }
+                }
+            }
             setLoadedFormId(data.id || "")
-            setCfg(data.config as Cfg)
-            try { sessionStorage.setItem(cacheKey, JSON.stringify({ id: data.id || "", config: data.config, ts: Date.now() })) } catch {}
+            setCfg(nextConfig)
+            try { sessionStorage.setItem(cacheKey, JSON.stringify({ id: data.id || "", config: nextConfig, ts: Date.now() })) } catch {}
             setLoading(false)
         })()
     }, [supa, propSlug, propFormId, configJson])
