@@ -66,7 +66,7 @@ type Cfg = {
     styles: { theme: "dark"|"light"; fieldH: number; qGap: number; maxW: number; labelGap?: number }
     auth: { enabled: boolean; loginUrl: string; errText: string }
     integrations?: { googleSheets?: { enabled: boolean; mode: "existing"|"new"; accountEmail: string; sheetUrl: string; sheetName: string; webhookUrl: string; lastSyncStatus?: "idle"|"sent"|"error"; lastSyncAt?: string; lastSyncMessage?: string } }
-    dashboard?: { isPublished?: boolean; publishedAt?: string }
+    dashboard?: { isPublished?: boolean; publishedAt?: string; operationStart?: string; operationEnd?: string }
     brand: string
     formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"
     kdtFields?: KdtField[]
@@ -223,6 +223,57 @@ function fmtPhone(v: string) {
     if (d.length <= 7) return `${d.slice(0, 3)}-${d.slice(3)}`
     return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`
 }
+function operationTimeMs(value?: string, edge: "start" | "end" = "start") {
+    const raw = String(value || "").trim()
+    if (!raw) return 0
+    const normalized = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+        ? `${raw}T${edge === "end" ? "23:59:59" : "00:00:00"}`
+        : raw
+    const time = new Date(normalized).getTime()
+    return Number.isFinite(time) ? time : 0
+}
+function formatOperationDateTime(value?: string, edge: "start" | "end" = "start") {
+    const raw = String(value || "").trim()
+    if (!raw) return edge === "start" ? "시작 시간 미정" : "종료 시간 미정"
+    const normalized = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+        ? `${raw}T${edge === "end" ? "23:59:59" : "00:00:00"}`
+        : raw
+    const date = new Date(normalized)
+    if (!Number.isFinite(date.getTime())) return raw
+    return date.toLocaleString("ko-KR", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+    })
+}
+function getOperationGate(cfg: Cfg) {
+    const start = cfg.dashboard?.operationStart || ""
+    const end = cfg.dashboard?.operationEnd || ""
+    if (!start && !end) return null
+    const now = Date.now()
+    const startAt = operationTimeMs(start, "start")
+    const endAt = operationTimeMs(end, "end")
+    const periodText = `${formatOperationDateTime(start, "start")} ~ ${formatOperationDateTime(end, "end")}`
+    if (startAt && now < startAt) {
+        return {
+            kind: "before" as const,
+            title: "아직 모집이 시작되지 않았어요.",
+            body: "운영 시작 시간 이후에 신청할 수 있습니다.",
+            periodText,
+        }
+    }
+    if (endAt && now > endAt) {
+        return {
+            kind: "ended" as const,
+            title: "모집이 종료되었습니다.",
+            body: "운영 기간이 지나 더 이상 신청을 받을 수 없습니다.",
+            periodText,
+        }
+    }
+    return null
+}
 
 // ─── Main Component ───────────────────────────────────────────────────────
 export function CatchForm(props: {
@@ -359,12 +410,19 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const draftLoadedRef = React.useRef(false)
     const remoteDraftTimerRef = React.useRef<any>(null)
     const [draftLastFieldId, setDraftLastFieldId] = React.useState("")
+    const operationGate = React.useMemo(() => getOperationGate(cfg), [cfg.dashboard?.operationStart, cfg.dashboard?.operationEnd])
+    const formDisabled = !!operationGate
+    const [showOperationModal, setShowOperationModal] = React.useState(!!operationGate)
 
     const draftKey = React.useMemo(() => {
         const raw = formId || formSlug || cfg.header?.programId || cfg.header?.title || "form"
         const safe = String(raw).trim().replace(/[^A-Za-z0-9가-힣._-]/g, "_").slice(0, 120) || "form"
         return `catchform_draft_v2_${safe}`
     }, [formId, formSlug, cfg.header?.programId, cfg.header?.title])
+
+    React.useEffect(() => {
+        if (operationGate) setShowOperationModal(true)
+    }, [operationGate?.kind, operationGate?.periodText])
 
     const setVal = (id: string, v: string) => setVals(p => ({ ...p, [id]: v }))
     const setErr = (id: string, msg: string) => setErrors(p => ({ ...p, [id]: msg }))
@@ -1024,6 +1082,10 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     }
 
     const handleSubmit = async () => {
+        if (operationGate) {
+            setShowOperationModal(true)
+            return
+        }
         // Validate
         let hasErr = false
         const newErrors: Record<string, string> = {}
@@ -1573,6 +1635,23 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 <div style={{height:1,background:FC.fieldBorder,margin:"6px 2px"}} />
                 <button onClick={() => copyShareUrl()} style={shareMenuButtonStyle}><ShareIcon type="link" />{shareCopied ? "복사 완료" : "URL 복사"}</button>
             </div>}
+            {/* Operation period modal */}
+            {operationGate && showOperationModal && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10000, padding: 20, boxSizing: "border-box" as const }}>
+                <div style={{ width: "min(420px,100%)", background: FC.bg || "#fff", borderRadius: 18, padding: "30px 26px 24px", boxShadow: "0 18px 48px rgba(0,0,0,0.28)", border: `1px solid ${FC.fieldBorder}`, textAlign: "center" as const }}>
+                    <div style={{ width: 54, height: 54, borderRadius: "50%", background: `${FC.red}12`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", color: FC.red }}>
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2"/><path d="M12 7v6M12 17h.01" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </div>
+                    <div style={{ fontSize: 18, fontWeight: 600, color: FC.t1, marginBottom: 8, fontFamily: FONT }}>{operationGate.title}</div>
+                    <div style={{ fontSize: 13.5, color: FC.t2, lineHeight: 1.6, marginBottom: 14, fontFamily: FONT }}>{operationGate.body}</div>
+                    <div style={{ padding: "10px 12px", borderRadius: fr, background: FC.fieldBg, color: FC.t2, fontSize: 12.5, lineHeight: 1.45, fontFamily: FONT, marginBottom: 18 }}>
+                        운영 기간<br/><span style={{ color: FC.t1, fontWeight: 600 }}>{operationGate.periodText}</span>
+                    </div>
+                    <button onClick={() => setShowOperationModal(false)}
+                        style={{ width: "100%", height: 44, borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: "pointer" }}>
+                        확인
+                    </button>
+                </div>
+            </div>}
             {/* Auth modal */}
             {cfg.auth?.enabled && showAuthModal && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 }}>
                 <div style={{ background: FC.bg || "#fff", borderRadius: 16, padding: "32px 28px", width: "min(360px,90%)", boxShadow: "0 8px 40px rgba(0,0,0,0.3)" }}>
@@ -1598,6 +1677,10 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 </div>
             </div>}
             <div style={{ width: "100%", maxWidth: cfg.styles.maxW, margin: "0 auto", fontFamily: FONT, padding: "40px 20px 80px", boxSizing: "border-box" as const }}>
+            {operationGate && <div style={{ marginBottom: 18, padding: "13px 14px", borderRadius: fr, background: `${FC.red}0f`, border: `1px solid ${FC.red}30`, color: FC.red, fontFamily: FONT }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>{operationGate.title}</div>
+                <div style={{ fontSize: 12.5, lineHeight: 1.55, color: FC.red }}>{operationGate.periodText}</div>
+            </div>}
 
             {/* Header image */}
             {cfg.header.imageUrl && <div style={{ ...imageBoxStyle(cfg.header, 200, fr, FC.fieldBg), marginBottom: 22 }}>
@@ -1680,14 +1763,14 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 {isMultiPage && page < formPages
                     ? <button
                         disabled={!isPageComplete}
-                        onClick={() => { persistLocalDraft(page + 1); saveRemoteDraft(false, page + 1); setPage(p => p + 1) }}
-                        style={{ flex: 2, height: cfg.cta.height, borderRadius: fr, border: "none", background: isPageComplete ? accentBg : accentBg + "55", color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: isPageComplete ? "pointer" : "not-allowed" }}>
+                        onClick={() => { if (formDisabled) { setShowOperationModal(true); return } persistLocalDraft(page + 1); saveRemoteDraft(false, page + 1); setPage(p => p + 1) }}
+                        style={{ flex: 2, height: cfg.cta.height, borderRadius: fr, border: "none", background: !formDisabled && isPageComplete ? accentBg : accentBg + "55", color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: !formDisabled && isPageComplete ? "pointer" : "not-allowed" }}>
                         다음
                       </button>
                     : <button
                         disabled={submitting || !isPageComplete}
                         onClick={handleSubmit}
-                        style={{ flex: 2, height: cfg.cta.height, borderRadius: fr, border: "none", background: isPageComplete ? accentBg : accentBg + "55", color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: (submitting || !isPageComplete) ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1 }}>
+                        style={{ flex: 2, height: cfg.cta.height, borderRadius: fr, border: "none", background: !formDisabled && isPageComplete ? accentBg : accentBg + "55", color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: (formDisabled || submitting || !isPageComplete) ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1 }}>
                         {submitting ? (cfg.cta.loadLabel || "제출 중...") : cfg.cta.label}
                       </button>}
             </div>
