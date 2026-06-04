@@ -2122,9 +2122,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     loadList();loadDashboard(supa)
     setRenameModal(null)
   }
-  const normalizeSlug=(v:string)=>v.trim().toLowerCase().replace(/[^a-z0-9가-힣._-]+/g,"-").replace(/-+/g,"-").replace(/^-+|-+$/g,"")
+  const normalizeSlug=(v:string)=>v.trim().toLowerCase().replace(/[^a-z0-9-]+/g,"-").replace(/-+/g,"-").replace(/^-+|-+$/g,"")
+  const hasInvalidSlugChars=(v:string)=>/[^a-zA-Z0-9-]/.test(v.trim())
   async function updateFormSlug(){
-    const next=normalizeSlug(slugDraft)
+    const raw=slugDraft.trim()
+    if(hasInvalidSlugChars(raw)){
+      showToast("슬러그는 한글, 공백 없이 영문, 숫자, 하이픈(-)만 사용할 수 있어요.",false)
+      return
+    }
+    const next=normalizeSlug(raw)
     if(!next){showToast("슬러그를 입력해주세요.",false);return}
     if(!supa){showToast("Supabase 연결 필요",false);return}
     if(!loadedId){
@@ -4228,10 +4234,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
 
       case "slug": {
-        const preview=slugDraft?buildPublicFormUrl(slugDraft):""
+        const slugHasInvalidChars=hasInvalidSlugChars(slugDraft)
+        const preview=slugDraft&&!slugHasInvalidChars?buildPublicFormUrl(normalizeSlug(slugDraft)):""
         return <div style={pd}>
           <FG title="폼 슬러그" A={A} last>
-            <F label="슬러그" A={A}><TIn value={slugDraft} onChange={v=>setSlugDraft(v)} placeholder="my-form-slug" A={A}/></F>
+            <F label="슬러그" A={A}>
+              <TIn value={slugDraft} onChange={v=>setSlugDraft(v)} placeholder="my-form-slug" A={A}/>
+              <div style={{marginTop:7,fontSize:11.5,lineHeight:1.5,color:slugHasInvalidChars?A.red:A.t3}}>
+                한글, 공백, 특수문자는 사용할 수 없어요. 영문, 숫자, 하이픈(-)만 입력해주세요.
+              </div>
+            </F>
             {preview&&<F label="미리보기 URL" A={A}><div style={{padding:"9px 10px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:11.5,color:A.t2,wordBreak:"break-all" as const,fontFamily:"Courier New,monospace"}}>{preview}</div></F>}
             <button onClick={updateFormSlug} style={{width:"100%",height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>
               {loadedId?"슬러그 저장":"저장 전 슬러그 적용"}
