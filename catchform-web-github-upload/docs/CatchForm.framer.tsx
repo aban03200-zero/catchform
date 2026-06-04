@@ -232,22 +232,6 @@ function operationTimeMs(value?: string, edge: "start" | "end" = "start") {
     const time = new Date(normalized).getTime()
     return Number.isFinite(time) ? time : 0
 }
-function formatOperationDateTime(value?: string, edge: "start" | "end" = "start") {
-    const raw = String(value || "").trim()
-    if (!raw) return edge === "start" ? "시작 시간 미정" : "종료 시간 미정"
-    const normalized = /^\d{4}-\d{2}-\d{2}$/.test(raw)
-        ? `${raw}T${edge === "end" ? "23:59:59" : "00:00:00"}`
-        : raw
-    const date = new Date(normalized)
-    if (!Number.isFinite(date.getTime())) return raw
-    return date.toLocaleString("ko-KR", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-    })
-}
 function getOperationGate(cfg: Cfg) {
     const start = cfg.dashboard?.operationStart || ""
     const end = cfg.dashboard?.operationEnd || ""
@@ -255,13 +239,11 @@ function getOperationGate(cfg: Cfg) {
     const now = Date.now()
     const startAt = operationTimeMs(start, "start")
     const endAt = operationTimeMs(end, "end")
-    const periodText = `${formatOperationDateTime(start, "start")} ~ ${formatOperationDateTime(end, "end")}`
     if (startAt && now < startAt) {
         return {
             kind: "before" as const,
             title: "아직 모집이 시작되지 않았어요.",
             body: "운영 시작 시간 이후에 신청할 수 있습니다.",
-            periodText,
         }
     }
     if (endAt && now > endAt) {
@@ -269,7 +251,6 @@ function getOperationGate(cfg: Cfg) {
             kind: "ended" as const,
             title: "모집이 종료되었습니다.",
             body: "운영 기간이 지나 더 이상 신청을 받을 수 없습니다.",
-            periodText,
         }
     }
     return null
@@ -422,7 +403,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
     React.useEffect(() => {
         if (operationGate) setShowOperationModal(true)
-    }, [operationGate?.kind, operationGate?.periodText])
+    }, [operationGate?.kind])
 
     const setVal = (id: string, v: string) => setVals(p => ({ ...p, [id]: v }))
     const setErr = (id: string, msg: string) => setErrors(p => ({ ...p, [id]: msg }))
@@ -1642,10 +1623,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                         <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2"/><path d="M12 7v6M12 17h.01" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </div>
                     <div style={{ fontSize: 18, fontWeight: 600, color: FC.t1, marginBottom: 8, fontFamily: FONT }}>{operationGate.title}</div>
-                    <div style={{ fontSize: 13.5, color: FC.t2, lineHeight: 1.6, marginBottom: 14, fontFamily: FONT }}>{operationGate.body}</div>
-                    <div style={{ padding: "10px 12px", borderRadius: fr, background: FC.fieldBg, color: FC.t2, fontSize: 12.5, lineHeight: 1.45, fontFamily: FONT, marginBottom: 18 }}>
-                        운영 기간<br/><span style={{ color: FC.t1, fontWeight: 600 }}>{operationGate.periodText}</span>
-                    </div>
+                    <div style={{ fontSize: 13.5, color: FC.t2, lineHeight: 1.6, marginBottom: 18, fontFamily: FONT }}>{operationGate.body}</div>
                     <button onClick={() => setShowOperationModal(false)}
                         style={{ width: "100%", height: 44, borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: "pointer" }}>
                         확인
@@ -1679,7 +1657,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             <div style={{ width: "100%", maxWidth: cfg.styles.maxW, margin: "0 auto", fontFamily: FONT, padding: "40px 20px 80px", boxSizing: "border-box" as const }}>
             {operationGate && <div style={{ marginBottom: 18, padding: "13px 14px", borderRadius: fr, background: `${FC.red}0f`, border: `1px solid ${FC.red}30`, color: FC.red, fontFamily: FONT }}>
                 <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>{operationGate.title}</div>
-                <div style={{ fontSize: 12.5, lineHeight: 1.55, color: FC.red }}>{operationGate.periodText}</div>
+                <div style={{ fontSize: 12.5, lineHeight: 1.55, color: FC.red }}>{operationGate.body}</div>
             </div>}
 
             {/* Header image */}
