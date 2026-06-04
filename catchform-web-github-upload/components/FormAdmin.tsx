@@ -81,6 +81,7 @@ const FONT = "'Pretendard Variable','Pretendard','Noto Sans KR',-apple-system,'A
 const FILE_MAX_COUNT = 5
 const FILE_MAX_SIZE_MB = 10
 const FILE_LIMIT_TEXT = `최대 ${FILE_MAX_COUNT}개, 파일당 ${FILE_MAX_SIZE_MB}MB`
+const CATCHFORM_DIRECT_FORM_BASE_URL = "https://catchform.vercel.app/form"
 const FORM_SUMMARY_SELECT = "id,name,slug,updated_at,brand,config_brand:config->>brand,header_title:config->header->>title,program_id:config->header->>programId,form_type:config->>formType,dashboard_meta:config->dashboard"
 const DEFAULT_GOOGLE_SHEETS = {enabled:false,mode:"existing" as const,accountEmail:"",sheetUrl:"",sheetName:"",webhookUrl:"",lastSyncStatus:"idle" as const,lastSyncAt:"",lastSyncMessage:""}
 const DASHBOARD_FORM_TYPES:{value:DashboardFormType;label:string}[]=[
@@ -432,7 +433,7 @@ const DEFAULT_GUIDE_SECTIONS = [
       "우측 상단 '저장' 버튼으로 폼을 처음 저장합니다. 이름과 슬러그를 입력하세요.",
       "저장 후에는 내용이 변경되면 2초 후 자동으로 저장됩니다.",
       "'폼 열기' 버튼으로 실제 폼 페이지를 확인할 수 있습니다.",
-      "폼 URL 형식: {사이트주소}?slug={슬러그}",
+      "스팩스페이스 폼 URL 형식: https://catchform.vercel.app/form/{슬러그}",
     ]
   },
   {
@@ -1977,17 +1978,26 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	    supa.from("form_configs").update({config:cfgFinal,brand:dbBrandValue(currentBrand),updated_at:updatedAt}).eq("id",loadedId)
 		      .then(({error})=>{if(error)showToast("저장 중 오류가 발생했어요",false);else{loadList();loadDashboard(supa)}})
 		  }
-	  function onSaveClick(){if(loadedId)setShowUpdateModal(true);else setShowSave(true)}
+  function onSaveClick(){if(loadedId)setShowUpdateModal(true);else setShowSave(true)}
   function getBrandFormBaseUrl(brand=currentBrand){
-    return (canonicalBrand(brand)==="SNIPERFACTORY"?(sfFormBaseUrl||""):(formBaseUrl||"")).replace(/\/+$/,"")
+    const normalized=canonicalBrand(brand)
+    if(normalized==="SFACSPACE")return CATCHFORM_DIRECT_FORM_BASE_URL
+    return (normalized==="SNIPERFACTORY"?(sfFormBaseUrl||""):(formBaseUrl||"")).replace(/\/+$/,"")
+  }
+  function buildPublicFormUrl(slug=savedSlug,brand=currentBrand){
+    const safeSlug=String(slug||"").trim()
+    if(!safeSlug)return""
+    const normalized=canonicalBrand(brand)
+    if(normalized==="SFACSPACE")return `${CATCHFORM_DIRECT_FORM_BASE_URL}/${encodeURIComponent(safeSlug)}`
+    const base=getBrandFormBaseUrl(normalized)
+    return base?`${base}?slug=${encodeURIComponent(safeSlug)}`:""
   }
   async function publishAndOpenForm(){
-    const base=getBrandFormBaseUrl()
-    if(!base){showToast("환경변수 NEXT_PUBLIC_FORM_BASE_URL을 먼저 설정해주세요",false);return}
     if(!savedSlug||!loadedId){showToast("폼을 먼저 저장해주세요",false);return}
+    const target=buildPublicFormUrl()
+    if(!target){showToast("브랜드별 배포 페이지 URL을 먼저 설정해주세요",false);return}
     const periodError=unlinkedOperationPeriodError()
     if(periodError){showToast(periodError,false);return}
-    const target=`${base}?slug=${savedSlug}`
     const popup=typeof window!=="undefined"?window.open("about:blank","_blank"):null
     if(!supa){
       if(popup)popup.location.href=target
@@ -3948,9 +3958,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
 
       case "slug": {
-        const isSF=canonicalBrand(currentBrand)==="SNIPERFACTORY"
-        const base=isSF?(sfFormBaseUrl||"").replace(/\/+$/,""):(formBaseUrl||"").replace(/\/+$/,"")
-        const preview=base&&slugDraft?`${base}?slug=${slugDraft}`:""
+        const preview=slugDraft?buildPublicFormUrl(slugDraft):""
         return <div style={pd}>
           <FG title="폼 슬러그" A={A} last>
             <F label="슬러그" A={A}><TIn value={slugDraft} onChange={v=>setSlugDraft(v)} placeholder="my-form-slug" A={A}/></F>
@@ -3963,11 +3971,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
 
       case "qr": {
-        const isSF=canonicalBrand(currentBrand)==="SNIPERFACTORY"
-        const base=isSF?(sfFormBaseUrl||"").replace(/\/+$/,""):(formBaseUrl||"").replace(/\/+$/,"")
+        const base=getBrandFormBaseUrl()
         const hasBase=base.length>0
         const hasSaved=savedSlug.length>0
-        const formUrl=hasBase&&hasSaved?`${base}?slug=${savedSlug}`:""
+        const formUrl=hasSaved?buildPublicFormUrl(savedSlug):""
         const activeQrUrl=qrMode==="form"?formUrl:qrCustomUrl.trim()
         const qrName=qrMode==="form"?`${loadedName||savedSlug||"catchform"}-form-qr`:"detail-page-qr"
         const trackerBase=typeof window!=="undefined"?window.location.origin:""
@@ -4755,17 +4762,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     </div>
   }
 
-    function renderLinkPanel() {
-    const isSF = canonicalBrand(currentBrand)==="SNIPERFACTORY"
-    const base = isSF
-      ? (sfFormBaseUrl || "").replace(/\/+$/, "")
-      : (formBaseUrl || "").replace(/\/+$/, "")
+  function renderLinkPanel() {
+    const normalizedBrand = canonicalBrand(currentBrand)
+    const isSF = normalizedBrand==="SNIPERFACTORY"
+    const isSfacspace = normalizedBrand==="SFACSPACE"
+    const base = getBrandFormBaseUrl()
     const hasBase = base.length > 0
     const hasSaved = savedSlug.length > 0
-    const formUrl = hasBase && hasSaved ? `${base}?slug=${savedSlug}` : ""
+    const formUrl = hasSaved ? buildPublicFormUrl(savedSlug) : ""
     const brandLabel = brandDisplayName(currentBrand)
     const brandColor = isSF ? "#6366F1" : currentBrand==="SFACSPACE" ? "#073B70" : A.red
-    const urlPropName = isSF ? "SF Form Base URL" : "Form Base URL"
+    const urlPropName = isSF ? "SF Form Base URL" : isSfacspace ? "CatchForm 직접 URL" : "Form Base URL"
 
     return <div style={{flex:1,overflowY:"auto" as const,padding:20,display:"flex",flexDirection:"column" as const,gap:14}}>
 
@@ -4782,7 +4789,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <div style={{width:20,height:20,borderRadius:"50%",background:hasBase?A.blue:A.card2,border:`1px solid ${hasBase?A.blue:A.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,color:hasBase?"#fff":A.t3,flexShrink:0}}>1</div>
           <div style={{fontSize:12.5,fontWeight:600,color:A.t1}}>배포 페이지 URL</div>
         </div>
-        <div style={{fontSize:12,color:A.t3,marginBottom:10,lineHeight:1.5}}>환경변수 {urlPropName} 에 배포된 페이지 주소를 입력하세요.</div>
+        <div style={{fontSize:12,color:A.t3,marginBottom:10,lineHeight:1.5}}>{isSfacspace?"스팩스페이스 폼은 외부 base URL 없이 캐치폼 직접 링크를 사용합니다.":`환경변수 ${urlPropName} 에 배포된 페이지 주소를 입력하세요.`}</div>
         <div style={{padding:"9px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${hasBase?A.blue:A.border}`,fontSize:12,fontFamily:"Courier New,monospace",color:hasBase?A.t1:A.t3}}>
           {hasBase?base:`미설정 — 환경변수에서 입력`}
         </div>

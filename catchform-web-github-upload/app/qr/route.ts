@@ -1,6 +1,8 @@
 import { createHash } from "crypto"
 import { NextRequest, NextResponse } from "next/server"
 
+const CATCHFORM_DIRECT_FORM_BASE_URL = "https://catchform.vercel.app/form"
+
 function readHeader(headers: Headers, names: string[]) {
   for (const name of names) {
     const value = headers.get(name)
@@ -55,6 +57,9 @@ function decodeCompactFormId(value: string) {
 function formUrlFromSlug(req: NextRequest, slug: string, brandOverride = "") {
   const rawBrand = brandOverride || req.nextUrl.searchParams.get("brand") || req.nextUrl.searchParams.get("b") || ""
   const brand = normalizeBrand(rawBrand)
+  if (brand === "SFACSPACE") {
+    return new URL(`${CATCHFORM_DIRECT_FORM_BASE_URL}/${encodeURIComponent(slug)}`)
+  }
   const base = (
     brand === "SNIPERFACTORY"
       ? process.env.NEXT_PUBLIC_SF_FORM_BASE_URL
@@ -226,7 +231,7 @@ export async function GET(req: NextRequest) {
   const compactFormId = decodeCompactFormId(req.nextUrl.searchParams.get("i") || "")
   const formRow = compactFormId ? await findFormById(compactFormId) : null
   const resolvedSlug = slug || formRow?.slug || ""
-  const resolvedBrand = formRow?.brand || formRow?.config?.brand || ""
+  const resolvedBrand = formRow?.config?.brand || formRow?.brand || ""
   const storedTarget = target ? "" : qrTargetFromConfig(formRow, qrCode) || (await findQrTargetBySlug(resolvedSlug, qrCode))
   let targetUrl: URL
   try {
