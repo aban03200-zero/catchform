@@ -87,6 +87,23 @@ function dbBrandValue(brand: string) {
     return normalized === "INSIDEOUT" ? "INSIDEOUT" : "SNIPERFACTORY"
 }
 
+const SNIPERFACTORY_AUTH_SUFFIX = ".sniperfactory"
+
+function authLoginEmail(email: string, brand: string) {
+    const raw = email.trim()
+    const normalizedBrand = String(brand || "").trim().toUpperCase()
+    if (!raw || normalizedBrand !== "SNIPERFACTORY") return raw
+
+    const atIndex = raw.lastIndexOf("@")
+    if (atIndex <= 0 || atIndex === raw.length - 1) return raw
+
+    const local = raw.slice(0, atIndex)
+    const domain = raw.slice(atIndex + 1)
+    if (local.toLowerCase().endsWith(SNIPERFACTORY_AUTH_SUFFIX)) return raw
+
+    return `${local}${SNIPERFACTORY_AUTH_SUFFIX}@${domain}`
+}
+
 function optionsToOpts(options: any[] = []): Opt[] {
     return options.map((option: any) => {
         const label = String(option?.label ?? option?.value ?? option)
@@ -1422,7 +1439,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const handleAuthLogin = async () => {
         if (!supa || !authEmail.trim() || !authPw) { setAuthErr("이메일과 비밀번호를 입력해주세요."); return }
         setAuthLoading(true); setAuthErr("")
-        const { data, error } = await supa.auth.signInWithPassword({ email: authEmail.trim(), password: authPw })
+        const { data, error } = await supa.auth.signInWithPassword({ email: authLoginEmail(authEmail, cfg.brand), password: authPw })
         setAuthLoading(false)
         if (error) { setAuthErr("이메일 또는 비밀번호가 올바르지 않아요."); return }
         setAuthUser(data.user)
