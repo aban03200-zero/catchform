@@ -16,6 +16,8 @@
 - QR 리다이렉트와 폼 진입 이벤트에 `cf_form_id`를 포함해 교육과정 신청폼의 QR 스캔/방문 데이터가 분석 화면에서 같은 폼으로 집계되도록 보강
 - 스나이퍼팩토리 브랜드 폼 로그인 시 사용자가 입력한 이메일은 그대로 두고, Supabase Auth 로그인 요청에만 `.sniperfactory` suffix가 붙은 내부 이메일로 변환되도록 변경
 - 인사이드아웃과 스팩스페이스 브랜드 폼 로그인은 기존처럼 입력 이메일 그대로 Supabase Auth에 전달되도록 유지
+- 스나이퍼팩토리 폼 링크와 QR 리다이렉트가 `NEXT_PUBLIC_SF_FORM_BASE_URL` 대신 `https://catchform.vercel.app/form/{slug}` 직접 링크를 사용하도록 변경
+- `NEXT_PUBLIC_SF_FORM_BASE_URL`을 더 이상 필수 환경변수로 안내하지 않도록 관리자 환경변수 안내 문구와 배포 문서를 정리
 
 ### 확인 필요
 
@@ -25,6 +27,7 @@
 - 교육과정 신청폼을 새로 만들면 `지원 유형`에서 사전 알림/정식 신청을 선택할 수 있고, 제출 row의 `application_type`도 선택값으로 저장됨
 - 기존 교육과정 신청폼은 편집 또는 운영 렌더링 시 일반 폼 구조로 변환되어 표시됨
 - 스나이퍼팩토리 로그인 필수 폼에서 `user@example.com`으로 입력하면 내부 로그인 요청은 `user@example.com.sniperfactory` 계정으로 처리됨
+- Vercel의 `NEXT_PUBLIC_SF_FORM_BASE_URL`은 코드에서 더 이상 읽지 않으므로 삭제해도 되며, 삭제 후에는 새 배포가 한 번 반영되어야 함
 
 ## 2026-06-04
 

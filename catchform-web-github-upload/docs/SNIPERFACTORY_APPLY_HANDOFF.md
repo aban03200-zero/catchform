@@ -205,19 +205,12 @@ https://sniperfactory.com/apply/폼슬러그
 
 3번은 디자인과 기능이 달라질 가능성이 높으므로 권장하지 않습니다.
 
-## CatchForm 관리자 환경변수 설정
+## CatchForm 관리자 링크 설정
 
-CatchForm 관리자에서 SniperFactory 폼 링크가 `/apply`로 나오게 하려면 Vercel 환경변수를 이렇게 설정합니다.
-
-```env
-NEXT_PUBLIC_FORM_BASE_URL=https://insideout.or.kr/apply
-NEXT_PUBLIC_SF_FORM_BASE_URL=https://sniperfactory.com/apply
-```
-
-SniperFactory 개발자가 아직 배포 전이면 임시로 다음처럼 둘 수 있습니다.
+CatchForm 관리자에서 SniperFactory 폼 링크는 별도 base URL을 사용하지 않고 캐치폼 직접 링크로 생성합니다.
 
 ```env
-NEXT_PUBLIC_SF_FORM_BASE_URL=https://스나이퍼팩토리-개발도메인/apply
+https://catchform.vercel.app/form/폼슬러그
 ```
 
-환경변수를 바꾼 뒤에는 Vercel에서 Redeploy해야 관리자 화면의 링크 복사/미리보기에 반영됩니다.
+`NEXT_PUBLIC_SF_FORM_BASE_URL`은 더 이상 사용하지 않습니다. 인사이드아웃처럼 외부 `/apply` 페이지를 쓰는 브랜드만 `NEXT_PUBLIC_FORM_BASE_URL`을 설정하면 됩니다.

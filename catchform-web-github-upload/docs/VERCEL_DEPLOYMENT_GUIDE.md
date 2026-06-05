@@ -35,7 +35,6 @@ Vercel Project Settings > Environment Variables에 아래 값을 넣습니다.
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 NEXT_PUBLIC_FORM_BASE_URL=https://배포도메인/form
-NEXT_PUBLIC_SF_FORM_BASE_URL=https://배포도메인/form
 NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL=
 ```
 
@@ -43,7 +42,6 @@ NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL=
 
 ```env
 NEXT_PUBLIC_FORM_BASE_URL=https://catchform-web.vercel.app/form
-NEXT_PUBLIC_SF_FORM_BASE_URL=https://catchform-web.vercel.app/form
 NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL=https://script.google.com/macros/s/배포ID/exec
 ```
 

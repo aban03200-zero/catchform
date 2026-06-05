@@ -30,7 +30,6 @@ export function FormAdminClient() {
       supabaseUrl={publicEnv.supabaseUrl}
       supabaseAnonKey={publicEnv.supabaseAnonKey}
       formBaseUrl={publicEnv.formBaseUrl}
-      sfFormBaseUrl={publicEnv.sfFormBaseUrl}
       googleSheetsWebhookUrl={publicEnv.googleSheetsWebhookUrl}
     />
   )

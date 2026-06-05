@@ -45,7 +45,7 @@ export function MissingEnvNotice({ surface }: MissingEnvNoticeProps) {
         }}>{`NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 NEXT_PUBLIC_FORM_BASE_URL=http://localhost:3000/form
-NEXT_PUBLIC_SF_FORM_BASE_URL=http://localhost:3000/form`}</pre>
+NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL=`}</pre>
         <div style={{ marginTop: 16, color: "#8B95A1", fontSize: 13, lineHeight: 1.7 }}>
           로컬에서는 <b>.env.local</b>에 넣고, Vercel에서는 Project Settings의
           Environment Variables에 같은 값을 넣어주세요.

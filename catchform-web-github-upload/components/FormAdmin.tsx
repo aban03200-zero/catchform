@@ -1294,8 +1294,8 @@ function ProgramPicker({progs,cats,brand,value,onChange,A}:{progs:Prog[];cats:Ca
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────
-export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:string;supabaseAnonKey?:string;formBaseUrl?:string;sfFormBaseUrl?:string;googleSheetsWebhookUrl?:string}) {
-  const {width=1280,height=820,supabaseUrl="",supabaseAnonKey="",formBaseUrl="",sfFormBaseUrl="",googleSheetsWebhookUrl=""}=props
+export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:string;supabaseAnonKey?:string;formBaseUrl?:string;googleSheetsWebhookUrl?:string}) {
+  const {width=1280,height=820,supabaseUrl="",supabaseAnonKey="",formBaseUrl="",googleSheetsWebhookUrl=""}=props
   const supa=React.useMemo(()=>getSB(supabaseUrl,supabaseAnonKey),[supabaseUrl,supabaseAnonKey])
 
   // ── Admin theme ────────────────────────────────────────────────────────
@@ -2258,14 +2258,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   function onSaveClick(){if(loadedId)setShowUpdateModal(true);else setShowSave(true)}
   function getBrandFormBaseUrl(brand=currentBrand){
     const normalized=canonicalBrand(brand)
-    if(normalized==="SFACSPACE")return CATCHFORM_DIRECT_FORM_BASE_URL
-    return (normalized==="SNIPERFACTORY"?(sfFormBaseUrl||""):(formBaseUrl||"")).replace(/\/+$/,"")
+    if(normalized==="SNIPERFACTORY"||normalized==="SFACSPACE")return CATCHFORM_DIRECT_FORM_BASE_URL
+    return (formBaseUrl||"").replace(/\/+$/,"")
   }
   function buildPublicFormUrl(slug=savedSlug,brand=currentBrand){
     const safeSlug=String(slug||"").trim()
     if(!safeSlug)return""
     const normalized=canonicalBrand(brand)
-    if(normalized==="SFACSPACE")return `${CATCHFORM_DIRECT_FORM_BASE_URL}/${encodeURIComponent(safeSlug)}`
+    if(normalized==="SNIPERFACTORY"||normalized==="SFACSPACE")return `${CATCHFORM_DIRECT_FORM_BASE_URL}/${encodeURIComponent(safeSlug)}`
     const base=getBrandFormBaseUrl(normalized)
     return base?`${base}?slug=${encodeURIComponent(safeSlug)}`:""
   }
@@ -5125,13 +5125,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const normalizedBrand = canonicalBrand(currentBrand)
     const isSF = normalizedBrand==="SNIPERFACTORY"
     const isSfacspace = normalizedBrand==="SFACSPACE"
+    const usesCatchformDirect = isSF || isSfacspace
     const base = getBrandFormBaseUrl()
     const hasBase = base.length > 0
     const hasSaved = savedSlug.length > 0
     const formUrl = hasSaved ? buildPublicFormUrl(savedSlug) : ""
     const brandLabel = brandDisplayName(currentBrand)
     const brandColor = isSF ? "#6366F1" : currentBrand==="SFACSPACE" ? "#073B70" : A.red
-    const urlPropName = isSF ? "SF Form Base URL" : isSfacspace ? "CatchForm 직접 URL" : "Form Base URL"
+    const urlPropName = usesCatchformDirect ? "CatchForm 직접 URL" : "Form Base URL"
 
     return <div style={{flex:1,overflowY:"auto" as const,padding:20,display:"flex",flexDirection:"column" as const,gap:14}}>
 
@@ -5148,7 +5149,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <div style={{width:20,height:20,borderRadius:"50%",background:hasBase?A.blue:A.card2,border:`1px solid ${hasBase?A.blue:A.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,color:hasBase?"#fff":A.t3,flexShrink:0}}>1</div>
           <div style={{fontSize:12.5,fontWeight:600,color:A.t1}}>배포 페이지 URL</div>
         </div>
-        <div style={{fontSize:12,color:A.t3,marginBottom:10,lineHeight:1.5}}>{isSfacspace?"스팩스페이스 폼은 외부 base URL 없이 캐치폼 직접 링크를 사용합니다.":`환경변수 ${urlPropName} 에 배포된 페이지 주소를 입력하세요.`}</div>
+        <div style={{fontSize:12,color:A.t3,marginBottom:10,lineHeight:1.5}}>{usesCatchformDirect?`${brandLabel} 폼은 외부 base URL 없이 캐치폼 직접 링크를 사용합니다.`:`환경변수 ${urlPropName} 에 배포된 페이지 주소를 입력하세요.`}</div>
         <div style={{padding:"9px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${hasBase?A.blue:A.border}`,fontSize:12,fontFamily:"Courier New,monospace",color:hasBase?A.t1:A.t3}}>
           {hasBase?base:`미설정 — 환경변수에서 입력`}
         </div>

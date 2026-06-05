@@ -57,14 +57,10 @@ function decodeCompactFormId(value: string) {
 function formUrlFromSlug(req: NextRequest, slug: string, brandOverride = "") {
   const rawBrand = brandOverride || req.nextUrl.searchParams.get("brand") || req.nextUrl.searchParams.get("b") || ""
   const brand = normalizeBrand(rawBrand)
-  if (brand === "SFACSPACE") {
+  if (brand === "SNIPERFACTORY" || brand === "SFACSPACE") {
     return new URL(`${CATCHFORM_DIRECT_FORM_BASE_URL}/${encodeURIComponent(slug)}`)
   }
-  const base = (
-    brand === "SNIPERFACTORY"
-      ? process.env.NEXT_PUBLIC_SF_FORM_BASE_URL
-      : process.env.NEXT_PUBLIC_FORM_BASE_URL
-  ) || ""
+  const base = process.env.NEXT_PUBLIC_FORM_BASE_URL || ""
 
   if (base) {
     const url = new URL(base)
