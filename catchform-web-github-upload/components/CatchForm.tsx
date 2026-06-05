@@ -87,6 +87,65 @@ function dbBrandValue(brand: string) {
     return normalized === "INSIDEOUT" ? "INSIDEOUT" : "SNIPERFACTORY"
 }
 
+function optionsToOpts(options: any[] = []): Opt[] {
+    return options.map((option: any) => {
+        const label = String(option?.label ?? option?.value ?? option)
+        const value = String(option?.value ?? option?.label ?? option)
+        const key = value.trim().toLowerCase()
+        const isEtc = !!option?.isEtc || label.includes("기타") || label.includes("직접") || value.includes("기타") || value.includes("직접") || key === "etc" || key === "other"
+        return { label, value, isEtc }
+    })
+}
+
+function kdtFieldsToFormFields(fields: any[] = []): any[] {
+    return fields.map((field: any) => {
+        const id = String(field.id || `field_${Date.now()}`)
+        const rawType = String(field.type || "text")
+        const type = rawType === "section_desc"
+            ? "section_desc"
+            : rawType === "text" && id.toLowerCase().includes("phone")
+                ? "phone"
+                : rawType === "text" && id.toLowerCase().includes("email")
+                    ? "email"
+                    : rawType
+        const next: any = {
+            ...field,
+            id,
+            type,
+            label: field.label || "새 질문",
+            page: field.page || 1,
+            required: !!field.required,
+            placeholder: rawType === "section_desc" ? (field.desc || field.placeholder || "") : field.placeholder,
+        }
+        if (Array.isArray(field.opts) && field.opts.length) next.opts = optionsToOpts(field.opts)
+        else if (Array.isArray(field.options) && field.options.length) next.opts = optionsToOpts(field.options)
+        delete next.options
+        return next
+    })
+}
+
+function normalizeRuntimeConfig(config: Cfg): Cfg {
+    if (config.formType !== "kdt") return config
+    const legacyFields = Array.isArray(config.kdtFields) && config.kdtFields.length
+        ? kdtFieldsToFormFields(config.kdtFields)
+        : (config.form?.fields || [])
+    const pages = Math.max(config.form?.pages || 1, legacyFields.length ? Math.max(...legacyFields.map((field: any) => field.page || 1)) : 1)
+    return {
+        ...config,
+        header: { ...config.header, applicationType: config.header?.applicationType || "formal" },
+        form: {
+            ...(config.form || {}),
+            showNum: config.form?.showNum !== false,
+            dupText: config.form?.dupText || "",
+            pages,
+            pageLabels: config.form?.pageLabels || ["기본 정보", "상세 정보", "자격 요건 및 동의"],
+            fields: legacyFields.map((field: any) => ({ ...field, page: field.page || 1 })),
+        },
+        formType: "blank",
+        kdtFields: undefined,
+    }
+}
+
 // ─── Color tokens ─────────────────────────────────────────────────────────
 const DARK = { bg: "#13151C", fieldBg: "#1E2230", fieldBorder: "#2C3148", t1: "#F0F3FF", t2: "#8B91A8", t3: "#555E7A", red: "#FF4747" }
 const LIGHT = { bg: "#FFFFFF", fieldBg: "#F7F8FA", fieldBorder: "#E2E5EA", t1: "#1A1D27", t2: "#4A5068", t3: "#9EA8C0", red: "#FF4747" }
@@ -396,12 +455,13 @@ export function CatchForm(props: {
     if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200, fontFamily: FONT, fontSize: 14, color: "#9EA8C0" }}>불러오는 중...</div>
     if (loadErr) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200, fontFamily: FONT, fontSize: 14, color: "#FF4747" }}>{loadErr}</div>
     if (!cfg) return null
-    if (cfg.dashboard?.isPublished === false) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 240, padding: 24, fontFamily: FONT, fontSize: 14, color: "#9EA8C0", textAlign: "center" }}>아직 공개되지 않은 폼이에요.</div>
+    const normalizedCfg = normalizeRuntimeConfig(cfg)
+    if (normalizedCfg.dashboard?.isPublished === false) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 240, padding: 24, fontFamily: FONT, fontSize: 14, color: "#9EA8C0", textAlign: "center" }}>아직 공개되지 않은 폼이에요.</div>
 
     const resolvedSlug = (() => {
         try { const p=new URLSearchParams(window.location.search); return p.get("slug")||propSlug } catch { return propSlug }
     })()
-    return <FormRenderer cfg={cfg} supa={supa} formSlug={resolvedSlug} formId={loadedFormId} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} googleSheetsWebhookUrl={googleSheetsWebhookUrl} />
+    return <FormRenderer cfg={normalizedCfg} supa={supa} formSlug={resolvedSlug} formId={loadedFormId} supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} googleSheetsWebhookUrl={googleSheetsWebhookUrl} />
 }
 
 // ─── Form Renderer ────────────────────────────────────────────────────────
@@ -547,6 +607,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             user_agent: navigator.userAgent || "",
             cf_qr: params.get("cf_qr") || "",
             cf_qr_redirected: params.get("cf_qr_redirected") || "",
+            cf_form_id: params.get("cf_form_id") || params.get("fid") || params.get("f") || "",
             qr_type: params.get("qr_type") || "",
             qr_label: params.get("qr_label") || "",
             qr_target: params.get("qr_target") || "",
@@ -554,8 +615,9 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     }
 
     const trackEvent = (eventType: string, extra?: { page?: number; field?: any; metadata?: any; keepalive?: boolean }) => {
+        const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search || "") : new URLSearchParams()
         const payload = {
-            form_id: formId || null,
+            form_id: formId || params.get("cf_form_id") || params.get("fid") || params.get("f") || null,
             form_slug: formSlug || "",
             session_id: getTrackingSessionId(),
             event_type: eventType,
@@ -1308,9 +1370,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             if (cfg.header?.programId) payload.program_id = cfg.header.programId
             if (cfg.brand) payload.brand = dbBrandValue(cfg.brand)
             // user_id from logged-in user only when auth is enabled
-            // application_type: auto for alert/kdt, custom for others
+            // application_type: auto for alert, configurable for the rest
             if (cfg.formType === "alert") payload.application_type = "pre"
-            else if (cfg.formType === "kdt") payload.application_type = "formal"
             else if (cfg.header?.applicationType) payload.application_type = cfg.header.applicationType
 
             // Phone value

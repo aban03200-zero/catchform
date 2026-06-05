@@ -672,18 +672,51 @@ const KDT_FIELDS_DEFAULT: KdtField[] = [
   {id:"sec_marketing",label:"마케팅 정보 수신 및 홍보 활용 동의",type:"section_desc",page:3,desc:"교육 관련 소식, 이벤트, 혜택 등 마케팅 정보 수신 및 홍보 활용에 동의합니다."},
   {id:"marketing_agree",label:"마케팅 정보 수신 및 홍보 활용 동의",type:"button_select",required:false,page:3,options:["동의합니다","동의하지 않습니다"]},
 ]
+function optionValuesToOpts(options:any[] = []):Opt[]{
+  return options.map((option:any)=>{
+    const label=String(option?.label??option?.value??option)
+    const value=String(option?.value??option?.label??option)
+    const key=value.trim().toLowerCase()
+    const isEtc=!!option?.isEtc||label.includes("기타")||label.includes("직접")||value.includes("기타")||value.includes("직접")||key==="etc"||key==="other"
+    return {label,value,isEtc}
+  })
+}
+function kdtFieldsToFormFields(fields:any[] = []):any[]{
+  return fields.map((field:any)=>{
+    const id=String(field.id||`field_${Date.now()}`)
+    const rawType=String(field.type||"text")
+    const type=rawType==="section_desc"
+      ? "section_desc"
+      : rawType==="text"&&id.toLowerCase().includes("phone")
+        ? "phone"
+        : rawType==="text"&&id.toLowerCase().includes("email")
+          ? "email"
+          : rawType
+    const next:any={
+      ...field,
+      id,
+      type,
+      label:field.label||"새 질문",
+      page:field.page||1,
+      required:!!field.required,
+      placeholder:rawType==="section_desc"?(field.desc||field.placeholder||""):field.placeholder,
+    }
+    if(Array.isArray(field.opts)&&field.opts.length)next.opts=optionValuesToOpts(field.opts)
+    else if(Array.isArray(field.options)&&field.options.length)next.opts=optionValuesToOpts(field.options)
+    delete next.options
+    return next
+  })
+}
+const KDT_FORM_PAGE_LABELS = ["기본 정보","상세 정보","자격 요건 및 동의"]
+const KDT_FORM_FIELDS_DEFAULT = kdtFieldsToFormFields(KDT_FIELDS_DEFAULT)
 const DEF_KDT: Cfg = {
-  header:{imageUrl:"",programId:"",overline:"교육과정 신청",title:"폼 제목을 입력해주세요.",educationStart:"",educationEnd:"",tuitionFree:false,tuitionFreeText:"",tuitionAmount:"",stipend:"",noticeEnabled:true,noticeIconEnabled:false,noticeIconText:"i",noticeText:"아래 항목을 모두 성실하게 작성해주세요. 총 3단계로 구성되어 있습니다."},
+  header:{imageUrl:"",programId:"",overline:"교육과정 신청",title:"폼 제목을 입력해주세요.",educationStart:"",educationEnd:"",tuitionFree:false,tuitionFreeText:"",tuitionAmount:"",stipend:"",noticeEnabled:true,noticeIconEnabled:false,noticeIconText:"i",noticeText:"아래 항목을 모두 성실하게 작성해주세요. 총 3단계로 구성되어 있습니다.",applicationType:"formal"},
   form:{
     showNum:true,
     dupText:"이미 신청 내역이 있어요.",
     pages:3,
-    fields:[
-      {id:"name",type:"text" as const,label:"성함을 입력해주세요.",placeholder:"예) 홍길동",required:true},
-      {id:"phone",type:"phone" as const,label:"연락처를 입력해주세요.",placeholder:"예) 010-1234-5678",required:true},
-      {id:"birthdate",type:"date" as const,label:"생년월일을 입력해주세요.",placeholder:"예) 1998-03-15",required:true},
-      {id:"referral",type:"dropdown" as const,label:"어떻게 알게 되셨나요?",placeholder:"선택해주세요.",required:true,opts:KDTOPTS,etcPh:"직접 입력해주세요."},
-    ],
+    pageLabels:KDT_FORM_PAGE_LABELS,
+    fields:KDT_FORM_FIELDS_DEFAULT,
   },
   consents:[
     {enabled:true,required:true,title:"개인정보 수집 및 이용동의",body:"수집 항목: 성명, 연락처, 생년월일, 주소, 학력, 이메일\n수집 목적: 교육과정 신청 접수 및 안내\n보유 기간: 교육과정 종료 후 1년",checkLabel:"개인정보 수집 및 이용에 동의합니다.",policyUrl:"https://sniperfactory.com/privacy"},
@@ -694,8 +727,8 @@ const DEF_KDT: Cfg = {
   styles:{theme:"light",fieldH:44,qGap:28,maxW:560,labelGap:12},
   auth:{enabled:true,loginUrl:"/login",errText:"로그인이 필요해요."},
   brand:"",
-  formType:"kdt" as const,
-  kdtFields:KDT_FIELDS_DEFAULT,
+  formType:"blank" as const,
+  kdtFields:undefined,
 }
 const DEF_BLANK: Cfg = {
   header:{imageUrl:"",programId:"",overline:"",title:"폼 제목을 입력해주세요.",educationStart:"",educationEnd:"",tuitionFree:true,tuitionFreeText:"",tuitionAmount:"",stipend:"",noticeEnabled:false,noticeIconEnabled:false,noticeIconText:"i",noticeText:""},
@@ -792,12 +825,18 @@ function mergeCfg(raw:any):Cfg {
   const d=dc(DEF)
   if(!raw)return d
   const rawIntegrations=raw.integrations||{}
+  const isLegacyKdt=raw.formType==="kdt"
+  const legacyKdtFields=isLegacyKdt&&Array.isArray(raw.kdtFields)&&raw.kdtFields.length?kdtFieldsToFormFields(raw.kdtFields):null
+  const legacyKdtPages=legacyKdtFields?Math.max(3,...legacyKdtFields.map((f:any)=>f.page||1)):0
   return {
-    header:{...d.header,...(raw.header||{})},
+    header:{...d.header,...(raw.header||{}),...(isLegacyKdt&&!(raw.header||{}).applicationType?{applicationType:"formal"}:{})},
     form:(()=>{
       const rf=raw.form||{}
       const df=d.form
       const pages=rf.pages||df.pages||1
+      if(legacyKdtFields){
+        return {showNum:rf.showNum!==false,dupText:rf.dupText||"이미 신청 내역이 있어요.",pages:legacyKdtPages,pageLabels:rf.pageLabels||KDT_FORM_PAGE_LABELS,fields:legacyKdtFields.map((f:any)=>({...f,page:f.page||1}))}
+      }
       // backward compat: old q1/q2/q3/q4 → fields array
       if(!rf.fields&&(rf.q1Label||rf.q2Label)){
         return {showNum:rf.showNum!==false,dupText:rf.dupText||df.dupText,pages:pages,fields:[
@@ -819,10 +858,10 @@ function mergeCfg(raw:any):Cfg {
       googleSheets:{...DEFAULT_GOOGLE_SHEETS,...(rawIntegrations.googleSheets||{})},
       qrLinks:Array.isArray(rawIntegrations.qrLinks)?rawIntegrations.qrLinks.filter((item:any)=>item&&item.code&&item.url):[],
     },
-    dashboard:{...(raw.dashboard||{})},
+    dashboard:{...(isLegacyKdt?{formTypeTag:"application" as DashboardFormType}:{}),...(raw.dashboard||{})},
     brand:raw.brand||d.brand,
-    formType:raw.formType||d.formType,
-    kdtFields:raw.kdtFields||d.kdtFields,
+    formType:isLegacyKdt?"blank" as const:(raw.formType||d.formType),
+    kdtFields:isLegacyKdt?undefined:(raw.kdtFields||d.kdtFields),
   }
 }
 function applyBrandDefaults(config:Cfg,brand:string):Cfg{
@@ -1714,6 +1753,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     base.brand=brand
     base.cta.bg=ctaBg
     base.dashboard={...(base.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft"}
+    if(tpl==="kdt")base.dashboard={...(base.dashboard||{}),formTypeTag:"application"}
     const branded=applyBrandDefaults(base,brand)
     setShowTemplateModal(false);setPendingBrand(null)
     setCfg(branded);setLoadedId("");setLoadedName("");setSavedSlug("");setCurrentBrand(brand)
@@ -2109,6 +2149,33 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       loadList();loadDashboard(supa)
     }catch(error){
       showToast("폼 복구 실패: "+((error as any)?.message||"오류"),false)
+    }finally{
+      setFormTrashBusy("")
+    }
+  }
+  async function purgeFormFromTrash(item:any){
+    if(!supa||!item?.id)return
+    const name=item.name||"폼"
+    if(!confirm(`"${name}"을 영구 삭제할까요? 제출 응답과 QR/분석 기록까지 모두 삭제되며 복구할 수 없어요.`))return
+    setFormTrashBusy(item.id)
+    try{
+      const id=item.id
+      const deleteFrom=async(table:string)=>{
+        const {error}=await supa.from(table).delete().eq("form_id",id)
+        if(error)throw error
+      }
+      await deleteFrom("applications")
+      await deleteFrom("company_applications")
+      await deleteFrom("form_response_events")
+      const {error}=await supa.from("form_configs").delete().eq("id",id)
+      if(error)throw error
+      delete fullFormCache.current[id]
+      if(loadedId===id){setLoadedId("");setLoadedName("");setSavedSlug("")}
+      setFormTrashItems(prev=>prev.filter(form=>form.id!==id))
+      showToast(`"${name}"을 영구 삭제했어요.`)
+      loadList();loadDashboard(supa)
+    }catch(error){
+      showToast("폼 영구 삭제 실패: "+((error as any)?.message||"오류"),false)
     }finally{
       setFormTrashBusy("")
     }
@@ -3282,7 +3349,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                           {trashedAt&&<span>{new Date(trashedAt).toLocaleString("ko-KR")}</span>}
                         </div>
                       </div>
-                      <button onClick={()=>restoreFormFromTrash(item)} disabled={busy} style={{height:34,padding:"0 12px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:busy?"wait":"pointer",flexShrink:0}}>{busy?"복구 중...":"복구"}</button>
+                      <button onClick={()=>restoreFormFromTrash(item)} disabled={busy} style={{height:34,padding:"0 12px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:busy?"wait":"pointer",flexShrink:0}}>{busy?"처리 중...":"복구"}</button>
+                      <button onClick={()=>purgeFormFromTrash(item)} disabled={busy} style={{height:34,padding:"0 12px",borderRadius:A.r,border:`1px solid ${A.red}44`,background:A.card,color:A.red,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:busy?"wait":"pointer",flexShrink:0}}>영구 삭제</button>
                     </div>
                   })}
               </div>
@@ -3336,7 +3404,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   label:"사전 알림 신청폼", desc:"오픈 소식을 먼저 받아보고 싶은 분들을 위한 간단한 신청폼"},
                 {id:"kdt" as const,
                   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" stroke={A.t2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><rect x="9" y="3" width="6" height="4" rx="1.5" stroke={A.t2} strokeWidth="1.8"/><line x1="9" y1="12" x2="15" y2="12" stroke={A.t2} strokeWidth="1.8" strokeLinecap="round"/><line x1="9" y1="16" x2="13" y2="16" stroke={A.t2} strokeWidth="1.8" strokeLinecap="round"/></svg>,
-                  label:"교육과정 신청폼", desc:"자세한 응답을 받기 위한 폼 (KDT 등)"},
+                  label:"교육과정 신청폼", desc:"교육과정 모집 응답을 받기 위한 신청 폼"},
                 {id:"edu_biz" as const,
                   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 21h18M3 7v1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7H3l2-4h14l2 4z" stroke={A.t2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>,
                   label:"교육 사업 신청폼", desc:"기업 대상 교육 사업 신청을 받는 폼"},
@@ -6172,7 +6240,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   label:"사전 알림 신청폼", desc:"오픈 소식을 먼저 받아보고 싶은 분들을 위한 간단한 신청폼"},
                 {id:"kdt" as const,
                   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" stroke={A.t2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><rect x="9" y="3" width="6" height="4" rx="1.5" stroke={A.t2} strokeWidth="1.8"/><line x1="9" y1="12" x2="15" y2="12" stroke={A.t2} strokeWidth="1.8" strokeLinecap="round"/><line x1="9" y1="16" x2="13" y2="16" stroke={A.t2} strokeWidth="1.8" strokeLinecap="round"/></svg>,
-                  label:"교육과정 신청폼", desc:"자세한 응답을 받기 위한 폼 (KDT 등)"},
+                  label:"교육과정 신청폼", desc:"교육과정 모집 응답을 받기 위한 신청 폼"},
                 {id:"edu_biz" as const,
                   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 21h18M3 7v1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7H3l2-4h14l2 4z" stroke={A.t2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>,
                   label:"교육 사업 신청폼", desc:"기업 대상 교육 사업 신청을 받는 폼"},

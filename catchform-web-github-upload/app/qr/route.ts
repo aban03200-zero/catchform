@@ -160,7 +160,7 @@ async function findQrTargetBySlug(slug: string, code: string) {
   }
 }
 
-async function recordQrScan(req: NextRequest, targetUrl: string) {
+async function recordQrScan(req: NextRequest, targetUrl: string, resolved: { formId?: string; formSlug?: string; qrLabel?: string } = {}) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
   if (!supabaseUrl || !supabaseAnonKey) return
@@ -172,11 +172,11 @@ async function recordQrScan(req: NextRequest, targetUrl: string) {
   const country = readHeader(headers, ["x-vercel-ip-country", "cf-ipcountry", "x-country"])
   const region = readHeader(headers, ["x-vercel-ip-country-region", "x-vercel-ip-region", "x-region"])
   const city = readHeader(headers, ["x-vercel-ip-city", "x-city"])
-  const formSlug = search.get("slug") || search.get("s") || ""
+  const formSlug = search.get("slug") || search.get("s") || resolved.formSlug || ""
   const compactFormId = decodeCompactFormId(search.get("i") || "")
-  const formId = search.get("fid") || search.get("f") || compactFormId || (await findFormIdBySlug(formSlug))
+  const formId = search.get("fid") || search.get("f") || compactFormId || resolved.formId || (await findFormIdBySlug(formSlug))
   const qrType = search.get("type") || (search.get("d") ? "detail" : "form")
-  const qrLabel = search.get("label") || search.get("l") || ""
+  const qrLabel = search.get("label") || search.get("l") || resolved.qrLabel || ""
   const fingerprint = createHash("sha256")
     .update([formId || "", formSlug, qrType, targetUrl, ip, userAgent].join("|"))
     .digest("hex")
@@ -190,6 +190,7 @@ async function recordQrScan(req: NextRequest, targetUrl: string) {
     page: 1,
     metadata: {
       cf_qr: "1",
+      cf_form_id: formId,
       qr_type: qrType,
       qr_label: qrLabel,
       qr_target: targetUrl,
@@ -231,6 +232,7 @@ export async function GET(req: NextRequest) {
   const compactFormId = decodeCompactFormId(req.nextUrl.searchParams.get("i") || "")
   const formRow = compactFormId ? await findFormById(compactFormId) : null
   const resolvedSlug = slug || formRow?.slug || ""
+  const resolvedFormId = formRow?.id || compactFormId || (resolvedSlug ? await findFormIdBySlug(resolvedSlug) : "") || ""
   const resolvedBrand = formRow?.config?.brand || formRow?.brand || ""
   const storedTarget = target ? "" : qrTargetFromConfig(formRow, qrCode) || (await findQrTargetBySlug(resolvedSlug, qrCode))
   let targetUrl: URL
@@ -246,6 +248,7 @@ export async function GET(req: NextRequest) {
   const redirectUrl = appendQrParams(targetUrl.toString(), {
     cf_qr: "1",
     cf_qr_redirected: "1",
+    cf_form_id: resolvedFormId,
     qr_type: qrType,
     qr_label: qrLabel,
     qr_target: targetUrl.toString(),
@@ -254,6 +257,6 @@ export async function GET(req: NextRequest) {
     utm_campaign: qrLabel,
   })
 
-  await recordQrScan(req, targetUrl.toString())
+  await recordQrScan(req, targetUrl.toString(), { formId: resolvedFormId, formSlug: resolvedSlug, qrLabel })
   return NextResponse.redirect(redirectUrl, 302)
 }
