@@ -81,6 +81,12 @@ function getSB(url: string, key: string): SupabaseClient | null {
     return _sb
 }
 
+function dbBrandValue(brand: string) {
+    const normalized = String(brand || "").trim().toUpperCase()
+    if (!normalized) return ""
+    return normalized === "INSIDEOUT" ? "INSIDEOUT" : "SNIPERFACTORY"
+}
+
 // ─── Color tokens ─────────────────────────────────────────────────────────
 const DARK = { bg: "#13151C", fieldBg: "#1E2230", fieldBorder: "#2C3148", t1: "#F0F3FF", t2: "#8B91A8", t3: "#555E7A", red: "#FF4747" }
 const LIGHT = { bg: "#FFFFFF", fieldBg: "#F7F8FA", fieldBorder: "#E2E5EA", t1: "#1A1D27", t2: "#4A5068", t3: "#9EA8C0", red: "#FF4747" }
@@ -1300,7 +1306,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
             // Meta fields
             if (cfg.header?.programId) payload.program_id = cfg.header.programId
-            if (cfg.brand) payload.brand = cfg.brand
+            if (cfg.brand) payload.brand = dbBrandValue(cfg.brand)
             // user_id from logged-in user only when auth is enabled
             // application_type: auto for alert/kdt, custom for others
             if (cfg.formType === "alert") payload.application_type = "pre"
