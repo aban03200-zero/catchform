@@ -93,15 +93,8 @@ function authLoginEmail(email: string, brand: string) {
     const raw = email.trim()
     const normalizedBrand = String(brand || "").trim().toUpperCase()
     if (!raw || normalizedBrand !== "SNIPERFACTORY") return raw
-
-    const atIndex = raw.lastIndexOf("@")
-    if (atIndex <= 0 || atIndex === raw.length - 1) return raw
-
-    const local = raw.slice(0, atIndex)
-    const domain = raw.slice(atIndex + 1)
-    if (local.toLowerCase().endsWith(SNIPERFACTORY_AUTH_SUFFIX)) return raw
-
-    return `${local}${SNIPERFACTORY_AUTH_SUFFIX}@${domain}`
+    if (raw.toLowerCase().endsWith(SNIPERFACTORY_AUTH_SUFFIX)) return raw
+    return `${raw}${SNIPERFACTORY_AUTH_SUFFIX}`
 }
 
 function optionsToOpts(options: any[] = []): Opt[] {
