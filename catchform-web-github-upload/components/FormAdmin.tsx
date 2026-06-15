@@ -14,8 +14,9 @@ type Prog = { id: string; title: string; slug?: string; category?: string; [key:
 type BrandId = "SNIPERFACTORY"|"INSIDEOUT"|"SFACSPACE"
 type DashboardFormType = "alert"|"application"|"recruit"|"survey"|"evaluation"|"other"
 type DashboardManualStatus = ""|"draft"|"active"|"closed"
-type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; manualStatus?:DashboardManualStatus; isPublished?:boolean; publishedAt?:string; editPasswordHash?:string; formTrashedAt?:string }
+type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; alwaysOpen?:boolean; manualStatus?:DashboardManualStatus; isPublished?:boolean; publishedAt?:string; editPasswordHash?:string; formTrashedAt?:string }
 type AdminRole = ""|"admin"|"master"
+type DashboardSettingsState = {item:any;formName:string;brand:BrandId;formTypeTag:DashboardFormType;operationStart:string;operationEnd:string;alwaysOpen:boolean;manualStatus:DashboardManualStatus;currentEditPasswordDraft:string;editPasswordDraft:string;clearEditPassword:boolean}
 type KdtFieldType = FieldType|"section_desc"
 type KdtField = { id:string; label:string; type:KdtFieldType; required?:boolean; page?:number; options?:string[]; placeholder?:string; desc?:string }
 type FieldType = "text"|"name"|"phone"|"email"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"
@@ -1333,7 +1334,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [dashQuery,setDashQuery]=React.useState("")
   const [dashOpenGroups,setDashOpenGroups]=React.useState<Record<string,boolean>>({})
   const [dashResponseCounts,setDashResponseCounts]=React.useState<Record<string,number>>({})
-  const [dashboardSettings,setDashboardSettings]=React.useState<null|{item:any;brand:BrandId;formTypeTag:DashboardFormType;operationStart:string;operationEnd:string;manualStatus:DashboardManualStatus;currentEditPasswordDraft:string;editPasswordDraft:string;clearEditPassword:boolean}>(null)
+  const [dashboardSettings,setDashboardSettings]=React.useState<DashboardSettingsState|null>(null)
   const [dashboardSettingsSaving,setDashboardSettingsSaving]=React.useState(false)
   const [editPasswordPrompt,setEditPasswordPrompt]=React.useState<null|{item:any;password:string;error:string;checking:boolean}>(null)
   const [formTrashOpen,setFormTrashOpen]=React.useState(false)
@@ -1874,12 +1875,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   function openDashboardSettings(item:any){
     const dashboard=item.config?.dashboard||{}
+    const legacyAlwaysOpen=!dashboard.operationStart&&!dashboard.operationEnd&&dashboard.manualStatus==="active"
     setDashboardSettings({
       item,
+      formName:String(item.name||item.config?.header?.title||"").trim(),
       brand:canonicalBrand(item.config?.brand||item.brand||"SNIPERFACTORY"),
       formTypeTag:dashboard.formTypeTag||legacyDashboardFormType(item.config?.formType),
       operationStart:dashboard.operationStart||"",
       operationEnd:dashboard.operationEnd||"",
+      alwaysOpen:!!dashboard.alwaysOpen||legacyAlwaysOpen,
       manualStatus:dashboard.manualStatus||"",
       currentEditPasswordDraft:"",
       editPasswordDraft:"",
@@ -1896,6 +1900,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     try{
       const full=dashboardSettings.item.__fromBuilder?dashboardSettings.item:await getFullFormRow(dashboardSettings.item)
       const next=applyBrandDefaults(mergeCfg(full.config||{}),dashboardSettings.brand)
+      const nextName=dashboardSettings.formName.trim()
+      if(!nextName)throw new Error("폼 제목을 입력해주세요.")
+      const nextOperationStart=dashboardSettings.alwaysOpen?"":dashboardSettings.operationStart
+      const nextOperationEnd=dashboardSettings.alwaysOpen?"":dashboardSettings.operationEnd
+      if(!dashboardSettings.alwaysOpen&&nextOperationStart&&nextOperationEnd&&operationTimeMs(nextOperationStart,"start")>operationTimeMs(nextOperationEnd,"end"))throw new Error("폼 운영 기간의 종료일은 시작일보다 빠를 수 없어요.")
       const previousEditPasswordHash=next.dashboard?.editPasswordHash||""
       let editPasswordHash=previousEditPasswordHash
       const changingEditPassword=!!dashboardSettings.editPasswordDraft||dashboardSettings.clearEditPassword
@@ -1911,22 +1920,25 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       next.dashboard={
         ...(next.dashboard||{}),
         formTypeTag:dashboardSettings.formTypeTag,
-        operationStart:dashboardSettings.operationStart,
-        operationEnd:dashboardSettings.operationEnd,
-        manualStatus:dashboardSettings.manualStatus,
+        operationStart:nextOperationStart,
+        operationEnd:nextOperationEnd,
+        alwaysOpen:dashboardSettings.alwaysOpen,
+        manualStatus:"",
         editPasswordHash,
       }
-      const {error}=await supa.from("form_configs").update({config:next,brand:dbBrandValue(dashboardSettings.brand),updated_at:new Date().toISOString()}).eq("id",dashboardSettings.item.id)
+      const updatedAt=new Date().toISOString()
+      const {error}=await supa.from("form_configs").update({name:nextName,config:next,brand:dbBrandValue(dashboardSettings.brand),updated_at:updatedAt}).eq("id",dashboardSettings.item.id)
       if(error)throw error
       delete fullFormCache.current[dashboardSettings.item.id]
       if(dashboardSettings.item.__fromBuilder){
         setCfg(next)
+        setLoadedName(nextName)
         setCurrentBrand(dashboardSettings.brand)
       }
       setDashboardSettings(null)
       await loadDashboard(supa)
-      showToast("목록 설정을 저장했어요.")
-    }catch(e){showToast("목록 설정 저장 실패: "+((e as any)?.message||"오류"),false)}
+      showToast("폼 설정을 저장했어요.")
+    }catch(e){showToast("폼 설정 저장 실패: "+((e as any)?.message||"오류"),false)}
     finally{setDashboardSettingsSaving(false)}
   }
 
@@ -1936,6 +1948,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   function setOperationPeriod(k:"operationStart"|"operationEnd",v:string){setCfg(p=>({...p,dashboard:{...(p.dashboard||{}),[k]:v}}))}
   function unlinkedOperationPeriodError(){
     if(!cfg.header.programUnlinked)return""
+    if(cfg.dashboard?.alwaysOpen)return""
     const start=cfg.dashboard?.operationStart||""
     const end=cfg.dashboard?.operationEnd||""
     if(!start||!end)return"교육과정 연동을 하지 않는 폼은 폼 운영 기간을 설정해주세요."
@@ -3119,15 +3132,18 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             const dashboard=item.config?.dashboard||{}
             if(dashboard.isPublished===false)return"draft"
             const dbPeriod=recruitmentPeriodOf(programOf(item))
+            const hasDbPeriod=!!(dbPeriod.start||dbPeriod.end)
             const start=dbPeriod.start||dashboard.operationStart||""
             const end=dbPeriod.end||dashboard.operationEnd||""
+            if(!hasDbPeriod&&dashboard.alwaysOpen)return"active"
             const startAt=operationTimeMs(start,"start")
             const endAt=operationTimeMs(end,"end")
             const now=Date.now()
             if(startAt&&now<startAt)return"draft"
             if(endAt&&now>endAt)return"closed"
             if(startAt||endAt)return"active"
-            return dashboard.manualStatus||"draft"
+            if(dashboard.alwaysOpen===undefined&&dashboard.manualStatus)return dashboard.manualStatus
+            return"draft"
           }
           const statusInfo=(status:DashboardManualStatus)=>{
             if(status==="active")return{label:"진행중",color:A.green,bg:"rgba(23,201,100,0.10)"}
@@ -3268,7 +3284,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       <span>{item.updated_at?new Date(item.updated_at).toLocaleDateString("ko-KR"):"-"}</span>
                       <div style={{display:"flex",justifyContent:"flex-end",gap:4}}>
                         <button onClick={()=>openFormAnalytics(item)} title="응답 및 분석" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg></button>
-                        <button onClick={()=>openDashboardSettings(item)} title="목록 설정" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><GearIcon size={15}/></button>
+                        <button onClick={()=>openDashboardSettings(item)} title="폼 설정" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><GearIcon size={15}/></button>
                         <button onClick={()=>requestOpenFormForEdit(item)} title="편집" style={{height:30,padding:"0 9px",borderRadius:6,border:`1px solid ${A.border}`,background:A.card,color:A.t1,cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:600}}>편집</button>
                       </div>
                     </div>
@@ -3289,9 +3305,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           const recruitment=recruitmentPeriodOf(program)
           const hasRecruitmentPeriod=!!(recruitment.start||recruitment.end)
           return <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={()=>setDashboardSettings(null)}>
-            <div style={{width:500,maxWidth:"92vw",padding:24,borderRadius:16,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-              <div style={{fontSize:17,fontWeight:600,color:A.t1,marginBottom:5}}>목록 설정</div>
-              <div style={{fontSize:12.5,color:A.t3,marginBottom:20}}>브랜드, 폼 유형과 대시보드 상태 표시 기준을 정합니다.</div>
+            <div style={{width:500,maxWidth:"92vw",maxHeight:"88vh",overflowY:"auto" as const,padding:24,borderRadius:16,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
+              <div style={{fontSize:17,fontWeight:600,color:A.t1,marginBottom:5}}>폼 설정</div>
+              <div style={{fontSize:12.5,color:A.t3,marginBottom:20}}>폼 제목, 브랜드, 폼 유형과 운영 기준을 정합니다.</div>
+              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 제목</div>
+              <input value={dashboardSettings.formName} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formName:e.target.value}))} placeholder="폼 제목" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16,boxSizing:"border-box" as const}}/>
               <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>브랜드</div>
               <select value={dashboardSettings.brand} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,brand:e.target.value as BrandId}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
                 <option value="SNIPERFACTORY">스나이퍼팩토리</option><option value="INSIDEOUT">인사이드아웃</option><option value="SFACSPACE">스팩스페이스</option>
@@ -3307,15 +3325,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               {!!dashboardSettings.item.config?.dashboard?.editPasswordHash&&<label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:16}}><input type="checkbox" checked={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,clearEditPassword:e.target.checked,editPasswordDraft:e.target.checked?"":prev.editPasswordDraft}))}/>편집 비밀번호 해제</label>}
               {hasRecruitmentPeriod?<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB 모집 기간을 기준으로 상태가 자동 표시됩니다.<br/>{recruitment.start||"시작일 미정"} ~ {recruitment.end||"종료일 미정"}</div>:<>
                 <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:8,marginBottom:14}}>
-                  <input type="datetime-local" step={60} value={operationInputValue(dashboardSettings.operationStart,"start")} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,operationStart:e.target.value}))} style={{minWidth:0,width:"100%",height:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12}}/>
+                <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:8}}>
+                  <input type="checkbox" checked={dashboardSettings.alwaysOpen} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,alwaysOpen:e.target.checked,operationStart:e.target.checked?"":prev.operationStart,operationEnd:e.target.checked?"":prev.operationEnd,manualStatus:""}))}/>
+                  상시 운영
+                </label>
+                <div style={{fontSize:11.5,color:A.t3,lineHeight:1.5,marginBottom:9}}>체크하면 시작/종료일 없이 진행중으로 표시됩니다.</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:8,marginBottom:16,opacity:dashboardSettings.alwaysOpen?0.55:1}}>
+                  <input type="datetime-local" step={60} disabled={dashboardSettings.alwaysOpen} value={operationInputValue(dashboardSettings.operationStart,"start")} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,operationStart:e.target.value}))} style={{minWidth:0,width:"100%",height:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12}}/>
                   <span style={{fontSize:12,color:A.t3}}>~</span>
-                  <input type="datetime-local" step={60} value={operationInputValue(dashboardSettings.operationEnd,"end")} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,operationEnd:e.target.value}))} style={{minWidth:0,width:"100%",height:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12}}/>
+                  <input type="datetime-local" step={60} disabled={dashboardSettings.alwaysOpen} value={operationInputValue(dashboardSettings.operationEnd,"end")} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,operationEnd:e.target.value}))} style={{minWidth:0,width:"100%",height:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12}}/>
                 </div>
-                <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>기간 미설정 시 상태</div>
-                <select value={dashboardSettings.manualStatus} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,manualStatus:e.target.value as DashboardManualStatus}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
-                  <option value="">작성중</option><option value="active">진행중</option><option value="closed">종료</option>
-                </select>
               </>}
               <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
                 <button onClick={()=>setDashboardSettings(null)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
@@ -6090,10 +6109,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             onMouseLeave={()=>setShowBuilderSettingsTip(false)}
             onClick={openBuilderSettings}
             style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
-            aria-label="목록 설정">
+            aria-label="폼 설정">
             <GearIcon size={16}/>
           </button>
-          {showBuilderSettingsTip&&<div style={{position:"absolute" as const,top:"calc(100% + 7px)",left:"50%",transform:"translateX(-50%)",background:A.t1,color:A.card,padding:"5px 8px",borderRadius:6,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const,zIndex:1000,boxShadow:A.shadow}}>목록 설정</div>}
+          {showBuilderSettingsTip&&<div style={{position:"absolute" as const,top:"calc(100% + 7px)",left:"50%",transform:"translateX(-50%)",background:A.t1,color:A.card,padding:"5px 8px",borderRadius:6,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const,zIndex:1000,boxShadow:A.shadow}}>폼 설정</div>}
         </div>
         <div style={{position:"relative" as const}}>
           <button
@@ -6299,9 +6318,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         const recruitment=recruitmentPeriodOf(program)
         const hasRecruitmentPeriod=!!(recruitment.start||recruitment.end)
         return <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setDashboardSettings(null)}>
-          <div style={{width:500,maxWidth:"92vw",padding:24,borderRadius:16,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:17,fontWeight:600,color:A.t1,marginBottom:5}}>목록 설정</div>
-            <div style={{fontSize:12.5,color:A.t3,marginBottom:20}}>브랜드, 폼 유형과 대시보드 상태 표시 기준을 정합니다.</div>
+          <div style={{width:500,maxWidth:"92vw",maxHeight:"88vh",overflowY:"auto" as const,padding:24,borderRadius:16,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:17,fontWeight:600,color:A.t1,marginBottom:5}}>폼 설정</div>
+            <div style={{fontSize:12.5,color:A.t3,marginBottom:20}}>폼 제목, 브랜드, 폼 유형과 운영 기준을 정합니다.</div>
+            <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 제목</div>
+            <input value={dashboardSettings.formName} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formName:e.target.value}))} placeholder="폼 제목" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16,boxSizing:"border-box" as const}}/>
             <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>브랜드</div>
             <select value={dashboardSettings.brand} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,brand:e.target.value as BrandId}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
               <option value="SNIPERFACTORY">스나이퍼팩토리</option><option value="INSIDEOUT">인사이드아웃</option><option value="SFACSPACE">스팩스페이스</option>
@@ -6317,15 +6338,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {!!settingsConfig?.dashboard?.editPasswordHash&&<label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:16}}><input type="checkbox" checked={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,clearEditPassword:e.target.checked,editPasswordDraft:e.target.checked?"":prev.editPasswordDraft}))}/>편집 비밀번호 해제</label>}
             {hasRecruitmentPeriod?<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB 모집 기간을 기준으로 상태가 자동 표시됩니다.<br/>{recruitment.start||"시작일 미정"} ~ {recruitment.end||"종료일 미정"}</div>:<>
               <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:8,marginBottom:14}}>
-                <input type="datetime-local" step={60} value={operationInputValue(dashboardSettings.operationStart,"start")} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,operationStart:e.target.value}))} style={{minWidth:0,width:"100%",height:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12}}/>
+              <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:8}}>
+                <input type="checkbox" checked={dashboardSettings.alwaysOpen} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,alwaysOpen:e.target.checked,operationStart:e.target.checked?"":prev.operationStart,operationEnd:e.target.checked?"":prev.operationEnd,manualStatus:""}))}/>
+                상시 운영
+              </label>
+              <div style={{fontSize:11.5,color:A.t3,lineHeight:1.5,marginBottom:9}}>체크하면 시작/종료일 없이 진행중으로 표시됩니다.</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:8,marginBottom:16,opacity:dashboardSettings.alwaysOpen?0.55:1}}>
+                <input type="datetime-local" step={60} disabled={dashboardSettings.alwaysOpen} value={operationInputValue(dashboardSettings.operationStart,"start")} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,operationStart:e.target.value}))} style={{minWidth:0,width:"100%",height:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12}}/>
                 <span style={{fontSize:12,color:A.t3}}>~</span>
-                <input type="datetime-local" step={60} value={operationInputValue(dashboardSettings.operationEnd,"end")} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,operationEnd:e.target.value}))} style={{minWidth:0,width:"100%",height:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12}}/>
+                <input type="datetime-local" step={60} disabled={dashboardSettings.alwaysOpen} value={operationInputValue(dashboardSettings.operationEnd,"end")} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,operationEnd:e.target.value}))} style={{minWidth:0,width:"100%",height:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12}}/>
               </div>
-              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>기간 미설정 시 상태</div>
-              <select value={dashboardSettings.manualStatus} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,manualStatus:e.target.value as DashboardManualStatus}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
-                <option value="">작성중</option><option value="active">진행중</option><option value="closed">종료</option>
-              </select>
             </>}
             <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
               <button onClick={()=>setDashboardSettings(null)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
