@@ -98,7 +98,7 @@ const FILE_MAX_COUNT = 5
 const FILE_MAX_SIZE_MB = 10
 const FILE_LIMIT_TEXT = `최대 ${FILE_MAX_COUNT}개, 파일당 ${FILE_MAX_SIZE_MB}MB`
 const CATCHFORM_DIRECT_FORM_BASE_URL = "https://catchform.vercel.app/form"
-const FORM_SUMMARY_SELECT = "id,name,slug,updated_at,brand,config_brand:config->>brand,header_title:config->header->>title,program_id:config->header->>programId,form_type:config->>formType,dashboard_meta:config->dashboard"
+const FORM_SUMMARY_SELECT = "id,name,slug,updated_at,brand,config_brand:config->>brand,header_title:config->header->>title,program_id:config->header->>programId,recruitment_period_mode:config->header->>recruitmentPeriodMode,form_type:config->>formType,dashboard_meta:config->dashboard"
 const DEFAULT_GOOGLE_SHEETS = {enabled:false,mode:"existing" as const,accountEmail:"",sheetUrl:"",sheetName:"",webhookUrl:"",lastSyncStatus:"idle" as const,lastSyncAt:"",lastSyncMessage:""}
 const DASHBOARD_FORM_TYPES:{value:DashboardFormType;label:string}[]=[
   {value:"alert",label:"사전 알림"},
@@ -1613,12 +1613,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const brand=canonicalBrand(row.config_brand||row.config?.brand||row.brand||"")
     const title=row.header_title||row.config?.header?.title||""
     const programId=row.program_id||row.config?.header?.programId||""
+    const recruitmentPeriodMode=row.recruitment_period_mode||row.config?.header?.recruitmentPeriodMode||""
     const formType=row.form_type||row.config?.formType||""
     const dashboard=row.dashboard_meta||row.config?.dashboard||{}
     return {
       ...row,
       brand,
-      config:{brand,formType,dashboard,header:{title,programId}},
+      config:{brand,formType,dashboard,header:{title,programId,recruitmentPeriodMode}},
       __summary:true,
     }
   }
@@ -3290,8 +3291,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             if(dashboard.isPublished===false)return"draft"
             const dbPeriod=recruitmentPeriodOf(programOf(item),recruitmentPeriodModeOf(item.config))
             const hasDbPeriod=!!(dbPeriod.start||dbPeriod.end)
-            const start=dbPeriod.start||dashboard.operationStart||""
-            const end=dbPeriod.end||dashboard.operationEnd||""
+            const start=dashboard.operationStart||dbPeriod.start||""
+            const end=dashboard.operationEnd||dbPeriod.end||""
             if(!hasDbPeriod&&dashboard.alwaysOpen)return"active"
             const startAt=operationTimeMs(start,"start")
             const endAt=operationTimeMs(end,"end")
