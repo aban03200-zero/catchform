@@ -18,6 +18,8 @@
 - 인사이드아웃과 스팩스페이스 브랜드 폼 로그인은 기존처럼 입력 이메일 그대로 Supabase Auth에 전달되도록 유지
 - 스나이퍼팩토리 폼 링크와 QR 리다이렉트가 `NEXT_PUBLIC_SF_FORM_BASE_URL` 대신 `https://catchform.vercel.app/form/{slug}` 직접 링크를 사용하도록 변경
 - `NEXT_PUBLIC_SF_FORM_BASE_URL`을 더 이상 필수 환경변수로 안내하지 않도록 관리자 환경변수 안내 문구와 배포 문서를 정리
+- 선택형 질문 응답 저장 시 내부 option value가 아니라 사용자에게 보이는 option label을 저장하도록 변경
+- 분석표, 질문별 차트, CSV 내보내기에서 기존 응답의 내부 value도 현재 옵션 label로 매핑해 표시하도록 보강
 
 ### 확인 필요
 
@@ -28,6 +30,7 @@
 - 기존 교육과정 신청폼은 편집 또는 운영 렌더링 시 일반 폼 구조로 변환되어 표시됨
 - 스나이퍼팩토리 로그인 필수 폼에서 `user@example.com`으로 입력하면 내부 로그인 요청은 `user@example.com.sniperfactory` 계정으로 처리됨
 - Vercel의 `NEXT_PUBLIC_SF_FORM_BASE_URL`은 코드에서 더 이상 읽지 않으므로 삭제해도 되며, 삭제 후에는 새 배포가 한 번 반영되어야 함
+- `신입`/`경력`처럼 label과 value가 다른 선택형 응답도 분석표에서는 사용자가 선택한 label로 표시됨
 
 ## 2026-06-04
 

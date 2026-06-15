@@ -2404,6 +2404,28 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const hit=fd.find((x:any)=>x.answerKey===field.id)||fd.find((x:any)=>(x.question||"")===field.label)
     return hit?.answer
   }
+  function analyticsFieldOpts(field:any){
+    const raw=(field?.opts&&field.opts.length)?field.opts:(field?.options||[])
+    return raw.map((o:any)=>{
+      const label=String(o?.label??o?.value??o)
+      const value=String(o?.value??o?.label??o)
+      const key=value.trim().toLowerCase()
+      return {...(typeof o==="object"?o:{}),label,value,isEtc:!!o?.isEtc||label.trim()==="기타"||value.trim()==="기타"||key==="etc"||key==="other"}
+    })
+  }
+  function analyticsOptionLabel(field:any,value:any){
+    const raw=String(value??"").trim()
+    if(!raw)return raw
+    const opts=analyticsFieldOpts(field)
+    if(!opts.length)return raw
+    const etc=raw.match(/^([^:]+):\s*(.*)$/)
+    if(etc){
+      const prefix=analyticsOptionLabel(field,etc[1])
+      return `${prefix||etc[1]}: ${etc[2]}`
+    }
+    const opt=opts.find((o:any)=>String(o.value)===raw)||opts.find((o:any)=>String(o.label)===raw)
+    return opt?.label||raw
+  }
   function isEmptyAnalyticsAnswer(ans:any){
     if(ans===undefined||ans===null||ans==="")return true
     if(Array.isArray(ans))return ans.length===0
@@ -2437,19 +2459,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const ans=analyticsRawAnswer(row,field)
     const files=analyticsFileItems(ans)
     if(files.length)return files.map((f:any)=>f.name).join(" / ")
-    if(Array.isArray(ans))return ans.join(" / ")
+    if(Array.isArray(ans))return ans.map((v:any)=>analyticsOptionLabel(field,v)).join(" / ")
     if(ans===undefined||ans===null||ans==="")return "없음"
     if(typeof ans==="object")return ans.name||ans.url||JSON.stringify(ans)
-    return String(ans)
+    return analyticsOptionLabel(field,ans)
   }
   function editableAnalyticsValue(row:any,field:any){
     const ans=analyticsRawAnswer(row,field)
     const files=analyticsFileItems(ans)
     if(files.length)return files.map((f:any)=>f.name).join("\n")
-    if(Array.isArray(ans))return ans.map((v:any)=>String(v??"")).join("\n")
+    if(Array.isArray(ans))return ans.map((v:any)=>analyticsOptionLabel(field,v)).join("\n")
     if(ans===undefined||ans===null)return ""
     if(typeof ans==="object")return ans.name||ans.url||JSON.stringify(ans,null,2)
-    return String(ans)
+    return analyticsOptionLabel(field,ans)
   }
   function parseEditedAnalyticsValue(field:any,value:string){
     if(field.type==="checkbox"){
@@ -2498,7 +2520,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   function analyticsValues(row:any,field:any){
     const norm=(v:any)=>{
-      const s=String(v||"없음").trim()
+      const s=analyticsOptionLabel(field,v||"없음").trim()
       return s.startsWith("기타:")? "기타" : s
     }
     const raw=analyticsRawAnswer(row,field)
@@ -5293,7 +5315,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const choiceDirectRows=activeField&&!isListQuestion?rows.map(row=>{
       const raw=analyticsRawAnswer(row,activeField)
       const vals=Array.isArray(raw)?raw:(raw?[raw]:[])
-      const answers=vals.map((v:any)=>String(v||"")).filter(v=>v.trim().startsWith("기타:")).map(v=>v.replace(/^기타:\s*/,"").trim()).filter(Boolean)
+      const answers=vals.map((v:any)=>analyticsOptionLabel(activeField,v)).filter(v=>v.trim().startsWith("기타:")).map(v=>v.replace(/^기타:\s*/,"").trim()).filter(Boolean)
       return {row,answers,date:fmtAnalyticsDate(row.created_at)}
     }).filter(item=>item.answers.length>0):[]
     let pieDeg=0

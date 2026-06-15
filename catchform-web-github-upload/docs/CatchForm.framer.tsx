@@ -965,16 +965,17 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
         if (field.type === "checkbox") {
             const selected = checked[fid] || []
-            if (!etcValue) return selected
             return selected.map(v => {
                 const opt = fieldOpts.find(o => o.value === v)
-                return opt?.isEtc ? `${opt.label}: ${etcValue}` : v
+                if (opt?.isEtc && etcValue) return `${opt.label}: ${etcValue}`
+                return opt?.label || v
             })
         }
 
         const answer = vals[fid] || ""
         const selectedOpt = fieldOpts.find(o => o.value === answer)
-        return selectedOpt?.isEtc && etcValue ? `${selectedOpt.label}: ${etcValue}` : answer
+        if (selectedOpt?.isEtc && etcValue) return `${selectedOpt.label}: ${etcValue}`
+        return selectedOpt?.label || answer
     }
 
     const getDraftAnswers = () => {
