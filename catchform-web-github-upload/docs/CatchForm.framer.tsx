@@ -35,6 +35,7 @@ const publicEnv = {
 // ─── Types ────────────────────────────────────────────────────────────────
 type Opt = { label: string; value: string; isEtc: boolean; nextPage?: number }
 type HelperItem = { text: string; callout?: boolean }
+type RecruitmentPeriodMode = "pre"|"formal"
 type FieldType = "text"|"name"|"email"|"phone"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"
 type FormField = {
     id: string; type: FieldType; label: string; placeholder?: string
@@ -50,7 +51,7 @@ type KdtField = {
 }
 type Cfg = {
     header: {
-        imageUrl: string; programId?: string; overline: string; title: string
+        imageUrl: string; programId?: string; recruitmentPeriodMode?: RecruitmentPeriodMode; overline: string; title: string
         educationStart: string; educationEnd: string
         tuitionFree: boolean; tuitionFreeText: string; tuitionAmount: string; stipend: string
         noticeEnabled: boolean; noticeIconEnabled: boolean; noticeIconText: string; noticeText: string
@@ -66,7 +67,7 @@ type Cfg = {
     styles: { theme: "dark"|"light"; fieldH: number; qGap: number; maxW: number; labelGap?: number }
     auth: { enabled: boolean; loginUrl: string; errText: string }
     integrations?: { googleSheets?: { enabled: boolean; mode: "existing"|"new"; accountEmail: string; sheetUrl: string; sheetName: string; webhookUrl: string; lastSyncStatus?: "idle"|"sent"|"error"; lastSyncAt?: string; lastSyncMessage?: string } }
-    dashboard?: { isPublished?: boolean; publishedAt?: string; operationStart?: string; operationEnd?: string }
+    dashboard?: { isPublished?: boolean; publishedAt?: string; operationStart?: string; operationEnd?: string; alwaysOpen?: boolean }
     brand: string
     formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"
     kdtFields?: KdtField[]
@@ -85,7 +86,18 @@ function getSB(url: string, key: string): SupabaseClient | null {
 function dbBrandValue(brand: string) {
     const normalized = String(brand || "").trim().toUpperCase()
     if (!normalized) return ""
-    return normalized === "INSIDEOUT" ? "INSIDEOUT" : "SNIPERFACTORY"
+    if (normalized === "INSIDEOUT") return "INSIDEOUT"
+    if (normalized === "SFACSPACE") return "SFACSPACE"
+    return "SNIPERFACTORY"
+}
+function isCompanyApplicationConfig(config: any) {
+    const formType = String(config?.formType || "")
+    if (["edu_biz", "company", "recruit"].includes(formType)) return true
+    const fields = Array.isArray(config?.form?.fields) ? config.form.fields : []
+    const fieldIds = new Set(fields.map((field: any) => String(field?.id || "")))
+    if (fieldIds.has("company_name") && (fieldIds.has("industry") || fieldIds.has("program_type") || fieldIds.has("business_type"))) return true
+    const titleText = `${config?.header?.overline || ""} ${config?.header?.title || ""}`
+    return titleText.includes("참여기업") || titleText.includes("참여 기업")
 }
 
 const SNIPERFACTORY_AUTH_SUFFIX = ".sniperfactory"
@@ -308,6 +320,7 @@ function operationTimeMs(value?: string, edge: "start" | "end" = "start") {
     return Number.isFinite(time) ? time : 0
 }
 function getOperationGate(cfg: Cfg) {
+    if (cfg.dashboard?.alwaysOpen) return null
     const start = cfg.dashboard?.operationStart || ""
     const end = cfg.dashboard?.operationEnd || ""
     if (!start && !end) return null
@@ -467,7 +480,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const draftLoadedRef = React.useRef(false)
     const remoteDraftTimerRef = React.useRef<any>(null)
     const [draftLastFieldId, setDraftLastFieldId] = React.useState("")
-    const operationGate = React.useMemo(() => getOperationGate(cfg), [cfg.dashboard?.operationStart, cfg.dashboard?.operationEnd])
+    const operationGate = React.useMemo(() => getOperationGate(cfg), [cfg.dashboard?.operationStart, cfg.dashboard?.operationEnd, cfg.dashboard?.alwaysOpen])
     const formDisabled = !!operationGate
     const [showOperationModal, setShowOperationModal] = React.useState(!!operationGate)
 
@@ -1183,8 +1196,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             if (!supa) { setDupErr("서버 연결 오류입니다."); setSubmitting(false); return }
 
             // Determine table
-            const companyTypes = ["edu_biz", "company", "recruit"]
-            const isCompanyForm = companyTypes.includes(cfg.formType || "")
+            const isCompanyForm = isCompanyApplicationConfig(cfg)
             const tableName = isCompanyForm ? "company_applications" : "applications"
 
             // Resolve form_configs.id from slug before uploads

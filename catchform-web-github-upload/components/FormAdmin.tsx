@@ -14,6 +14,7 @@ type Prog = { id: string; title: string; slug?: string; category?: string; [key:
 type BrandId = "SNIPERFACTORY"|"INSIDEOUT"|"SFACSPACE"
 type DashboardFormType = "alert"|"application"|"recruit"|"survey"|"evaluation"|"other"
 type DashboardManualStatus = ""|"draft"|"active"|"closed"
+type RecruitmentPeriodMode = "pre"|"formal"
 type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; alwaysOpen?:boolean; manualStatus?:DashboardManualStatus; isPublished?:boolean; publishedAt?:string; editPasswordHash?:string; formTrashedAt?:string }
 type AdminRole = ""|"admin"|"master"
 type DashboardSettingsState = {item:any;formName:string;brand:BrandId;formTypeTag:DashboardFormType;operationStart:string;operationEnd:string;alwaysOpen:boolean;manualStatus:DashboardManualStatus;currentEditPasswordDraft:string;editPasswordDraft:string;clearEditPassword:boolean}
@@ -24,7 +25,7 @@ type HelperItem = { text:string; callout?:boolean }
 type FormField = { id:string; type:FieldType; label:string; placeholder?:string; helper?:string; helpers?:HelperItem[]; required?:boolean; opts?:Opt[]; etcPh?:string; dupCheck?:boolean; page?:number; cols?:number; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
 type QrLink = { code:string; url:string; label?:string; type?:string; createdAt?:string }
 type Cfg = {
-  header: { imageUrl:string; programId:string; programUnlinked?:boolean; overline:string; title:string; educationStart:string; educationEnd:string; tuitionFree:boolean; tuitionFreeText:string; tuitionAmount:string; stipend:string; noticeEnabled:boolean; noticeIconEnabled:boolean; noticeIconText:string; noticeText:string; noticeShape?:"pill"|"rect"; applicationType?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
+  header: { imageUrl:string; programId:string; programUnlinked?:boolean; recruitmentPeriodMode?:RecruitmentPeriodMode; overline:string; title:string; educationStart:string; educationEnd:string; tuitionFree:boolean; tuitionFreeText:string; tuitionAmount:string; stipend:string; noticeEnabled:boolean; noticeIconEnabled:boolean; noticeIconText:string; noticeText:string; noticeShape?:"pill"|"rect"; applicationType?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
   form: { fields:FormField[]; showNum:boolean; dupText:string; pages:number; pageLabels?:string[] }
   consents: { enabled:boolean; required:boolean; title:string; consentType?:string; body:string; checkLabel:string; policyUrl:string }[]
   cta: { label:string; loadLabel:string; height:number; bg:string; color:string }
@@ -117,11 +118,69 @@ function firstDateValue(source:any,keys:string[]){
   for(const key of keys){const value=source?.[key];if(typeof value==="string"&&value.trim())return value.trim()}
   return""
 }
-function recruitmentPeriodOf(program?:Prog){
+const FORMAL_RECRUITMENT_START_KEYS=[
+  "formal_recruitment_start","formal_recruitment_start_at","formal_recruitment_start_date",
+  "formal_recruit_start","formal_recruit_start_at","formal_recruit_start_date",
+  "formal_application_start","formal_application_start_at","formal_application_start_date",
+  "formal_apply_start","formal_apply_start_at","formal_apply_start_date",
+  "regular_recruitment_start","regular_recruitment_start_at","regular_recruitment_start_date",
+  "official_recruitment_start","official_recruitment_start_at","official_recruitment_start_date",
+  "recruitment_start","recruitment_start_at","recruitment_start_date",
+  "recruit_start","recruit_start_at","recruit_start_date",
+  "application_start","application_start_at","application_start_date",
+  "apply_start","apply_start_at",
+]
+const FORMAL_RECRUITMENT_END_KEYS=[
+  "formal_recruitment_end","formal_recruitment_end_at","formal_recruitment_end_date",
+  "formal_recruit_end","formal_recruit_end_at","formal_recruit_end_date",
+  "formal_application_end","formal_application_end_at","formal_application_end_date",
+  "formal_apply_end","formal_apply_end_at","formal_apply_end_date",
+  "regular_recruitment_end","regular_recruitment_end_at","regular_recruitment_end_date",
+  "official_recruitment_end","official_recruitment_end_at","official_recruitment_end_date",
+  "recruitment_end","recruitment_end_at","recruitment_end_date",
+  "recruit_end","recruit_end_at","recruit_end_date",
+  "application_end","application_end_at","application_end_date",
+  "apply_end","apply_end_at",
+]
+const PRE_RECRUITMENT_START_KEYS=[
+  "pre_recruitment_start","pre_recruitment_start_at","pre_recruitment_start_date",
+  "pre_recruitment_period_start","pre_recruitment_period_start_at","pre_recruitment_period_start_date",
+  "pre_recruit_start","pre_recruit_start_at","pre_recruit_start_date",
+  "pre_application_start","pre_application_start_at","pre_application_start_date",
+  "pre_apply_start","pre_apply_start_at","pre_apply_start_date",
+  "pre_registration_start","pre_registration_start_at","pre_registration_start_date",
+  "early_recruitment_start","early_recruitment_start_at","early_recruitment_start_date",
+  "early_application_start","early_application_start_at","early_application_start_date",
+  "notice_start","notice_start_at","notice_start_date",
+  "notification_start","notification_start_at","notification_start_date",
+  "pre_start","pre_start_at","pre_start_date",
+]
+const PRE_RECRUITMENT_END_KEYS=[
+  "pre_recruitment_end","pre_recruitment_end_at","pre_recruitment_end_date",
+  "pre_recruitment_period_end","pre_recruitment_period_end_at","pre_recruitment_period_end_date",
+  "pre_recruit_end","pre_recruit_end_at","pre_recruit_end_date",
+  "pre_application_end","pre_application_end_at","pre_application_end_date",
+  "pre_apply_end","pre_apply_end_at","pre_apply_end_date",
+  "pre_registration_end","pre_registration_end_at","pre_registration_end_date",
+  "early_recruitment_end","early_recruitment_end_at","early_recruitment_end_date",
+  "early_application_end","early_application_end_at","early_application_end_date",
+  "notice_end","notice_end_at","notice_end_date",
+  "notification_end","notification_end_at","notification_end_date",
+  "pre_end","pre_end_at","pre_end_date",
+]
+function recruitmentPeriodModeOf(config:any):RecruitmentPeriodMode{
+  return config?.header?.recruitmentPeriodMode==="pre"?"pre":"formal"
+}
+function recruitmentPeriodLabel(mode:RecruitmentPeriodMode){
+  return mode==="pre"?"사전 모집 기간":"정식 모집 기간"
+}
+function recruitmentPeriodOf(program?:Prog,mode:RecruitmentPeriodMode="formal"){
   if(!program)return{start:"",end:""}
+  const startKeys=mode==="pre"?PRE_RECRUITMENT_START_KEYS:FORMAL_RECRUITMENT_START_KEYS
+  const endKeys=mode==="pre"?PRE_RECRUITMENT_END_KEYS:FORMAL_RECRUITMENT_END_KEYS
   return{
-    start:firstDateValue(program,["recruitment_start","recruitment_start_at","recruitment_start_date","recruit_start","recruit_start_at","recruit_start_date","application_start","application_start_at","application_start_date","apply_start","apply_start_at"]),
-    end:firstDateValue(program,["recruitment_end","recruitment_end_at","recruitment_end_date","recruit_end","recruit_end_at","recruit_end_date","application_end","application_end_at","application_end_date","apply_end","apply_end_at"]),
+    start:firstDateValue(program,startKeys),
+    end:firstDateValue(program,endKeys),
   }
 }
 function operationInputValue(value:string,edge:"start"|"end"="start"){
@@ -587,6 +646,19 @@ function canonicalBrand(brand:string):BrandId{
 // while this column keeps a compatible parent value for existing Supabase schemas.
 function dbBrandValue(brand:string){
   return canonicalBrand(brand)==="INSIDEOUT"?"INSIDEOUT":"SNIPERFACTORY"
+}
+function isCompanyApplicationConfig(config:any){
+  const formType=String(config?.formType||"")
+  if(["edu_biz","company","recruit"].includes(formType))return true
+  const fields=Array.isArray(config?.form?.fields)?config.form.fields:[]
+  const fieldIds=new Set(fields.map((field:any)=>String(field?.id||"")))
+  if(fieldIds.has("company_name")&&(fieldIds.has("industry")||fieldIds.has("program_type")||fieldIds.has("business_type")))return true
+  const titleText=`${config?.header?.overline||""} ${config?.header?.title||""}`
+  return titleText.includes("참여기업")||titleText.includes("참여 기업")
+}
+function makeAutoSlug(prefix="form"){
+  const safePrefix=String(prefix||"form").replace(/[^a-z0-9-]/gi,"").toLowerCase()||"form"
+  return `${safePrefix}-${Date.now()}-${Math.floor(100000+Math.random()*900000)}`
 }
 
 function SelectChevron({color}:{color:string}){
@@ -1773,7 +1845,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       delete (copiedDashboard as any).formTrashedAt
       const brandedCopy=applyBrandDefaults({...cfgCopy,dashboard:copiedDashboard},brand)
       const newName=item.name+" 복사본"
-      const newSlug=(item.slug||item.name).toLowerCase().replace(/\s+/g,"-")+"-copy-"+Date.now()
+      const newSlug=makeAutoSlug("copy")
       const{error}=await supa.from("form_configs").insert({name:newName,slug:newSlug,config:brandedCopy,brand:dbBrandValue(brand)})
       if(error)throw error
       showToast(`"${newName}" 복사 완료!`)
@@ -1902,8 +1974,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const next=applyBrandDefaults(mergeCfg(full.config||{}),dashboardSettings.brand)
       const nextName=dashboardSettings.formName.trim()
       if(!nextName)throw new Error("폼 제목을 입력해주세요.")
-      const nextOperationStart=dashboardSettings.alwaysOpen?"":dashboardSettings.operationStart
-      const nextOperationEnd=dashboardSettings.alwaysOpen?"":dashboardSettings.operationEnd
+      const nextOperationStart=dashboardSettings.operationStart
+      const nextOperationEnd=dashboardSettings.operationEnd
       if(!dashboardSettings.alwaysOpen&&nextOperationStart&&nextOperationEnd&&operationTimeMs(nextOperationStart,"start")>operationTimeMs(nextOperationEnd,"end"))throw new Error("폼 운영 기간의 종료일은 시작일보다 빠를 수 없어요.")
       const previousEditPasswordHash=next.dashboard?.editPasswordHash||""
       let editPasswordHash=previousEditPasswordHash
@@ -1958,7 +2030,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   function mergeRecruitmentPeriodIntoConfig(source:Cfg){
     if(source.header.programUnlinked||!source.header.programId)return source
     const program=progs.find(p=>p.id===source.header.programId)
-    const period=recruitmentPeriodOf(program)
+    const period=recruitmentPeriodOf(program,recruitmentPeriodModeOf(source))
     if(!period.start&&!period.end)return source
     return {
       ...source,
@@ -1969,6 +2041,28 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       },
     }
   }
+  function applyLinkedProgram(program:Prog){
+    const mode=recruitmentPeriodModeOf(cfg)
+    const period=recruitmentPeriodOf(program,mode)
+    setCfg(p=>({
+      ...p,
+      header:{...p.header,programId:program.id,programUnlinked:false,recruitmentPeriodMode:mode,title:program.title||p.header.title},
+      dashboard:{...(p.dashboard||{}),operationStart:period.start||"",operationEnd:period.end||""},
+    }))
+  }
+  function setRecruitmentPeriodMode(mode:RecruitmentPeriodMode){
+    const program=progs.find(p=>p.id===cfg.header.programId)
+    if(!program){
+      setCfg(p=>({...p,header:{...p.header,recruitmentPeriodMode:mode}}))
+      return
+    }
+    const period=recruitmentPeriodOf(program,mode)
+    setCfg(p=>({
+      ...p,
+      header:{...p.header,recruitmentPeriodMode:mode},
+      dashboard:{...(p.dashboard||{}),operationStart:period.start||"",operationEnd:period.end||""},
+    }))
+  }
   function updateField(idx:number,patch:Partial<FormField>){setCfg(p=>({...p,form:{...p.form,fields:p.form.fields.map((f,i)=>i===idx?{...f,...patch}:f)}}))}
   function addField(type:FieldType="text"){
     const fieldDefs:Record<string,{id:string;label:string;placeholder:string;helper?:string;required:boolean}> = {
@@ -1976,14 +2070,27 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       phone:    {id:"phone",    label:"연락 가능한 휴대폰 번호를 입력해 주세요.", placeholder:"예) 010-1234-5678",       required:true},
       email:    {id:"email",    label:"이메일 주소를 입력해주세요.",              placeholder:"예) example@email.com",   required:true},
       referral: {id:"referral", label:"프로그램을 어디에서 알게 되셨나요?",       placeholder:"선택해주세요.",           required:false},
+      text:     {id:"",         label:"단답형 질문",                             placeholder:"예) 답변을 입력해주세요.", required:false},
+      textarea: {id:"",         label:"장문형 질문",                             placeholder:"예) 자세한 답변을 작성해주세요.", required:false},
+      date:     {id:"",         label:"날짜를 선택해주세요.",                    placeholder:"",                         required:false},
+      time:     {id:"",         label:"시간을 선택해주세요.",                    placeholder:"",                         required:false},
+      file:     {id:"",         label:"파일을 첨부해주세요.",                    placeholder:"파일 업로드",              required:false},
     }
     const preset = fieldDefs[type]
-    const id = preset ? preset.id : "f_"+Date.now()
+    const id = preset?.id ? preset.id : "f_"+Date.now()
     const defaultLabel = type==="info" ? "안내 텍스트" : preset ? preset.label : "새 질문"
     const defaultPh = type==="info" ? "" : preset ? preset.placeholder : "입력해주세요."
     const extra:any = preset ? {required:preset.required} : {}
     if(preset?.helper)extra.helper=preset.helper
     if(type==="referral"){extra.opts=DEFOPTS;extra.etcPh="기타 경로를 입력해주세요."}
+    if(type==="dropdown"||type==="button_select"||type==="checkbox"){
+      extra.opts=[
+        {label:"예시 답변 1",value:"예시 답변 1",isEtc:false},
+        {label:"예시 답변 2",value:"예시 답변 2",isEtc:false},
+      ]
+      extra.placeholder="선택해주세요."
+      if(type==="button_select"||type==="checkbox")extra.cols=2
+    }
     const finalType = type==="referral" ? "dropdown" : type
     setCfg(p=>({...p,form:{...p.form,fields:[...p.form.fields,{id,type:finalType,label:defaultLabel,placeholder:defaultPh,page:pvPage,...extra}]}}))
   }
@@ -2241,7 +2348,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(periodError){setSaveErr(periodError);return}
     setSaving(true);setSaveErr("")
     try{
-      const slug=saveSlug.trim()||saveName.trim().toLowerCase().replace(/\s+/g,"-")+"-"+Date.now()
+      const slug=saveSlug.trim()||makeAutoSlug()
       const cfgFinal={...cfg,brand:currentBrand,dashboard:{...(cfg.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft" as DashboardManualStatus}}
       const{data:ins,error}=await supa.from("form_configs").insert({name:saveName.trim(),slug,config:cfgFinal,brand:dbBrandValue(currentBrand)}).select("id,slug").single()
       if(error)throw error
@@ -2549,10 +2656,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const files=analyticsFileItems(ans)
     if(files.length)return <div style={{display:"flex",flexDirection:"column" as const,gap:5}}>
       {files.map((f:any,i:number)=>f.url
-        ? <button key={i} onClick={()=>setFilePreview(f)} style={{border:"none",background:"transparent",padding:0,color:A.blue,textDecoration:"none",fontWeight:400,fontFamily:FONT,fontSize:13,textAlign:"left" as const,cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{f.name}</button>
-        : <span key={i} style={{color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{f.name}</span>)}
+        ? <button key={i} onClick={()=>setFilePreview(f)} style={{border:"none",background:"transparent",padding:0,color:A.blue,textDecoration:"none",fontWeight:400,fontFamily:FONT,fontSize:13,textAlign:"left" as const,cursor:"pointer",whiteSpace:"normal" as const,wordBreak:"break-word" as const,overflowWrap:"anywhere" as const}}>{f.name}</button>
+        : <span key={i} style={{color:A.t1,whiteSpace:"normal" as const,wordBreak:"break-word" as const,overflowWrap:"anywhere" as const}}>{f.name}</span>)}
     </div>
-    return <span>{analyticsAnswer(row,field)}</span>
+    if(field.type==="checkbox"){
+      const values=Array.isArray(ans)
+        ? ans.map((v:any)=>analyticsOptionLabel(field,v)).filter(Boolean)
+        : String(analyticsAnswer(row,field)).split(/\s*\/\s*/).map(v=>v.trim()).filter(Boolean)
+      return <div style={{display:"flex",flexDirection:"column" as const,alignItems:"flex-start",gap:5}}>
+        {(values.length?values:["없음"]).map((value:string,i:number)=><span key={`${value}_${i}`} style={{maxWidth:"100%",padding:"3px 7px",borderRadius:6,background:A.card,border:`1px solid ${A.border}`,whiteSpace:"normal" as const,wordBreak:"break-word" as const,overflowWrap:"anywhere" as const,lineHeight:1.35}}>{value}</span>)}
+      </div>
+    }
+    const value=analyticsAnswer(row,field)
+    return <span style={{display:"block",whiteSpace:"pre-wrap" as const,wordBreak:"break-word" as const,overflowWrap:"anywhere" as const,lineHeight:1.55}}>{value}</span>
   }
   function saveAnalyticsBlob(blob:Blob,name:string){
     const url=URL.createObjectURL(blob)
@@ -2678,8 +2794,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(!supa||!loadedId){setAnalyticsErr("저장된 폼을 먼저 선택해주세요.");return}
     setAnalyticsLoading(true);setAnalyticsErr("")
     try{
-      const companyTypes=["edu_biz","company","recruit"]
-      const tableName=companyTypes.includes(cfg.formType||"")?"company_applications":"applications"
+      const tableName=isCompanyApplicationConfig(cfg)?"company_applications":"applications"
       let rows:any[]=[]
       const res=await supa.from(tableName).select("*").eq("form_id",loadedId).order("created_at",{ascending:false}).limit(1000)
       if(res.error)throw res.error
@@ -2706,8 +2821,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     } finally {setAnalyticsLoading(false)}
   }
   function analyticsTableName(){
-    const companyTypes=["edu_biz","company","recruit"]
-    return companyTypes.includes(cfg.formType||"")?"company_applications":"applications"
+    return isCompanyApplicationConfig(cfg)?"company_applications":"applications"
   }
   async function deleteAnalyticsRow(row:any){
     if(!supa||!row?.id)return
@@ -3131,7 +3245,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           const statusOf=(item:any):DashboardManualStatus=>{
             const dashboard=item.config?.dashboard||{}
             if(dashboard.isPublished===false)return"draft"
-            const dbPeriod=recruitmentPeriodOf(programOf(item))
+            const dbPeriod=recruitmentPeriodOf(programOf(item),recruitmentPeriodModeOf(item.config))
             const hasDbPeriod=!!(dbPeriod.start||dbPeriod.end)
             const start=dbPeriod.start||dashboard.operationStart||""
             const end=dbPeriod.end||dashboard.operationEnd||""
@@ -3302,7 +3416,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         })()}
         {dashboardSettings&&(()=>{
           const program=progs.find(p=>p.id===dashboardSettings.item.config?.header?.programId)
-          const recruitment=recruitmentPeriodOf(program)
+          const recruitmentMode=recruitmentPeriodModeOf(dashboardSettings.item.config)
+          const recruitment=recruitmentPeriodOf(program,recruitmentMode)
           const hasRecruitmentPeriod=!!(recruitment.start||recruitment.end)
           return <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={()=>setDashboardSettings(null)}>
             <div style={{width:500,maxWidth:"92vw",maxHeight:"88vh",overflowY:"auto" as const,padding:24,borderRadius:16,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
@@ -3323,10 +3438,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <input type="password" value={dashboardSettings.editPasswordDraft} disabled={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,editPasswordDraft:e.target.value}))} placeholder={dashboardSettings.item.config?.dashboard?.editPasswordHash?"새 비밀번호 입력 시 변경":"비밀번호 입력 시 편집 보호"} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,opacity:dashboardSettings.clearEditPassword?.55:1}}/>
               <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,margin:"6px 0 9px"}}>{canMasterReset(authRole)&&dashboardSettings.item.config?.dashboard?.editPasswordHash?"master 권한 계정은 현재 비밀번호 없이 편집 비밀번호를 변경하거나 해제할 수 있어요.":"설정하면 대시보드에서 편집을 열 때 비밀번호를 확인합니다. 원문 대신 해시값만 저장됩니다."}</div>
               {!!dashboardSettings.item.config?.dashboard?.editPasswordHash&&<label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:16}}><input type="checkbox" checked={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,clearEditPassword:e.target.checked,editPasswordDraft:e.target.checked?"":prev.editPasswordDraft}))}/>편집 비밀번호 해제</label>}
-              {hasRecruitmentPeriod?<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB 모집 기간을 기준으로 상태가 자동 표시됩니다.<br/>{recruitment.start||"시작일 미정"} ~ {recruitment.end||"종료일 미정"}</div>:<>
+              {hasRecruitmentPeriod?<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB의 {recruitmentPeriodLabel(recruitmentMode)}을 기준으로 상태가 자동 표시됩니다.<br/>{recruitment.start||"시작일 미정"} ~ {recruitment.end||"종료일 미정"}</div>:<>
                 <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
                 <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:8}}>
-                  <input type="checkbox" checked={dashboardSettings.alwaysOpen} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,alwaysOpen:e.target.checked,operationStart:e.target.checked?"":prev.operationStart,operationEnd:e.target.checked?"":prev.operationEnd,manualStatus:""}))}/>
+                  <input type="checkbox" checked={dashboardSettings.alwaysOpen} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,alwaysOpen:e.target.checked,manualStatus:""}))}/>
                   상시 운영
                 </label>
                 <div style={{fontSize:11.5,color:A.t3,lineHeight:1.5,marginBottom:9}}>체크하면 시작/종료일 없이 진행중으로 표시됩니다.</div>
@@ -3836,8 +3951,30 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
           {!cfg.header.programUnlinked&&progs.length>0&&<F label="과정 선택" A={A}>
             <ProgramPicker progs={progs} cats={cats} brand={currentBrand} value={cfg.header.programId}
-              onChange={(p)=>{uh("programId",p.id);uh("programUnlinked",false);if(p.title)uh("title",p.title)}} A={A}/>
+              onChange={applyLinkedProgram} A={A}/>
           </F>}
+          {!cfg.header.programUnlinked&&cfg.header.programId&&(()=>{
+            const linkedProgram=progs.find(p=>p.id===cfg.header.programId)
+            const currentMode=recruitmentPeriodModeOf(cfg)
+            const currentPeriod=recruitmentPeriodOf(linkedProgram,currentMode)
+            return <F label="폼 운영 기간 기준" A={A}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                {(["pre","formal"] as RecruitmentPeriodMode[]).map(mode=>{
+                  const period=recruitmentPeriodOf(linkedProgram,mode)
+                  const selected=currentMode===mode
+                  return <button key={mode} onClick={()=>setRecruitmentPeriodMode(mode)}
+                    style={{minHeight:54,padding:"9px 10px",borderRadius:A.r,border:`1.5px solid ${selected?A.blue:A.border}`,background:selected?A.blue2:A.card2,color:selected?A.blue:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:selected?700:600,cursor:"pointer",textAlign:"left" as const,lineHeight:1.45}}>
+                    <div>{recruitmentPeriodLabel(mode)}</div>
+                    <div style={{fontSize:11,color:selected?A.blue:A.t3,fontWeight:400,marginTop:3,wordBreak:"break-all" as const}}>{period.start||period.end?`${period.start||"시작 미정"} ~ ${period.end||"종료 미정"}`:"기간 데이터 없음"}</div>
+                  </button>
+                })}
+              </div>
+              <div style={{marginTop:8,padding:"8px 10px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:11.5,color:A.t3,lineHeight:1.55}}>
+                현재 기준: <b style={{color:A.t2}}>{recruitmentPeriodLabel(currentMode)}</b><br/>
+                {currentPeriod.start||currentPeriod.end?`${currentPeriod.start||"시작 미정"} ~ ${currentPeriod.end||"종료 미정"}`:"선택한 기준의 모집 기간 데이터가 없습니다."}
+              </div>
+            </F>
+          })()}
           {cfg.header.programUnlinked&&<div style={{padding:"9px 11px",marginBottom:10,borderRadius:A.r,border:`1px solid ${A.blue}33`,background:A.blue2,color:A.blue,fontSize:12,lineHeight:1.55}}>교육과정과 연결하지 않습니다. 저장할 때 폼 운영 기간을 설정해주세요.</div>}
           <F label="제목" A={A}><TIn value={cfg.header.title} onChange={v=>uh("title",v)} A={A}/></F>
           <F label="지원 유형" A={A}>
@@ -5652,11 +5789,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     </button>}
                   </div>
                 </th>})}</tr></thead>
-                <tbody>{responseRows.map(row=>{const dt=fmtAnalyticsDate(row.created_at);const selected=selectedAnalyticsRowIds.includes(String(row.id));return <tr key={row.id} style={{background:selected?A.blue2:"transparent"}}><td style={{width:118,minWidth:118,padding:"13px 10px",borderBottom:`1px solid ${A.border}`,textAlign:"center" as const}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                <tbody>{responseRows.map(row=>{const dt=fmtAnalyticsDate(row.created_at);const selected=selectedAnalyticsRowIds.includes(String(row.id));return <tr key={row.id} style={{background:selected?A.blue2:"transparent",verticalAlign:"top" as const}}><td style={{width:118,minWidth:118,padding:"13px 10px",borderBottom:`1px solid ${A.border}`,textAlign:"center" as const}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                   <input type="checkbox" checked={selected} onChange={()=>toggleResponseRow(String(row.id))} aria-label="응답 선택" style={{width:15,height:15,accentColor:A.blue,cursor:"pointer",flexShrink:0}}/>
                   {!row.__draft&&<button onClick={()=>openEditAnalyticsRow(row)} title="응답 수정" style={{width:28,height:28,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 11.5V13h1.5L12 5.5 10.5 4 3 11.5zM9.8 4.7l1.5 1.5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
                   <button onClick={()=>deleteAnalyticsRow(row)} title="응답 삭제" style={{width:28,height:28,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t3,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v6M8 6v6M11 6v6M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
-                </div></td><td style={{width:190,minWidth:190,padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}><div style={{whiteSpace:"nowrap" as const,fontWeight:400}}>{dt[0]}</div><div style={{fontSize:12,color:A.t3,marginTop:4,whiteSpace:"nowrap" as const}}>{dt[1]}</div>{row.__draft&&<div style={{display:"inline-flex",alignItems:"center",height:20,padding:"0 7px",borderRadius:999,background:chartOrange+"16",color:chartOrange,fontSize:11,fontWeight:600,marginTop:7}}>작성 중 · 섹션 {row.__page}</div>}</td>{fields.map(f=><td key={f.id} style={{padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}><div style={{padding:"7px 9px",border:`1px solid ${A.border}`,borderRadius:A.r,background:A.card2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:A.t1,fontWeight:400}}>{renderAnalyticsAnswer(row,f)}</div></td>)}</tr>})}</tbody>
+                </div></td><td style={{width:190,minWidth:190,padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}><div style={{whiteSpace:"nowrap" as const,fontWeight:400}}>{dt[0]}</div><div style={{fontSize:12,color:A.t3,marginTop:4,whiteSpace:"nowrap" as const}}>{dt[1]}</div>{row.__draft&&<div style={{display:"inline-flex",alignItems:"center",height:20,padding:"0 7px",borderRadius:999,background:chartOrange+"16",color:chartOrange,fontSize:11,fontWeight:600,marginTop:7}}>작성 중 · 섹션 {row.__page}</div>}</td>{fields.map(f=><td key={f.id} style={{padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,verticalAlign:"top" as const}}><div style={{padding:"8px 10px",border:`1px solid ${A.border}`,borderRadius:A.r,background:A.card2,color:A.t1,fontWeight:400,maxWidth:360,minWidth:0,whiteSpace:"normal" as const,wordBreak:"break-word" as const,overflowWrap:"anywhere" as const}}>{renderAnalyticsAnswer(row,f)}</div></td>)}</tr>})}</tbody>
               </table>
             </div>}
           </div>}
@@ -6315,7 +6452,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       {dashboardSettings&&(()=>{
         const settingsConfig=dashboardSettings.item.__fromBuilder?cfg:dashboardSettings.item.config
         const program=progs.find(p=>p.id===settingsConfig?.header?.programId)
-        const recruitment=recruitmentPeriodOf(program)
+        const recruitmentMode=recruitmentPeriodModeOf(settingsConfig)
+        const recruitment=recruitmentPeriodOf(program,recruitmentMode)
         const hasRecruitmentPeriod=!!(recruitment.start||recruitment.end)
         return <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setDashboardSettings(null)}>
           <div style={{width:500,maxWidth:"92vw",maxHeight:"88vh",overflowY:"auto" as const,padding:24,borderRadius:16,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
@@ -6336,10 +6474,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <input type="password" value={dashboardSettings.editPasswordDraft} disabled={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,editPasswordDraft:e.target.value}))} placeholder={settingsConfig?.dashboard?.editPasswordHash?"새 비밀번호 입력 시 변경":"비밀번호 입력 시 편집 보호"} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,opacity:dashboardSettings.clearEditPassword?.55:1}}/>
             <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,margin:"6px 0 9px"}}>{canMasterReset(authRole)&&settingsConfig?.dashboard?.editPasswordHash?"master 권한 계정은 현재 비밀번호 없이 편집 비밀번호를 변경하거나 해제할 수 있어요.":"설정하면 대시보드에서 편집을 열 때 비밀번호를 확인합니다. 원문 대신 해시값만 저장됩니다."}</div>
             {!!settingsConfig?.dashboard?.editPasswordHash&&<label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:16}}><input type="checkbox" checked={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,clearEditPassword:e.target.checked,editPasswordDraft:e.target.checked?"":prev.editPasswordDraft}))}/>편집 비밀번호 해제</label>}
-            {hasRecruitmentPeriod?<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB 모집 기간을 기준으로 상태가 자동 표시됩니다.<br/>{recruitment.start||"시작일 미정"} ~ {recruitment.end||"종료일 미정"}</div>:<>
+            {hasRecruitmentPeriod?<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB의 {recruitmentPeriodLabel(recruitmentMode)}을 기준으로 상태가 자동 표시됩니다.<br/>{recruitment.start||"시작일 미정"} ~ {recruitment.end||"종료일 미정"}</div>:<>
               <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
               <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:8}}>
-                <input type="checkbox" checked={dashboardSettings.alwaysOpen} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,alwaysOpen:e.target.checked,operationStart:e.target.checked?"":prev.operationStart,operationEnd:e.target.checked?"":prev.operationEnd,manualStatus:""}))}/>
+                <input type="checkbox" checked={dashboardSettings.alwaysOpen} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,alwaysOpen:e.target.checked,manualStatus:""}))}/>
                 상시 운영
               </label>
               <div style={{fontSize:11.5,color:A.t3,lineHeight:1.5,marginBottom:9}}>체크하면 시작/종료일 없이 진행중으로 표시됩니다.</div>

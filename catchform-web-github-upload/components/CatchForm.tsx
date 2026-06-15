@@ -34,6 +34,7 @@ const publicEnv = {
 // ─── Types ────────────────────────────────────────────────────────────────
 type Opt = { label: string; value: string; isEtc: boolean; nextPage?: number }
 type HelperItem = { text: string; callout?: boolean }
+type RecruitmentPeriodMode = "pre"|"formal"
 type FieldType = "text"|"name"|"email"|"phone"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"
 type FormField = {
     id: string; type: FieldType; label: string; placeholder?: string
@@ -49,7 +50,7 @@ type KdtField = {
 }
 type Cfg = {
     header: {
-        imageUrl: string; programId?: string; programUnlinked?: boolean; overline: string; title: string
+        imageUrl: string; programId?: string; programUnlinked?: boolean; recruitmentPeriodMode?: RecruitmentPeriodMode; overline: string; title: string
         educationStart: string; educationEnd: string
         tuitionFree: boolean; tuitionFreeText: string; tuitionAmount: string; stipend: string
         noticeEnabled: boolean; noticeIconEnabled: boolean; noticeIconText: string; noticeText: string
@@ -65,7 +66,7 @@ type Cfg = {
     styles: { theme: "dark"|"light"; fieldH: number; qGap: number; maxW: number; labelGap?: number }
     auth: { enabled: boolean; loginUrl: string; errText: string }
     integrations?: { googleSheets?: { enabled: boolean; mode: "existing"|"new"; accountEmail: string; sheetUrl: string; sheetName: string; webhookUrl: string; lastSyncStatus?: "idle"|"sent"|"error"; lastSyncAt?: string; lastSyncMessage?: string } }
-    dashboard?: { isPublished?: boolean; publishedAt?: string; operationStart?: string; operationEnd?: string }
+    dashboard?: { isPublished?: boolean; publishedAt?: string; operationStart?: string; operationEnd?: string; alwaysOpen?: boolean }
     brand: string
     formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"
     kdtFields?: KdtField[]
@@ -84,7 +85,18 @@ function getSB(url: string, key: string): SupabaseClient | null {
 function dbBrandValue(brand: string) {
     const normalized = String(brand || "").trim().toUpperCase()
     if (!normalized) return ""
-    return normalized === "INSIDEOUT" ? "INSIDEOUT" : "SNIPERFACTORY"
+    if (normalized === "INSIDEOUT") return "INSIDEOUT"
+    if (normalized === "SFACSPACE") return "SFACSPACE"
+    return "SNIPERFACTORY"
+}
+function isCompanyApplicationConfig(config: any) {
+    const formType = String(config?.formType || "")
+    if (["edu_biz", "company", "recruit"].includes(formType)) return true
+    const fields = Array.isArray(config?.form?.fields) ? config.form.fields : []
+    const fieldIds = new Set(fields.map((field: any) => String(field?.id || "")))
+    if (fieldIds.has("company_name") && (fieldIds.has("industry") || fieldIds.has("program_type") || fieldIds.has("business_type"))) return true
+    const titleText = `${config?.header?.overline || ""} ${config?.header?.title || ""}`
+    return titleText.includes("참여기업") || titleText.includes("참여 기업")
 }
 
 const SNIPERFACTORY_AUTH_SUFFIX = ".sniperfactory"
@@ -313,38 +325,70 @@ function firstDateValue(source: any, keys: string[]) {
     }
     return ""
 }
-function recruitmentPeriodOf(program?: any) {
+const FORMAL_RECRUITMENT_START_KEYS = [
+    "formal_recruitment_start", "formal_recruitment_start_at", "formal_recruitment_start_date",
+    "formal_recruit_start", "formal_recruit_start_at", "formal_recruit_start_date",
+    "formal_application_start", "formal_application_start_at", "formal_application_start_date",
+    "formal_apply_start", "formal_apply_start_at", "formal_apply_start_date",
+    "regular_recruitment_start", "regular_recruitment_start_at", "regular_recruitment_start_date",
+    "official_recruitment_start", "official_recruitment_start_at", "official_recruitment_start_date",
+    "recruitment_start", "recruitment_start_at", "recruitment_start_date",
+    "recruit_start", "recruit_start_at", "recruit_start_date",
+    "application_start", "application_start_at", "application_start_date",
+    "apply_start", "apply_start_at",
+]
+const FORMAL_RECRUITMENT_END_KEYS = [
+    "formal_recruitment_end", "formal_recruitment_end_at", "formal_recruitment_end_date",
+    "formal_recruit_end", "formal_recruit_end_at", "formal_recruit_end_date",
+    "formal_application_end", "formal_application_end_at", "formal_application_end_date",
+    "formal_apply_end", "formal_apply_end_at", "formal_apply_end_date",
+    "regular_recruitment_end", "regular_recruitment_end_at", "regular_recruitment_end_date",
+    "official_recruitment_end", "official_recruitment_end_at", "official_recruitment_end_date",
+    "recruitment_end", "recruitment_end_at", "recruitment_end_date",
+    "recruit_end", "recruit_end_at", "recruit_end_date",
+    "application_end", "application_end_at", "application_end_date",
+    "apply_end", "apply_end_at",
+]
+const PRE_RECRUITMENT_START_KEYS = [
+    "pre_recruitment_start", "pre_recruitment_start_at", "pre_recruitment_start_date",
+    "pre_recruitment_period_start", "pre_recruitment_period_start_at", "pre_recruitment_period_start_date",
+    "pre_recruit_start", "pre_recruit_start_at", "pre_recruit_start_date",
+    "pre_application_start", "pre_application_start_at", "pre_application_start_date",
+    "pre_apply_start", "pre_apply_start_at", "pre_apply_start_date",
+    "pre_registration_start", "pre_registration_start_at", "pre_registration_start_date",
+    "early_recruitment_start", "early_recruitment_start_at", "early_recruitment_start_date",
+    "early_application_start", "early_application_start_at", "early_application_start_date",
+    "notice_start", "notice_start_at", "notice_start_date",
+    "notification_start", "notification_start_at", "notification_start_date",
+    "pre_start", "pre_start_at", "pre_start_date",
+]
+const PRE_RECRUITMENT_END_KEYS = [
+    "pre_recruitment_end", "pre_recruitment_end_at", "pre_recruitment_end_date",
+    "pre_recruitment_period_end", "pre_recruitment_period_end_at", "pre_recruitment_period_end_date",
+    "pre_recruit_end", "pre_recruit_end_at", "pre_recruit_end_date",
+    "pre_application_end", "pre_application_end_at", "pre_application_end_date",
+    "pre_apply_end", "pre_apply_end_at", "pre_apply_end_date",
+    "pre_registration_end", "pre_registration_end_at", "pre_registration_end_date",
+    "early_recruitment_end", "early_recruitment_end_at", "early_recruitment_end_date",
+    "early_application_end", "early_application_end_at", "early_application_end_date",
+    "notice_end", "notice_end_at", "notice_end_date",
+    "notification_end", "notification_end_at", "notification_end_date",
+    "pre_end", "pre_end_at", "pre_end_date",
+]
+function recruitmentPeriodModeOf(config: any): RecruitmentPeriodMode {
+    return config?.header?.recruitmentPeriodMode === "pre" ? "pre" : "formal"
+}
+function recruitmentPeriodOf(program?: any, mode: RecruitmentPeriodMode = "formal") {
     if (!program) return { start: "", end: "" }
+    const startKeys = mode === "pre" ? PRE_RECRUITMENT_START_KEYS : FORMAL_RECRUITMENT_START_KEYS
+    const endKeys = mode === "pre" ? PRE_RECRUITMENT_END_KEYS : FORMAL_RECRUITMENT_END_KEYS
     return {
-        start: firstDateValue(program, [
-            "recruitment_start",
-            "recruitment_start_at",
-            "recruitment_start_date",
-            "recruit_start",
-            "recruit_start_at",
-            "recruit_start_date",
-            "application_start",
-            "application_start_at",
-            "application_start_date",
-            "apply_start",
-            "apply_start_at",
-        ]),
-        end: firstDateValue(program, [
-            "recruitment_end",
-            "recruitment_end_at",
-            "recruitment_end_date",
-            "recruit_end",
-            "recruit_end_at",
-            "recruit_end_date",
-            "application_end",
-            "application_end_at",
-            "application_end_date",
-            "apply_end",
-            "apply_end_at",
-        ]),
+        start: firstDateValue(program, startKeys),
+        end: firstDateValue(program, endKeys),
     }
 }
 function getOperationGate(cfg: Cfg) {
+    if (cfg.dashboard?.alwaysOpen) return null
     const start = cfg.dashboard?.operationStart || ""
     const end = cfg.dashboard?.operationEnd || ""
     if (!start && !end) return null
@@ -443,7 +487,7 @@ export function CatchForm(props: {
                     const programRes = await supa.from("programs").select("*").eq("id", programId).maybeSingle()
                     program = programRes.data
                 } catch {}
-                const period = recruitmentPeriodOf(program)
+                const period = recruitmentPeriodOf(program, recruitmentPeriodModeOf(nextConfig))
                 if (period.start || period.end) {
                     nextConfig = {
                         ...nextConfig,
@@ -524,7 +568,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const draftLoadedRef = React.useRef(false)
     const remoteDraftTimerRef = React.useRef<any>(null)
     const [draftLastFieldId, setDraftLastFieldId] = React.useState("")
-    const operationGate = React.useMemo(() => getOperationGate(cfg), [cfg.dashboard?.operationStart, cfg.dashboard?.operationEnd])
+    const operationGate = React.useMemo(() => getOperationGate(cfg), [cfg.dashboard?.operationStart, cfg.dashboard?.operationEnd, cfg.dashboard?.alwaysOpen])
     const formDisabled = !!operationGate
     const [showOperationModal, setShowOperationModal] = React.useState(!!operationGate)
 
@@ -1240,8 +1284,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             if (!supa) { setDupErr("서버 연결 오류입니다."); setSubmitting(false); return }
 
             // Determine table
-            const companyTypes = ["edu_biz", "company", "recruit"]
-            const isCompanyForm = companyTypes.includes(cfg.formType || "")
+            const isCompanyForm = isCompanyApplicationConfig(cfg)
             const tableName = isCompanyForm ? "company_applications" : "applications"
 
             // Resolve form_configs.id from slug before uploads
