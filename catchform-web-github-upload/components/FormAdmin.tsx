@@ -2609,7 +2609,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(!supa||!editResponse?.row?.id)return
     setEditResponseSaving(true)
     try{
-      const tableName=analyticsTableName()
+      const tableName=analyticsRowTable(editResponse.row)
       const existing=Array.isArray(editResponse.row.form_data)?editResponse.row.form_data.map((item:any)=>({...item})):[]
       const patch:any={form_data:existing}
       const upsertFormAnswer=(field:any,answer:any)=>{
@@ -2627,10 +2627,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         if(referralIds.includes(field.id))patch.referral_source=Array.isArray(answer)?answer.join(" / "):answer
         if(tableName==="company_applications"&&field.id==="manager_name")patch.manager_name=Array.isArray(answer)?answer.join(" / "):answer
       })
+      const editedRowKey=analyticsRowKey(editResponse.row)
       const {data,error}=await supa.from(tableName).update(patch).eq("id",editResponse.row.id).select("*").single()
       if(error)throw error
-      const nextRow=data||{...editResponse.row,...patch}
-      setAnalyticsRows(prev=>prev.map(row=>row.id===editResponse.row.id?nextRow:row))
+      const nextRow={...(data||{...editResponse.row,...patch}),__tableName:tableName}
+      setAnalyticsRows(prev=>prev.map(row=>analyticsRowKey(row)===editedRowKey?nextRow:row))
       setEditResponse(null)
       showToast("응답 데이터를 수정했어요.")
     }catch(e){
@@ -2791,15 +2792,33 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   async function insertAnalyticsAdminEvent(event_type:string,metadata:any,session_id?:string){
     return (await insertAnalyticsAdminEvents([{event_type,metadata,session_id}]))[0]
   }
+  function analyticsCandidateTableNames(){
+    const preferred=analyticsTableName()
+    return preferred==="company_applications"?["company_applications","applications"]:["applications","company_applications"]
+  }
+  function analyticsRowTable(row:any){
+    return String(row?.__tableName||analyticsTableName())
+  }
+  function analyticsRowKey(row:any){
+    if(row?.__draft)return `draft:${row.__sessionId||row.id||row.created_at||""}`
+    return `${analyticsRowTable(row)}:${row?.id||""}`
+  }
+  function stripAnalyticsInternalRow(row:any){
+    const clean:any={}
+    Object.entries(row||{}).forEach(([key,value])=>{if(!key.startsWith("__"))clean[key]=value})
+    return clean
+  }
   async function loadAnalytics(){
     if(!supa||!loadedId){setAnalyticsErr("저장된 폼을 먼저 선택해주세요.");return}
     setAnalyticsLoading(true);setAnalyticsErr("")
     try{
-      const tableName=isCompanyApplicationConfig(cfg)?"company_applications":"applications"
-      let rows:any[]=[]
-      const res=await supa.from(tableName).select("*").eq("form_id",loadedId).order("created_at",{ascending:false}).limit(1000)
-      if(res.error)throw res.error
-      rows=res.data||[]
+      const tableNames=analyticsCandidateTableNames()
+      const rowResults=await Promise.all(tableNames.map(async tableName=>{
+        const res=await supa.from(tableName).select("*").eq("form_id",loadedId).order("created_at",{ascending:false}).limit(1000)
+        if(res.error)throw res.error
+        return (res.data||[]).map((row:any)=>({...row,__tableName:tableName}))
+      }))
+      const rows=rowResults.flat().sort((a:any,b:any)=>new Date(b.created_at||0).getTime()-new Date(a.created_at||0).getTime())
       const ev=await supa.from("form_response_events").select("*").eq("form_id",loadedId).order("created_at",{ascending:false}).limit(5000)
       const rawEvents=ev.error?[]:(ev.data||[])
       const restoredIds=new Set(rawEvents.filter(event=>["response_restored","analytics_scope_restored"].includes(event.event_type)).map(event=>analyticsEventMeta(event).trash_event_id).filter(Boolean))
@@ -2836,9 +2855,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       return
     }
     if(!confirm("이 응답을 휴지통으로 이동할까요?"))return
-    const tableName=analyticsTableName()
+    const tableName=analyticsRowTable(row)
     try{
-      const trashEvent=await insertAnalyticsAdminEvent("response_trashed",{trash_kind:"submitted",table_name:tableName,original_row:row,deleted_at:new Date().toISOString()})
+      const trashEvent=await insertAnalyticsAdminEvent("response_trashed",{trash_kind:"submitted",table_name:tableName,original_row:stripAnalyticsInternalRow(row),deleted_at:new Date().toISOString()})
       const {error}=await supa.from(tableName).delete().eq("id",row.id)
       if(error){
         if(trashEvent?.id)await supa.from("form_response_events").delete().eq("id",trashEvent.id)
@@ -2852,14 +2871,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(!supa||!loadedId)return
     setActionLoading("응답 데이터를 휴지통으로 이동하는 중이에요.")
     try{
-      const tableName=analyticsTableName()
-      const responseRows=await supa.from(tableName).select("*").eq("form_id",loadedId).limit(10000)
-      if(responseRows.error)throw responseRows.error
+      const tableNames=analyticsCandidateTableNames()
+      const responseGroups=await Promise.all(tableNames.map(async tableName=>{
+        const responseRows=await supa.from(tableName).select("*").eq("form_id",loadedId).limit(10000)
+        if(responseRows.error)throw responseRows.error
+        return {tableName,rows:responseRows.data||[]}
+      }))
       const batchId=analyticsTrashSessionId("trash_batch")
-      await insertAnalyticsAdminEvents((responseRows.data||[]).map((row:any)=>({event_type:"response_trashed",metadata:{trash_kind:"submitted",table_name:tableName,original_row:row,batch_id:batchId,deleted_at:new Date().toISOString()}})))
-      const res=await supa.from(tableName).delete().eq("form_id",loadedId)
-      if(res.error)throw res.error
-      await insertAnalyticsAdminEvent("analytics_scope_trashed",{trash_kind:"scope",batch_id:batchId,deleted_count:(responseRows.data||[]).length,deleted_at:new Date().toISOString()})
+      const allRows=responseGroups.flatMap(group=>group.rows.map((row:any)=>({tableName:group.tableName,row})))
+      await insertAnalyticsAdminEvents(allRows.map(({tableName,row})=>({event_type:"response_trashed",metadata:{trash_kind:"submitted",table_name:tableName,original_row:row,batch_id:batchId,deleted_at:new Date().toISOString()}})))
+      for(const tableName of tableNames){
+        const res=await supa.from(tableName).delete().eq("form_id",loadedId)
+        if(res.error)throw res.error
+      }
+      await insertAnalyticsAdminEvent("analytics_scope_trashed",{trash_kind:"scope",batch_id:batchId,deleted_count:allRows.length,deleted_at:new Date().toISOString()})
       setShowDeleteAllAnalytics(false)
       await loadAnalytics()
       showToast("해당 폼의 응답 데이터를 휴지통으로 이동했어요.")
@@ -5432,8 +5457,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
     }).filter(Boolean) as any[]
     const responseRows=analyticsResponseScope==="draft"?draftResponseRows:rows
-    const responseRowIds=responseRows.map((row:any)=>String(row.id))
-    const selectedResponseRows=responseRows.filter((row:any)=>selectedAnalyticsRowIds.includes(String(row.id)))
+    const responseRowIds=responseRows.map((row:any)=>analyticsRowKey(row))
+    const selectedResponseRows=responseRows.filter((row:any)=>selectedAnalyticsRowIds.includes(analyticsRowKey(row)))
     const allResponseRowsSelected=responseRowIds.length>0&&responseRowIds.every((id:string)=>selectedAnalyticsRowIds.includes(id))
     const toggleAllResponseRows=()=>setSelectedAnalyticsRowIds(prev=>{
       if(allResponseRowsSelected)return prev.filter(id=>!responseRowIds.includes(id))
@@ -5818,8 +5843,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     </span>}
                   </div>
                 </th>})}</tr></thead>
-                <tbody>{responseRows.map(row=>{const dt=fmtAnalyticsDate(row.created_at);const selected=selectedAnalyticsRowIds.includes(String(row.id));return <tr key={row.id} style={{background:selected?A.blue2:"transparent",verticalAlign:"top" as const}}><td style={{width:118,minWidth:118,padding:"13px 10px",borderBottom:`1px solid ${A.border}`,textAlign:"center" as const}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-                  <input type="checkbox" checked={selected} onChange={()=>toggleResponseRow(String(row.id))} aria-label="응답 선택" style={{width:15,height:15,accentColor:A.blue,cursor:"pointer",flexShrink:0}}/>
+                <tbody>{responseRows.map(row=>{const dt=fmtAnalyticsDate(row.created_at);const rowKey=analyticsRowKey(row);const selected=selectedAnalyticsRowIds.includes(rowKey);return <tr key={rowKey} style={{background:selected?A.blue2:"transparent",verticalAlign:"top" as const}}><td style={{width:118,minWidth:118,padding:"13px 10px",borderBottom:`1px solid ${A.border}`,textAlign:"center" as const}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                  <input type="checkbox" checked={selected} onChange={()=>toggleResponseRow(rowKey)} aria-label="응답 선택" style={{width:15,height:15,accentColor:A.blue,cursor:"pointer",flexShrink:0}}/>
                   {!row.__draft&&<button onClick={()=>openEditAnalyticsRow(row)} title="응답 수정" style={{width:28,height:28,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 11.5V13h1.5L12 5.5 10.5 4 3 11.5zM9.8 4.7l1.5 1.5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
                   <button onClick={()=>deleteAnalyticsRow(row)} title="응답 삭제" style={{width:28,height:28,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t3,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v6M8 6v6M11 6v6M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                 </div></td><td style={{width:190,minWidth:190,padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}><div style={{whiteSpace:"nowrap" as const,fontWeight:400}}>{dt[0]}</div><div style={{fontSize:12,color:A.t3,marginTop:4,whiteSpace:"nowrap" as const}}>{dt[1]}</div>{row.__draft&&<div style={{display:"inline-flex",alignItems:"center",height:20,padding:"0 7px",borderRadius:999,background:chartOrange+"16",color:chartOrange,fontSize:11,fontWeight:600,marginTop:7}}>작성 중 · 섹션 {row.__page}</div>}</td>{analyticsColumnMeta.map(({field:f,width:colWidth,resizable}:any)=><td key={f.id} style={{padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,verticalAlign:"top" as const,width:colWidth,minWidth:colWidth,maxWidth:colWidth}}><div style={{padding:"8px 10px",border:`1px solid ${A.border}`,borderRadius:A.r,background:A.card2,color:A.t1,fontWeight:400,width:"100%",maxWidth:resizable?Math.max(260,colWidth-32):360,minWidth:0,boxSizing:"border-box" as const,whiteSpace:"normal" as const,wordBreak:"break-word" as const,overflowWrap:"anywhere" as const}}>{renderAnalyticsAnswer(row,f)}</div></td>)}</tr>})}</tbody>
