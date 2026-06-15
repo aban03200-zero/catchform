@@ -2799,12 +2799,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   React.useEffect(()=>{setSelectedAnalyticsRowIds([])},[loadedId,analyticsResponseScope])
   function exportAnalyticsCsv(srcRows:any[]=analyticsRows,fileSuffix="responses"){
     const fields=getAnalyticsFields()
-    const headers=["날짜","시간","이름","전화번호","이메일",...fields.map(f=>f.label)]
+    const headers=fields.map(f=>f.label)
     const csvEscape=(v:any)=>`"${String(v??"").replace(/"/g,'""')}"`
     const lines=[headers.map(csvEscape).join(",")]
     srcRows.forEach(row=>{
-      const [date,time]=fmtAnalyticsDate(row.created_at)
-      const values=[date,time,row.name||"",row.phone||"",row.email||"",...fields.map(f=>analyticsAnswer(row,f))]
+      const values=fields.map(f=>analyticsAnswer(row,f))
       lines.push(values.map(csvEscape).join(","))
     })
     const blob=new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"})
