@@ -2785,14 +2785,18 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   function analyticsTrashSessionId(prefix="admin_trash"){
     return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2,8)}`
   }
-  const analyticsTrashTypes=["response_trashed","response_restored","analytics_scope_trashed","analytics_scope_restored"]
+  const analyticsTrashTypes=["response_trashed","response_restored","response_purged","analytics_scope_trashed","analytics_scope_restored","analytics_scope_purged"]
   function activeAnalyticsTrashRecords(source:any[]=analyticsTrashEvents){
-    const restoredIds=new Set(source.filter(event=>["response_restored","analytics_scope_restored"].includes(event.event_type)).map(event=>analyticsEventMeta(event).trash_event_id).filter(Boolean))
-    const activeScopes=source.filter(event=>event.event_type==="analytics_scope_trashed"&&!restoredIds.has(event.id))
+    const closedIds=new Set(source.filter(event=>["response_restored","analytics_scope_restored","response_purged","analytics_scope_purged"].includes(event.event_type)).map(event=>analyticsEventMeta(event).trash_event_id).filter(Boolean))
+    const purgedBatchIds=new Set(source.filter(event=>event.event_type==="analytics_scope_purged").map(event=>analyticsEventMeta(event).batch_id).filter(Boolean))
+    const purgedDraftSessions=new Set(source.filter(event=>event.event_type==="response_purged").map(event=>analyticsEventMeta(event).session_id).filter(Boolean))
+    const activeScopes=source.filter(event=>event.event_type==="analytics_scope_trashed"&&!closedIds.has(event.id))
     const activeBatchIds=new Set(activeScopes.map(event=>analyticsEventMeta(event).batch_id).filter(Boolean))
     return source.filter(event=>{
-      if(!["response_trashed","analytics_scope_trashed"].includes(event.event_type)||restoredIds.has(event.id))return false
+      if(!["response_trashed","analytics_scope_trashed"].includes(event.event_type)||closedIds.has(event.id))return false
       const meta=analyticsEventMeta(event)
+      if(meta.batch_id&&purgedBatchIds.has(meta.batch_id))return false
+      if(meta.session_id&&purgedDraftSessions.has(meta.session_id))return false
       return event.event_type==="analytics_scope_trashed"||!meta.batch_id||!activeBatchIds.has(meta.batch_id)
     }).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())
   }
@@ -2839,9 +2843,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const rows=rowResults.flat().sort((a:any,b:any)=>new Date(b.created_at||0).getTime()-new Date(a.created_at||0).getTime())
       const ev=await supa.from("form_response_events").select("*").eq("form_id",loadedId).order("created_at",{ascending:false}).limit(5000)
       const rawEvents=ev.error?[]:(ev.data||[])
-      const restoredIds=new Set(rawEvents.filter(event=>["response_restored","analytics_scope_restored"].includes(event.event_type)).map(event=>analyticsEventMeta(event).trash_event_id).filter(Boolean))
-      const activeScope=[...rawEvents].filter(event=>event.event_type==="analytics_scope_trashed"&&!restoredIds.has(event.id)).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
-      const trashedDraftSessions=new Set(rawEvents.filter(event=>event.event_type==="response_trashed"&&!restoredIds.has(event.id)&&analyticsEventMeta(event).trash_kind==="draft").map(event=>analyticsEventMeta(event).session_id).filter(Boolean))
+      const closedIds=new Set(rawEvents.filter(event=>["response_restored","analytics_scope_restored","response_purged","analytics_scope_purged"].includes(event.event_type)).map(event=>analyticsEventMeta(event).trash_event_id).filter(Boolean))
+      const purgedDraftSessions=new Set(rawEvents.filter(event=>event.event_type==="response_purged").map(event=>analyticsEventMeta(event).session_id).filter(Boolean))
+      const activeScope=[...rawEvents].filter(event=>event.event_type==="analytics_scope_trashed"&&!closedIds.has(event.id)).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
+      const trashedDraftSessions=new Set(rawEvents.filter(event=>event.event_type==="response_trashed"&&!closedIds.has(event.id)&&analyticsEventMeta(event).trash_kind==="draft"&&!purgedDraftSessions.has(analyticsEventMeta(event).session_id)).map(event=>analyticsEventMeta(event).session_id).filter(Boolean))
       const visibleEvents=rawEvents.filter(event=>!analyticsTrashTypes.includes(event.event_type))
         .filter(event=>!activeScope||new Date(event.created_at).getTime()>new Date(activeScope.created_at).getTime())
         .filter(event=>!trashedDraftSessions.has(event.session_id))
@@ -2951,6 +2956,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       if(event.event_type==="analytics_scope_trashed"){
         const {error}=await supa.from("form_response_events").delete().eq("form_id",loadedId).lte("created_at",event.created_at)
         if(error)throw error
+        await insertAnalyticsAdminEvent("analytics_scope_purged",{trash_event_id:event.id,batch_id:meta.batch_id,purged_at:new Date().toISOString()})
       }else{
         if(meta.trash_kind==="draft"&&meta.session_id){
           const {error}=await supa.from("form_response_events").delete().eq("form_id",loadedId).eq("session_id",meta.session_id)
@@ -2958,6 +2964,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         }
         const {error}=await supa.from("form_response_events").delete().eq("id",event.id)
         if(error)throw error
+        await insertAnalyticsAdminEvent("response_purged",{trash_event_id:event.id,session_id:meta.session_id,batch_id:meta.batch_id,purged_at:new Date().toISOString()})
       }
       await loadAnalytics()
       showToast("휴지통 기록을 영구 삭제했어요.")
