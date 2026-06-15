@@ -183,6 +183,23 @@ function recruitmentPeriodOf(program?:Prog,mode:RecruitmentPeriodMode="formal"){
     end:firstDateValue(program,endKeys),
   }
 }
+function compactDateTimeText(value:string){
+  const raw=String(value||"").trim()
+  if(!raw)return""
+  const dateOnly=raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if(dateOnly)return`${dateOnly[1]}.${dateOnly[2]}.${dateOnly[3]}`
+  const d=new Date(raw)
+  if(!Number.isNaN(d.getTime())){
+    const pad=(n:number)=>String(n).padStart(2,"0")
+    return`${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+  return raw.replace("T"," ").replace(/([+-]\d{2}:?\d{2}|Z)$/,"").slice(0,16).replace(/-/g,".")
+}
+function recruitmentPeriodText(period:{start?:string;end?:string},emptyText="기간 데이터 없음"){
+  const start=compactDateTimeText(period.start||"")
+  const end=compactDateTimeText(period.end||"")
+  return start||end?`${start||"시작 미정"} ~ ${end||"종료 미정"}`:emptyText
+}
 function operationInputValue(value:string,edge:"start"|"end"="start"){
   const raw=String(value||"").trim()
   if(!raw)return""
@@ -3464,7 +3481,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <input type="password" value={dashboardSettings.editPasswordDraft} disabled={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,editPasswordDraft:e.target.value}))} placeholder={dashboardSettings.item.config?.dashboard?.editPasswordHash?"새 비밀번호 입력 시 변경":"비밀번호 입력 시 편집 보호"} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,opacity:dashboardSettings.clearEditPassword?.55:1}}/>
               <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,margin:"6px 0 9px"}}>{canMasterReset(authRole)&&dashboardSettings.item.config?.dashboard?.editPasswordHash?"master 권한 계정은 현재 비밀번호 없이 편집 비밀번호를 변경하거나 해제할 수 있어요.":"설정하면 대시보드에서 편집을 열 때 비밀번호를 확인합니다. 원문 대신 해시값만 저장됩니다."}</div>
               {!!dashboardSettings.item.config?.dashboard?.editPasswordHash&&<label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:16}}><input type="checkbox" checked={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,clearEditPassword:e.target.checked,editPasswordDraft:e.target.checked?"":prev.editPasswordDraft}))}/>편집 비밀번호 해제</label>}
-              {hasRecruitmentPeriod?<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB의 {recruitmentPeriodLabel(recruitmentMode)}을 기준으로 상태가 자동 표시됩니다.<br/>{recruitment.start||"시작일 미정"} ~ {recruitment.end||"종료일 미정"}</div>:<>
+              {hasRecruitmentPeriod?<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB의 {recruitmentPeriodLabel(recruitmentMode)}을 기준으로 상태가 자동 표시됩니다.<br/>{recruitmentPeriodText(recruitment,"기간 데이터 없음")}</div>:<>
                 <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
                 <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:8}}>
                   <input type="checkbox" checked={dashboardSettings.alwaysOpen} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,alwaysOpen:e.target.checked,manualStatus:""}))}/>
@@ -3982,7 +3999,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           {!cfg.header.programUnlinked&&cfg.header.programId&&(()=>{
             const linkedProgram=progs.find(p=>p.id===cfg.header.programId)
             const currentMode=recruitmentPeriodModeOf(cfg)
-            const currentPeriod=recruitmentPeriodOf(linkedProgram,currentMode)
             return <F label="폼 운영 기간 기준" A={A}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                 {(["pre","formal"] as RecruitmentPeriodMode[]).map(mode=>{
@@ -3991,13 +4007,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   return <button key={mode} onClick={()=>setRecruitmentPeriodMode(mode)}
                     style={{minHeight:54,padding:"9px 10px",borderRadius:A.r,border:`1.5px solid ${selected?A.blue:A.border}`,background:selected?A.blue2:A.card2,color:selected?A.blue:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:selected?700:600,cursor:"pointer",textAlign:"left" as const,lineHeight:1.45}}>
                     <div>{recruitmentPeriodLabel(mode)}</div>
-                    <div style={{fontSize:11,color:selected?A.blue:A.t3,fontWeight:400,marginTop:3,wordBreak:"break-all" as const}}>{period.start||period.end?`${period.start||"시작 미정"} ~ ${period.end||"종료 미정"}`:"기간 데이터 없음"}</div>
+                    <div style={{fontSize:11,color:selected?A.blue:A.t3,fontWeight:400,marginTop:3,wordBreak:"keep-all" as const,overflowWrap:"break-word" as const}}>{recruitmentPeriodText(period)}</div>
                   </button>
                 })}
-              </div>
-              <div style={{marginTop:8,padding:"8px 10px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:11.5,color:A.t3,lineHeight:1.55}}>
-                현재 기준: <b style={{color:A.t2}}>{recruitmentPeriodLabel(currentMode)}</b><br/>
-                {currentPeriod.start||currentPeriod.end?`${currentPeriod.start||"시작 미정"} ~ ${currentPeriod.end||"종료 미정"}`:"선택한 기준의 모집 기간 데이터가 없습니다."}
               </div>
             </F>
           })()}
@@ -6528,7 +6540,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <input type="password" value={dashboardSettings.editPasswordDraft} disabled={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,editPasswordDraft:e.target.value}))} placeholder={settingsConfig?.dashboard?.editPasswordHash?"새 비밀번호 입력 시 변경":"비밀번호 입력 시 편집 보호"} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,opacity:dashboardSettings.clearEditPassword?.55:1}}/>
             <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,margin:"6px 0 9px"}}>{canMasterReset(authRole)&&settingsConfig?.dashboard?.editPasswordHash?"master 권한 계정은 현재 비밀번호 없이 편집 비밀번호를 변경하거나 해제할 수 있어요.":"설정하면 대시보드에서 편집을 열 때 비밀번호를 확인합니다. 원문 대신 해시값만 저장됩니다."}</div>
             {!!settingsConfig?.dashboard?.editPasswordHash&&<label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:16}}><input type="checkbox" checked={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,clearEditPassword:e.target.checked,editPasswordDraft:e.target.checked?"":prev.editPasswordDraft}))}/>편집 비밀번호 해제</label>}
-            {hasRecruitmentPeriod?<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB의 {recruitmentPeriodLabel(recruitmentMode)}을 기준으로 상태가 자동 표시됩니다.<br/>{recruitment.start||"시작일 미정"} ~ {recruitment.end||"종료일 미정"}</div>:<>
+            {hasRecruitmentPeriod?<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB의 {recruitmentPeriodLabel(recruitmentMode)}을 기준으로 상태가 자동 표시됩니다.<br/>{recruitmentPeriodText(recruitment,"기간 데이터 없음")}</div>:<>
               <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
               <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:8}}>
                 <input type="checkbox" checked={dashboardSettings.alwaysOpen} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,alwaysOpen:e.target.checked,manualStatus:""}))}/>
