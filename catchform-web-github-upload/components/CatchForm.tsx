@@ -751,7 +751,9 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         }
         if (!supa) return
         if (statusMode) {
-            supa.from("form_response_events").upsert(payload as any, { onConflict: "id" }).then(() => {})
+            supa.from("form_response_events").upsert(payload as any, { onConflict: "id" }).then(({ error }) => {
+                if (error) supa.from("form_response_events").insert(basePayload).then(() => {})
+            })
             return
         }
         supa.from("form_response_events").insert(payload).then(() => {})
