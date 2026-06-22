@@ -566,11 +566,11 @@ const DEFAULT_GUIDE_SECTIONS = [
     ]
   },
   {
-    title:"템플릿 활용",
-    desc:"자주 사용하는 폼을 템플릿으로 저장해두세요.",
+    title:"폼 유형 선택",
+    desc:"브랜드와 목적에 맞는 기본 폼 유형을 선택해 시작하세요.",
     steps:[
-      "대시보드에서 폼 카드를 우클릭하면 '템플릿으로 저장' 옵션이 나타납니다.",
-      "저장된 템플릿은 '새 폼 만들기' 팝업 우측 '내 템플릿' 에서 불러올 수 있습니다.",
+      "새 폼 만들기에서 브랜드를 선택한 뒤 사전 알림, 교육과정, 참여기업, 채용 등 기본 유형을 고르세요.",
+      "선택한 유형의 기본 질문과 디자인이 자동으로 적용되며, 이후 빌더에서 자유롭게 수정할 수 있습니다.",
     ]
   },
 ]
@@ -1457,11 +1457,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [showSave,setShowSave]=React.useState(false)
   const [saveName,setSaveName]=React.useState("")
   const [ctxMenu,setCtxMenu]=React.useState<{x:number;y:number;item:any;source?:string}|null>(null)
-  const [customTemplates,setCustomTemplates]=React.useState<{id:string;name:string;config:any;brand:string}[]>([])
   const fullFormCache=React.useRef<Record<string,{updatedAt?:string;data:any}>>({})
-  const [tmplModal,setTmplModal]=React.useState<{item:any}|null>(null)
-  const [tmplName,setTmplName]=React.useState("")
-  const [editingTemplateId,setEditingTemplateId]=React.useState<string|null>(null)
   const [saveSlug,setSaveSlug]=React.useState("")
   const [saveErr,setSaveErr]=React.useState("")
   const [showUpdateModal,setShowUpdateModal]=React.useState(false)
@@ -1797,39 +1793,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setShowTemplateModal(true)
   }
 
-  function applyCustomTemplate(t:{id:string;name:string;config:any;brand:string}){
-    const merged=mergeCfg(t.config||{})
-    const brand=canonicalBrand(t.brand||pendingBrand||"")
-    const branded=applyBrandDefaults({...merged,dashboard:{...(merged.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft"}},brand)
-    setCfg(branded)
-    setCurrentBrand(brand)
-    setShowTemplateModal(false)
-    setPendingBrand(null)
-    setView("builder")
-    setSec("header")
-  }
-  function editCustomTemplate(t:{id:string;name:string;config:any;brand:string}){
-    const merged=mergeCfg(t.config||{})
-    const brand=canonicalBrand(t.brand||"")
-    const branded=applyBrandDefaults(merged,brand)
-    setCfg(branded)
-    setCurrentBrand(brand)
-    setEditingTemplateId(t.id)
-    setShowTemplateModal(false)
-    setPendingBrand(null)
-    setView("builder")
-    setSec("header")
-  }
-  function saveEditedTemplate(){
-    if(!editingTemplateId)return
-    const updated=customTemplates.map(t=>t.id===editingTemplateId?{...t,config:cfg}:t)
-    setCustomTemplates(updated)
-    try{
-    localStorage.setItem("catchform_custom_templates",JSON.stringify(updated))
-  } catch(e){}
-    setEditingTemplateId(null)
-    showToast("템플릿이 수정되었어요!")
-  }
   function applyTemplate(tpl:NonNullable<Cfg["formType"]>){
     const brand=pendingBrand||"SNIPERFACTORY"
     const ctaBg=brand==="SNIPERFACTORY"?"#529DFF":brand==="SFACSPACE"?"#073B70":"#EA594D"
@@ -2200,34 +2163,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
 
   // ── Supabase ops ──────────────────────────────────────────────────────
-  React.useEffect(()=>{
-    try{
-    const saved=localStorage.getItem("catchform_custom_templates")
-    if(saved)setCustomTemplates(JSON.parse(saved))
-  } catch(e){}
-  },[])
-  async function saveCustomTemplate(item:any,name:string){
-    setActionLoading("템플릿을 저장하는 중이에요.")
-    try{
-      const full=await getFullFormRow(item)
-      const config=mergeCfg(full.config||{})
-      const t={id:"tpl_"+Date.now(),name:name.trim()||item.name,config,brand:config.brand||full.brand||item.brand||""}
-      const next=[...customTemplates,t]
-      setCustomTemplates(next)
-      try{
-      localStorage.setItem("catchform_custom_templates",JSON.stringify(next))
-    } catch(e){}
-      showToast(`"${t.name}" 템플릿으로 저장됨!`)
-    } catch(e){showToast("템플릿 저장 실패: "+((e as any)?.message||"오류"),false)}
-    finally{setActionLoading("")}
-  }
-  function deleteCustomTemplate(id:string){
-    const next=customTemplates.filter(t=>t.id!==id)
-    setCustomTemplates(next)
-    try{
-    localStorage.setItem("catchform_custom_templates",JSON.stringify(next))
-  } catch(e){}
-  }
   async function loadList(){
     if(!supa)return
     const list=await fetchFormSummaries(supa,20)
@@ -3596,7 +3531,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       {/* TEMPLATE MODAL */}
       {showTemplateModal&&(
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>{setShowTemplateModal(false);setPendingBrand(null)}}>
-          <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:16,padding:"28px 24px",width:customTemplates.length>0?820:420,maxHeight:"85vh",overflowY:"auto" as const,boxShadow:A.shadow,position:"relative" as const,display:"flex",gap:24}} onClick={e=>e.stopPropagation()}>
+          <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:16,padding:"28px 24px",width:420,maxHeight:"85vh",overflowY:"auto" as const,boxShadow:A.shadow,position:"relative" as const,display:"flex",gap:24}} onClick={e=>e.stopPropagation()}>
             <button onClick={()=>{setShowTemplateModal(false);setPendingBrand(null)}} style={{position:"absolute",top:14,right:14,width:28,height:28,borderRadius:"50%",border:`1px solid ${A.border}`,background:A.card2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:A.t3,lineHeight:1}}>×</button>
             {/* 왼쪽: 기본 폼 종류 */}
             <div style={{flex:1,minWidth:0}}>
@@ -3638,57 +3573,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               ))}
               </div>
             </div>
-            {/* 오른쪽: 내 템플릿 */}
-            {customTemplates.length>0&&<div style={{width:300,flexShrink:0,borderLeft:`1px solid ${A.border}`,paddingLeft:24}}>
-              <div style={{fontSize:14,fontWeight:600,color:A.t1,marginBottom:16,paddingTop:2}}>내 템플릿</div>
-              <div style={{display:"flex",flexDirection:"column" as const,gap:8}}>
-                {customTemplates.map(t=>(
-                  <div key={t.id} style={{display:"flex",alignItems:"center",gap:6}}>
-                    <button onClick={()=>applyCustomTemplate(t)}
-                      style={{flex:1,padding:"10px 12px",borderRadius:A.r2,border:`1px solid ${A.border}`,background:"transparent",cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,transition:"all .12s",display:"flex",alignItems:"center",gap:10,minWidth:0}}
-                      onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.borderColor=A.border2}}
-                      onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.borderColor=A.border}}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{flexShrink:0,color:A.t3}}><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      <span style={{fontSize:12.5,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{t.name}</span>
-                    </button>
-                    <button onClick={()=>editCustomTemplate(t)} title="수정"
-                      style={{width:26,height:26,borderRadius:6,border:"none",background:"transparent",cursor:"pointer",color:A.t3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
-                      onMouseEnter={e=>(e.currentTarget as HTMLElement).style.color=A.blue}
-                      onMouseLeave={e=>(e.currentTarget as HTMLElement).style.color=A.t3}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
-                    <button onClick={()=>deleteCustomTemplate(t.id)}
-                      style={{width:26,height:26,borderRadius:6,border:"none",background:"transparent",cursor:"pointer",color:A.t3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
-                      onMouseEnter={e=>(e.currentTarget as HTMLElement).style.color=A.red}
-                      onMouseLeave={e=>(e.currentTarget as HTMLElement).style.color=A.t3}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>}
           </div>
         </div>
       )}
-      {/* TEMPLATE NAME MODAL */}
-      {tmplModal&&<div style={{position:"fixed" as const,inset:0,zIndex:10000,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setTmplModal(null)}>
-        <div style={{background:A.card,borderRadius:16,padding:"28px 24px",width:360,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-          <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:6}}>템플릿으로 저장</div>
-          <div style={{fontSize:12.5,color:A.t3,marginBottom:18}}>이 폼을 템플릿으로 저장하면 새 폼 만들기에서 사용할 수 있어요.</div>
-          <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>템플릿 이름</div>
-          <input value={tmplName} onChange={e=>setTmplName(e.target.value)}
-            onKeyDown={e=>{if(e.key==="Enter"&&tmplName.trim()){saveCustomTemplate(tmplModal.item,tmplName);setTmplModal(null)}}}
-            placeholder="템플릿 이름을 입력해주세요"
-            autoFocus
-            style={{width:"100%",background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:13,padding:"9px 12px",outline:"none",boxSizing:"border-box" as const,marginBottom:16}}/>
-          <div style={{display:"flex",gap:8}}>
-            <button onClick={()=>setTmplModal(null)}
-              style={{flex:1,height:40,borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
-            <button onClick={()=>{if(tmplName.trim()){saveCustomTemplate(tmplModal.item,tmplName);setTmplModal(null)}}}
-              style={{flex:2,height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>저장하기</button>
-          </div>
-        </div>
-      </div>}
       {/* CONTEXT MENU */}
       {ctxMenu&&<>
         <div style={{position:"fixed" as const,inset:0,zIndex:9998}} onClick={()=>setCtxMenu(null)}/>
@@ -3708,14 +3595,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
               폼 이름 변경
-            </button>
-            <div style={{height:1,background:A.border,margin:"4px 0"}}/>
-            <button onClick={()=>{setTmplModal({item:ctxMenu.item});setTmplName(ctxMenu.item.name+" 템플릿");setCtxMenu(null)}}
-              style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 12px",border:"none",background:"transparent",cursor:"pointer",color:A.t1,fontFamily:FONT,fontSize:13,borderRadius:A.r,textAlign:"left" as const}}
-              onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=A.card2}
-              onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              템플릿으로 저장
             </button>
             <div style={{height:1,background:A.border,margin:"4px 0"}}/>
             <button onClick={()=>{delCfg(ctxMenu.item.id,ctxMenu.item.name);setCtxMenu(null)}}
@@ -3748,25 +3627,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
         </div>
       </div>}
-      {/* TEMPLATE NAME MODAL */}
-      {tmplModal&&<div style={{position:"fixed" as const,inset:0,zIndex:10000,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setTmplModal(null)}>
-        <div style={{background:A.card,borderRadius:16,padding:"28px 24px",width:360,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-          <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:6}}>템플릿으로 저장</div>
-          <div style={{fontSize:12.5,color:A.t3,marginBottom:18}}>이 폼을 템플릿으로 저장하면 새 폼 만들기에서 사용할 수 있어요.</div>
-          <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>템플릿 이름</div>
-          <input value={tmplName} onChange={e=>setTmplName(e.target.value)}
-            onKeyDown={e=>{if(e.key==="Enter"&&tmplName.trim()){saveCustomTemplate(tmplModal.item,tmplName);setTmplModal(null)}}}
-            placeholder="템플릿 이름을 입력해주세요"
-            autoFocus
-            style={{width:"100%",background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:13,padding:"9px 12px",outline:"none",boxSizing:"border-box" as const,marginBottom:16}}/>
-          <div style={{display:"flex",gap:8}}>
-            <button onClick={()=>setTmplModal(null)}
-              style={{flex:1,height:40,borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
-            <button onClick={()=>{if(tmplName.trim()){saveCustomTemplate(tmplModal.item,tmplName);setTmplModal(null)}}}
-              style={{flex:2,height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>저장하기</button>
-          </div>
-        </div>
-      </div>}
       {/* CONTEXT MENU */}
       {ctxMenu&&<>
         <div style={{position:"fixed" as const,inset:0,zIndex:9998}} onClick={()=>setCtxMenu(null)}/>
@@ -3786,14 +3646,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
               폼 이름 변경
-            </button>
-            <div style={{height:1,background:A.border,margin:"4px 0"}}/>
-            <button onClick={()=>{setTmplModal({item:ctxMenu.item});setTmplName(ctxMenu.item.name+" 템플릿");setCtxMenu(null)}}
-              style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 12px",border:"none",background:"transparent",cursor:"pointer",color:A.t1,fontFamily:FONT,fontSize:13,borderRadius:A.r,textAlign:"left" as const}}
-              onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=A.card2}
-              onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              템플릿으로 저장
             </button>
             <div style={{height:1,background:A.border,margin:"4px 0"}}/>
             <button onClick={()=>{delCfg(ctxMenu.item.id,ctxMenu.item.name);setCtxMenu(null)}}
@@ -5596,12 +5448,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	      if(country&&country!=="미확인")return place?`${country} · ${place}`:country
 	      return place||"미확인"
 	    }
+	    const UNKNOWN_SOURCE_LABEL="출처 미확인"
+	    const normalizeSourceLabel=(value:any)=>{
+	      const raw=String(value||"").trim()
+	      if(!raw||raw.toLowerCase()==="direct"||raw==="직접 유입")return UNKNOWN_SOURCE_LABEL
+	      return raw
+	    }
+	    const sourceFromMeta=(meta:any)=>normalizeSourceLabel(meta?.source||meta?.utm_source||meta?.referrer_host||"")
 	    const sourceBySession:any={}
 	    const sessionSummaries=sessions.map((evs:any[])=>{
 	      const first=evs[0]||{}
 	      const metaEvent=evs.find(e=>{const m=eventMeta(e);return ["started","page_view"].includes(String(e.event_type||""))&&(m.geo_label||m.latitude||m.country||m.region||m.city||m.district||m.neighborhood)})||evs.find(e=>{const m=eventMeta(e);return m.geo_label||m.latitude||m.country||m.region||m.city||m.district||m.neighborhood})||first
 	      const meta=eventMeta(metaEvent)
-	      const source=meta.source||meta.utm_source||meta.referrer_host||"직접 유입"
+	      const source=sourceFromMeta(meta)
 	      const country=countryName(meta.country||"")
 	      const region=regionName(meta.region||"")
 	      const city=regionName(meta.city||"")
@@ -5612,7 +5471,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	    })
     rows.forEach((row:any)=>{
       if(!sessionSummaries.length){
-        const src=row.referral_source||"직접 유입"
+        const src=normalizeSourceLabel(row.referral_source)
         sourceBySession[row.id]=src
       }
     })
@@ -5623,12 +5482,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       if(s.completed)sourceMap[s.source].complete+=1
     })
     if(!sessionSummaries.length){
-      rows.forEach((row:any)=>{const src=row.referral_source||"직접 유입";sourceMap[src]=sourceMap[src]||{label:src,participation:0,complete:0,share:0,link:0};sourceMap[src].participation+=1;sourceMap[src].complete+=1})
+      rows.forEach((row:any)=>{const src=normalizeSourceLabel(row.referral_source);sourceMap[src]=sourceMap[src]||{label:src,participation:0,complete:0,share:0,link:0};sourceMap[src].participation+=1;sourceMap[src].complete+=1})
     }
     events.forEach((e:any)=>{
       const m=eventMeta(e)
       const sid=e.session_id||"unknown"
-      const src=sourceBySession[sid]||m.source||"직접 유입"
+      const src=sourceBySession[sid]||sourceFromMeta(m)
       if(!sourceMap[src])sourceMap[src]={label:src,participation:0,complete:0,share:0,link:0}
       if(String(e.event_type).includes("share"))sourceMap[src].share+=1
       if(e.event_type==="link_click")sourceMap[src].link+=1
@@ -5851,7 +5710,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {responseRows.length===0?emptyState(analyticsResponseScope==="draft"?"아직 작성 중인 응답이 없습니다.":"아직 제출 완료된 응답이 없습니다."):<div className="catchform-analytics-table-scroll" style={{flex:1,minHeight:0,background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,overflow:"auto",boxShadow:A.shadow}}>
               <style>{`.catchform-analytics-table-scroll::-webkit-scrollbar{height:7px;width:7px}.catchform-analytics-table-scroll::-webkit-scrollbar-thumb{background:${A.border2};border-radius:999px}.catchform-analytics-table-scroll::-webkit-scrollbar-track{background:transparent}`}</style>
               <table style={{borderCollapse:"collapse",minWidth:analyticsTableMinWidth,width:"100%",fontSize:13,tableLayout:"fixed" as const}}>
-                <thead><tr><th style={{position:"sticky" as const,top:0,zIndex:4,width:118,minWidth:118,padding:"13px 10px",textAlign:"center" as const,borderBottom:`1px solid ${A.border}`,color:A.t2,background:A.card2}}><label style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7,cursor:"pointer"}}><input type="checkbox" checked={allResponseRowsSelected} onChange={toggleAllResponseRows} style={{width:15,height:15,accentColor:A.blue,cursor:"pointer"}}/>관리</label></th><th style={{position:"sticky" as const,top:0,zIndex:4,width:190,minWidth:190,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t2,background:A.card2}}>날짜</th>{analyticsColumnMeta.map(({field:f,fileCount,resizable,width:colWidth}:any)=>{return <th key={f.id} style={{position:"sticky" as const,top:0,zIndex:4,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,width:colWidth,minWidth:colWidth,maxWidth:colWidth,background:A.card2}}>
+                <thead><tr><th style={{position:"sticky" as const,top:0,zIndex:4,width:118,minWidth:118,padding:"13px 10px",textAlign:"center" as const,borderBottom:`1px solid ${A.border}`,color:A.t2,background:A.card2}}><label style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7,cursor:"pointer"}}><input type="checkbox" checked={allResponseRowsSelected} onChange={toggleAllResponseRows} style={{width:15,height:15,accentColor:A.blue,cursor:"pointer"}}/>전체</label></th><th style={{position:"sticky" as const,top:0,zIndex:4,width:190,minWidth:190,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t2,background:A.card2}}>날짜</th>{analyticsColumnMeta.map(({field:f,fileCount,resizable,width:colWidth}:any)=>{return <th key={f.id} style={{position:"sticky" as const,top:0,zIndex:4,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,width:colWidth,minWidth:colWidth,maxWidth:colWidth,background:A.card2}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
                     <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{f.label}</span>
                     {fileCount>0&&<button onClick={()=>downloadAnalyticsFilesZip(f,responseRows)} title={`첨부파일 ${fileCount}개 일괄 다운로드`} style={{height:28,padding:"0 9px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,flexShrink:0,fontFamily:FONT,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const}}>
@@ -5883,7 +5742,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   <div style={{fontSize:13,fontWeight:600,color:A.t1}}>섹션을 열어 질문을 선택하세요</div>
                 </div>
                 <div style={{padding:10,display:"flex",flexDirection:"column" as const,gap:8,maxHeight:620,overflow:"auto"}}>
-                  {analyticsPages.map(p=>{const open=selectedAnalyticsPage===p;const pageFields=fieldsByPage[p]||[];const first=pageFields[0];const pageVisible=open?visibleSectionQuestionFields:pageFields;return <div key={p} style={{border:`1px solid ${open?A.blue+"55":A.border}`,borderRadius:A.r,background:open?A.blue2:A.card2,overflow:"hidden"}}>
+                  {analyticsPages.map(p=>{const open=selectedAnalyticsPage===p;const pageFields=fieldsByPage[p]||[];const first=pageFields[0];const pageVisible=open?visibleSectionQuestionFields:pageFields;const questionListScroll=open&&pageVisible.length>7;return <div key={p} style={{border:`1px solid ${open?A.blue+"55":A.border}`,borderRadius:A.r,background:open?A.blue2:A.card2,overflow:"hidden"}}>
                     <button onClick={()=>{setAnalyticsSection(p);setAnalyticsQuestionQuery("");if(first)setAnalyticsQuestionId(first.id);setAnalyticsHoverSlice(null)}} style={{width:"100%",minHeight:44,padding:"9px 10px",border:"none",background:"transparent",color:open?A.blue:A.t1,fontFamily:FONT,cursor:"pointer",display:"flex",alignItems:"center",gap:9,textAlign:"left" as const}}>
                       <span style={{width:4,alignSelf:"stretch",borderRadius:999,background:open?A.blue:A.border,flexShrink:0}}/>
                       <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{pageName(p)}</span>
@@ -5900,7 +5759,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                         ? <div style={{height:54,borderRadius:A.r,border:`1px dashed ${A.border2}`,display:"flex",alignItems:"center",justifyContent:"center",color:A.t3,fontSize:12.5}}>질문이 없습니다.</div>
                         : pageVisible.length===0
                         ? <div style={{height:54,borderRadius:A.r,border:`1px dashed ${A.border2}`,display:"flex",alignItems:"center",justifyContent:"center",color:A.t3,fontSize:12.5}}>검색 결과가 없습니다.</div>
-                        : <div style={{display:"flex",flexDirection:"column" as const,gap:6}}>
+                        : <div style={{display:"flex",flexDirection:"column" as const,gap:6,maxHeight:questionListScroll?386:undefined,overflowY:questionListScroll?"auto" as const:"visible" as const,paddingRight:questionListScroll?4:0,paddingBottom:questionListScroll?4:0}}>
                           {pageVisible.map((f:any)=>{const on=activeField?.id===f.id;const originalIdx=pageFields.findIndex((sf:any)=>sf.id===f.id);return <button key={f.id} onClick={()=>{setAnalyticsQuestionId(f.id);setAnalyticsHoverSlice(null)}} style={{minHeight:42,padding:"7px 8px",borderRadius:A.r,border:`1px solid ${on?A.blue+"66":A.border}`,background:on?A.card:A.card2,color:on?A.blue:A.t1,fontFamily:FONT,cursor:"pointer",textAlign:"left" as const,display:"flex",alignItems:"center",gap:9,transition:"all .14s ease",boxShadow:on?`0 0 0 3px ${A.blue}14`:"none"}}>
                             <span style={{width:24,height:24,borderRadius:8,background:on?A.blue:A.card,border:`1px solid ${on?A.blue:A.border}`,color:on?"#fff":A.t3,fontSize:11.5,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{originalIdx+1}</span>
                             <span style={{minWidth:0,flex:1}}>
@@ -5960,7 +5819,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </div>
             <div style={{display:"grid",gridTemplateColumns:"minmax(340px,1fr) minmax(320px,1fr)",gap:16,marginBottom:16}}>
               <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-                {infoTitle("유입경로","form_response_events의 started/page 이벤트 metadata에 저장된 source, utm_source, referrer_host를 기준으로 채널을 묶습니다. 각 채널별 참여 세션, 완료 세션, 공유/링크 클릭 수와 전환율을 보여줍니다.")}
+                {infoTitle("유입경로","form_response_events의 started/page 이벤트 metadata에 저장된 source, utm_source, referrer_host를 기준으로 채널을 묶습니다. 출처 미확인은 referrer와 UTM 정보가 모두 비어 있어 원천을 확인할 수 없는 방문입니다.")}
                 {periodTip("source")}
                 {sourceEntries.length===0?emptyState("유입경로 데이터가 아직 없습니다."):<div style={{display:"grid",gridTemplateColumns:"280px 1fr",gap:18,alignItems:"center"}}>
 	                  <svg viewBox="0 0 260 260" style={{width:"100%",maxWidth:280,overflow:"visible"}}>
@@ -5970,11 +5829,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	                      : <path key={s.label} d={donutPath(130,130,86,s.start+donutGap(s),s.end-donutGap(s))} fill="none" stroke={s.color} strokeWidth="42" strokeLinecap="round" onMouseMove={e=>movePeriodTip("source",e,{title:s.label,color:s.color,lines:[`참여 : ${s.participation} (${s.pct}%)`,`완료 : ${s.complete}`,`전환율 : ${s.conversion}%`,`공유 : ${s.share} · 링크 클릭 : ${s.link}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{cursor:"pointer",transform:periodHover?.scope==="source"&&periodHover.title===s.label?"scale(1.035)":"scale(1)",transformOrigin:"130px 130px",transition:"transform .16s ease"}}/>
 	                    )}
 	                  </svg>
-                  <div>{sourceEntries.map((s:any,i:number)=><div key={s.label} style={{display:"grid",gridTemplateColumns:"14px 1fr auto",gap:9,alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${A.border}`}}>
-                    <span style={{width:12,height:12,borderRadius:4,background:colors[i%colors.length]}}/>
-                    <span style={{fontSize:13,color:A.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{s.label}</span>
-                    <span style={{fontSize:12.5,color:A.t2,fontWeight:600}}>참여 {s.participation} · 완료 {s.complete} · 전환 {s.conversion}%</span>
-                  </div>)}</div>
+                  <div>
+                    {sourceEntries.map((s:any,i:number)=><div key={s.label} style={{display:"grid",gridTemplateColumns:"14px 1fr auto",gap:9,alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${A.border}`}}>
+                      <span style={{width:12,height:12,borderRadius:4,background:colors[i%colors.length]}}/>
+                      <span style={{fontSize:13,color:A.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{s.label}</span>
+                      <span style={{fontSize:12.5,color:A.t2,fontWeight:600}}>참여 {s.participation} · 완료 {s.complete} · 전환 {s.conversion}%</span>
+                    </div>)}
+                    {sourceEntries.some((s:any)=>s.label===UNKNOWN_SOURCE_LABEL)&&<div style={{marginTop:10,padding:"10px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12,lineHeight:1.55,color:A.t2}}>
+                      출처 미확인은 URL 직접 입력뿐 아니라 카카오톡·문자·메일 앱, 새 탭/즐겨찾기, 브라우저 개인정보 보호 설정처럼 referrer가 전달되지 않는 방문입니다. 링크에 <b style={{color:A.t1}}>utm_source</b>를 붙이면 채널별로 분리해서 볼 수 있어요.
+                    </div>}
+                  </div>
                 </div>}
               </div>
               <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>

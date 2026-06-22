@@ -538,23 +538,30 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         const params = new URLSearchParams(window.location.search || "")
         const ref = typeof document !== "undefined" ? document.referrer || "" : ""
         const refHost = (() => { try { return ref ? new URL(ref).hostname.replace(/^www\./, "") : "" } catch { return "" } })()
-        const sourceRaw = params.get("utm_source") || params.get("source") || params.get("ref") || refHost || "direct"
+        const explicitSource = params.get("utm_source") || params.get("source") || params.get("ref") || ""
+        const sourceRaw = explicitSource || refHost || "direct"
         const sourceMap: Record<string, string> = {
             google: "Google", naver: "Naver", medium: "Medium", twitter: "Twitter", x: "Twitter",
             bing: "Bing", kakao: "KakaoTalk", kakaotalk: "KakaoTalk", facebook: "Facebook",
-            instagram: "Instagram", qr: "QR", qrcode: "QR", direct: "직접 유입"
+            instagram: "Instagram", qr: "QR", qrcode: "QR", direct: "출처 미확인"
         }
         const sourceKey = sourceRaw.toLowerCase().replace(/\.(com|co\.kr|net|kr)$/g, "").split(".")[0]
         const locale = navigator.language || ""
         const localeCountry = locale.includes("-") ? locale.split("-").pop() || "" : ""
         const isQr = params.get("cf_qr") === "1" || params.get("utm_medium") === "qrcode" || params.get("utm_source") === "qr"
+        const sourceOrigin = isQr ? "qr" : explicitSource ? "url_param" : refHost ? "referrer" : "unknown"
+        const sourceDetail = isQr ? (params.get("qr_label") || params.get("utm_campaign") || "QR") : explicitSource ? sourceRaw : refHost ? refHost : "referrer/UTM 없음"
         return {
             utm_source: params.get("utm_source") || "",
             utm_medium: params.get("utm_medium") || "",
             utm_campaign: params.get("utm_campaign") || "",
             source: isQr ? "QR" : (sourceMap[sourceKey] || sourceRaw),
+            source_origin: sourceOrigin,
+            source_detail: sourceDetail,
             referrer: ref,
             referrer_host: refHost,
+            landing_url: window.location.href,
+            landing_path: window.location.pathname,
             country: params.get("country") || geoMeta.country || localeCountry || "",
             region: params.get("region") || params.get("province") || params.get("sido") || geoMeta.region || "",
             city: params.get("city") || geoMeta.city || "",
