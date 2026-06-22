@@ -479,6 +479,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const qrScanTrackedRef = React.useRef(false)
     const draftLoadedRef = React.useRef(false)
     const remoteDraftTimerRef = React.useRef<any>(null)
+    const statusEventIdsRef = React.useRef<Record<string, string>>({})
     const [draftLastFieldId, setDraftLastFieldId] = React.useState("")
     const operationGate = React.useMemo(() => getOperationGate(cfg), [cfg.dashboard?.operationStart, cfg.dashboard?.operationEnd, cfg.dashboard?.alwaysOpen])
     const formDisabled = !!operationGate
@@ -587,9 +588,40 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         }
     }
 
+    const makeTrackingUuid = () => {
+        try {
+            if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID()
+        } catch {}
+        return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0
+            const v = c === "x" ? r : (r & 0x3 | 0x8)
+            return v.toString(16)
+        })
+    }
+
+    const getStatusEventId = (key: string) => {
+        if (statusEventIdsRef.current[key]) return statusEventIdsRef.current[key]
+        const storageKey = `catchform_status_event_${key}`.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 190)
+        try {
+            const existing = window.sessionStorage.getItem(storageKey)
+            if (existing) {
+                statusEventIdsRef.current[key] = existing
+                return existing
+            }
+            const next = makeTrackingUuid()
+            window.sessionStorage.setItem(storageKey, next)
+            statusEventIdsRef.current[key] = next
+            return next
+        } catch {
+            const next = makeTrackingUuid()
+            statusEventIdsRef.current[key] = next
+            return next
+        }
+    }
+
     const trackEvent = (eventType: string, extra?: { page?: number; field?: any; metadata?: any; keepalive?: boolean }) => {
         const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search || "") : new URLSearchParams()
-        const payload = {
+        const basePayload = {
             form_id: formId || params.get("cf_form_id") || params.get("fid") || params.get("f") || null,
             form_slug: formSlug || "",
             session_id: getTrackingSessionId(),
@@ -599,15 +631,29 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             field_label: extra?.field?.label || null,
             metadata: { ...getTrackingMeta(), ...(extra?.metadata || {}) }
         }
+        const statusMode = eventType === "draft_saved" || eventType === "leave"
+        const statusKey = statusMode ? [basePayload.form_id || basePayload.form_slug || "form", basePayload.session_id || "session", eventType].join(":") : ""
+        const payload = statusMode
+            ? {
+                ...basePayload,
+                id: getStatusEventId(statusKey),
+                metadata: {
+                    ...basePayload.metadata,
+                    event_mode: "session_status",
+                    status_event_key: statusKey,
+                    status_updated_at: new Date().toISOString(),
+                }
+            }
+            : basePayload
         if (extra?.keepalive && supabaseUrl && supabaseAnonKey) {
             try {
-                fetch(`${supabaseUrl.replace(/\/+$/, "")}/rest/v1/form_response_events`, {
+                fetch(`${supabaseUrl.replace(/\/+$/, "")}/rest/v1/form_response_events${statusMode ? "?on_conflict=id" : ""}`, {
                     method: "POST",
                     headers: {
                         apikey: supabaseAnonKey,
                         authorization: `Bearer ${supabaseAnonKey}`,
                         "content-type": "application/json",
-                        prefer: "return=minimal"
+                        prefer: statusMode ? "resolution=merge-duplicates,return=minimal" : "return=minimal"
                     },
                     body: JSON.stringify(payload),
                     keepalive: true
@@ -616,6 +662,10 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             return
         }
         if (!supa) return
+        if (statusMode) {
+            supa.from("form_response_events").upsert(payload as any, { onConflict: "id" }).then(() => {})
+            return
+        }
         supa.from("form_response_events").insert(payload).then(() => {})
     }
 
