@@ -484,6 +484,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const [dpOpen, setDpOpen] = React.useState<Record<string, boolean>>({})
     const [dpY, setDpY] = React.useState<Record<string, number>>({})
     const [dpM, setDpM] = React.useState<Record<string, number>>({})
+    const [dpD, setDpD] = React.useState<Record<string, number>>({})
     const [submitting, setSubmitting] = React.useState(false)
     const [showModal, setShowModal] = React.useState(false)
     const [shareCopied, setShareCopied] = React.useState(false)
@@ -1552,16 +1553,29 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 const minYear = today.getFullYear() - 80
                 const maxYear = today.getFullYear() + 40
                 const daysInMonth = new Date(dy, dm + 1, 0).getDate()
-                const selectedDay = Math.min(Math.max(1, parsed ? parsed.getDate() : today.getDate()), daysInMonth)
-                const commitDate = (year: number, month: number, day: number, close = false) => {
+                const selectedDay = Math.min(Math.max(1, dpD[f.id] ?? (parsed ? parsed.getDate() : today.getDate())), daysInMonth)
+                const setDraftDate = (year: number, month: number, day: number) => {
                     const safeYear = Math.min(maxYear, Math.max(minYear, year))
                     const safeMonth = Math.min(11, Math.max(0, month))
                     const safeDay = Math.min(new Date(safeYear, safeMonth + 1, 0).getDate(), Math.max(1, day))
                     setDpY(p => ({ ...p, [f.id]: safeYear }))
                     setDpM(p => ({ ...p, [f.id]: safeMonth }))
+                    setDpD(p => ({ ...p, [f.id]: safeDay }))
+                }
+                const applyDate = (year: number, month: number, day: number) => {
+                    const safeYear = Math.min(maxYear, Math.max(minYear, year))
+                    const safeMonth = Math.min(11, Math.max(0, month))
+                    const safeDay = Math.min(new Date(safeYear, safeMonth + 1, 0).getDate(), Math.max(1, day))
                     setVal(f.id, `${safeYear}-${String(safeMonth + 1).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`)
                     clearErr(f.id)
-                    if (close) setDpOpen(p => ({ ...p, [f.id]: false }))
+                    setDpOpen(p => ({ ...p, [f.id]: false }))
+                }
+                const openPicker = () => {
+                    if (!open) {
+                        const base = parsed && !Number.isNaN(parsed.getTime()) ? parsed : today
+                        setDraftDate(base.getFullYear(), base.getMonth(), base.getDate())
+                    }
+                    setDpOpen(p => ({ ...p, [f.id]: !p[f.id] }))
                 }
                 const WHEEL_ITEM_HEIGHT = 42
                 const WHEEL_VISIBLE_ITEMS = 5
@@ -1569,7 +1583,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 const years = Array.from({ length: maxYear - minYear + 1 }, (_, idx) => minYear + idx)
                 const months = Array.from({ length: 12 }, (_, idx) => idx)
                 const days = Array.from({ length: daysInMonth }, (_, idx) => idx + 1)
-                const wheelColumn = (label: string, values: number[], activeValue: number, format: (value: number) => string, onSelect: (value: number, close?: boolean) => void, closeOnClick = false) => {
+                const wheelColumn = (label: string, values: number[], activeValue: number, format: (value: number) => string, onSelect: (value: number) => void) => {
                     const activeIndex = Math.max(0, values.indexOf(activeValue))
                     const syncKey = `${values.length}-${activeIndex}`
                     const handleScrollEnd = (el: HTMLDivElement) => {
@@ -1578,7 +1592,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                         el.dataset.userScrolling = "0"
                         el.dataset.syncKey = `${values.length}-${idx}`
                         el.scrollTo({ top: idx * WHEEL_ITEM_HEIGHT, behavior: "smooth" })
-                        if (typeof nextValue === "number" && nextValue !== activeValue) onSelect(nextValue, false)
+                        if (typeof nextValue === "number" && nextValue !== activeValue) onSelect(nextValue)
                     }
                     return (
                     <div>
@@ -1599,7 +1613,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                                 {values.map((value, idx) => {
                                     const isActive = value === activeValue
                                     const distance = Math.abs(idx - activeIndex)
-                                    return <button key={value} onClick={() => onSelect(value, closeOnClick)}
+                                    return <button key={value} onClick={() => onSelect(value)}
                                         style={{ width: "100%", height: WHEEL_ITEM_HEIGHT, scrollSnapAlign: "center", border: "none", background: "transparent", color: isActive ? FC.t1 : distance === 1 ? FC.t2 : FC.t3, fontFamily: FONT, fontSize: isActive ? 18 : distance === 1 ? 15 : 12.5, fontWeight: isActive ? 700 : 500, cursor: "pointer", transition: "all .12s ease" }}>
                                         {format(value)}
                                     </button>
@@ -1611,22 +1625,22 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     )
                 }
                 return <div style={{ position: "relative", display: "inline-block" }}>
-                    <div onClick={() => setDpOpen(p => ({ ...p, [f.id]: !p[f.id] }))} style={{ height: fh, display: "inline-flex", alignItems: "center", gap: 10, padding: "0 14px", borderRadius: fr, border: `1px solid ${open ? accentBg : fieldErr ? FC.red : FC.fieldBorder}`, background: FC.fieldBg, cursor: "pointer", userSelect: "none", transition: "border .15s" }}>
+                    <div onClick={openPicker} style={{ height: fh, display: "inline-flex", alignItems: "center", gap: 10, padding: "0 14px", borderRadius: fr, border: `1px solid ${open ? accentBg : fieldErr ? FC.red : FC.fieldBorder}`, background: FC.fieldBg, cursor: "pointer", userSelect: "none", transition: "border .15s" }}>
                         <span style={{ fontSize: 13, color: displayVal ? FC.t1 : FC.t3, fontFamily: FONT }}>{displayVal || "날짜를 선택해주세요"}</span>
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ color: FC.t3, flexShrink: 0 }}><rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.4" /><path d="M5 2v2M11 2v2M2 7h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
                     </div>
                     {open && <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 200, background: FC.bg || "#fff", border: `1px solid ${FC.fieldBorder}`, borderRadius: 20, padding: 14, boxShadow: "0 12px 36px rgba(0,0,0,0.18)", width: 342 }}>
                         <style>{`.cf-date-wheel-list{scrollbar-width:none;-ms-overflow-style:none}.cf-date-wheel-list::-webkit-scrollbar{display:none;width:0;height:0}`}</style>
                         <div style={{ display: "grid", gridTemplateColumns: "1.15fr 0.82fr 0.82fr", gap: 10 }}>
-                            {wheelColumn("년", years, dy, value => `${value}년`, value => commitDate(value, dm, selectedDay))}
-                            {wheelColumn("월", months, dm, value => MONTHS[value], value => commitDate(dy, value, selectedDay))}
-                            {wheelColumn("일", days, selectedDay, value => `${value}일`, (value, close) => commitDate(dy, dm, value, close), true)}
+                            {wheelColumn("년", years, dy, value => `${value}년`, value => setDraftDate(value, dm, selectedDay))}
+                            {wheelColumn("월", months, dm, value => MONTHS[value], value => setDraftDate(dy, value, selectedDay))}
+                            {wheelColumn("일", days, selectedDay, value => `${value}일`, value => setDraftDate(dy, dm, value))}
                         </div>
                         <div style={{ marginTop: 12, borderTop: `1px solid ${FC.fieldBorder}`, paddingTop: 11, display: "flex", justifyContent: "center", gap: 8 }}>
-                            <button onClick={() => { const t = today; setVal(f.id, `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`); setDpOpen(p => ({ ...p, [f.id]: false })) }}
-                                style={{ padding: "5px 20px", borderRadius: 8, border: `1px solid ${accentBg}44`, background: accentBg + "0f", color: accentBg, fontFamily: FONT, fontSize: 12.5, fontWeight:600, cursor: "pointer" }}>오늘</button>
-                            {val && <button onClick={() => { setVal(f.id, ""); setDpOpen(p => ({ ...p, [f.id]: false })) }}
-                                style={{ padding: "5px 14px", borderRadius: 8, border: `1px solid ${FC.fieldBorder}`, background: "transparent", color: FC.t3, fontFamily: FONT, fontSize: 12.5, cursor: "pointer" }}>초기화</button>}
+                            <button onClick={() => setDraftDate(today.getFullYear(), today.getMonth(), today.getDate())}
+                                style={{ padding: "5px 14px", borderRadius: 8, border: `1px solid ${FC.fieldBorder}`, background: "transparent", color: FC.t3, fontFamily: FONT, fontSize: 12.5, cursor: "pointer" }}>오늘</button>
+                            <button onClick={() => applyDate(dy, dm, selectedDay)}
+                                style={{ padding: "5px 20px", borderRadius: 8, border: `1px solid ${accentBg}`, background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>확인</button>
                         </div>
                     </div>}
                 </div>

@@ -1553,6 +1553,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [pvDropOpen,setPvDropOpen]=React.useState<Record<string,boolean>>({})
   const [pvDpY,setPvDpY]=React.useState<Record<string,number>>({})
   const [pvDpM,setPvDpM]=React.useState<Record<string,number>>({})
+  const [pvDpD,setPvDpD]=React.useState<Record<string,number>>({})
   const [dragIdx,setDragIdx]=React.useState<number|null>(null)
   const [dragOver,setDragOver]=React.useState<number|null>(null)
   const [dragInsertAt,setDragInsertAt]=React.useState<number|null>(null)
@@ -2237,8 +2238,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       next.dashboard=dashboard
       const{error}=await supa.from("form_configs").update({config:next,updated_at:new Date().toISOString()}).eq("id",item.id)
       if(error)throw error
+      const restoredAnalyticsScopes=await restoreActiveAnalyticsTrashForForm(item.id,full.slug||item.slug||"")
       delete fullFormCache.current[item.id]
-      showToast(`"${item.name||full.name||"폼"}"을 복구했어요.`)
+      showToast(restoredAnalyticsScopes>0
+        ? `"${item.name||full.name||"폼"}"을 복구했고 응답/QR 데이터도 함께 복구했어요.`
+        : `"${item.name||full.name||"폼"}"을 복구했어요.`
+      )
       loadList();loadDashboard(supa)
     }catch(error){
       showToast("폼 복구 실패: "+((error as any)?.message||"오류"),false)
@@ -2754,9 +2759,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       return event.event_type==="analytics_scope_trashed"||!meta.batch_id||!activeBatchIds.has(meta.batch_id)
     }).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())
   }
-  async function insertAnalyticsAdminEvents(events:{event_type:string;session_id?:string;metadata?:any}[]){
-    if(!supa||!loadedId||!events.length)return[] as any[]
-    const payloads=events.map(event=>({form_id:loadedId,form_slug:savedSlug||"",session_id:event.session_id||analyticsTrashSessionId(),event_type:event.event_type,page:1,metadata:event.metadata||{}}))
+  async function insertAnalyticsEventsForForm(formId:string,formSlug:string,events:{event_type:string;session_id?:string;metadata?:any}[]){
+    if(!supa||!formId||!events.length)return[] as any[]
+    const payloads=events.map(event=>({form_id:formId,form_slug:formSlug||"",session_id:event.session_id||analyticsTrashSessionId(),event_type:event.event_type,page:1,metadata:event.metadata||{}}))
     const inserted:any[]=[]
     for(let i=0;i<payloads.length;i+=100){
       const {data,error}=await supa.from("form_response_events").insert(payloads.slice(i,i+100)).select("*")
@@ -2765,8 +2770,40 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     }
     return inserted
   }
+  async function insertAnalyticsAdminEvents(events:{event_type:string;session_id?:string;metadata?:any}[]){
+    if(!loadedId||!events.length)return[] as any[]
+    return insertAnalyticsEventsForForm(loadedId,savedSlug||"",events)
+  }
   async function insertAnalyticsAdminEvent(event_type:string,metadata:any,session_id?:string){
     return (await insertAnalyticsAdminEvents([{event_type,metadata,session_id}]))[0]
+  }
+  async function restoreActiveAnalyticsTrashForForm(formId:string,formSlug:string){
+    if(!supa||!formId)return 0
+    const {data,error}=await supa.from("form_response_events").select("*").eq("form_id",formId).order("created_at",{ascending:false}).limit(5000)
+    if(error)throw error
+    const rawEvents=data||[]
+    const closedIds=new Set(rawEvents.filter(event=>["response_restored","analytics_scope_restored","response_purged","analytics_scope_purged"].includes(event.event_type)).map(event=>analyticsEventMeta(event).trash_event_id).filter(Boolean))
+    const activeScopes=rawEvents.filter(event=>event.event_type==="analytics_scope_trashed"&&!closedIds.has(event.id)).sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime())
+    let restoredScopes=0
+    for(const scopeEvent of activeScopes){
+      const meta=analyticsEventMeta(scopeEvent)
+      const batchEvents=rawEvents.filter(event=>event.event_type==="response_trashed"&&!closedIds.has(event.id)&&analyticsEventMeta(event).batch_id&&analyticsEventMeta(event).batch_id===meta.batch_id)
+      const submitted=batchEvents.filter(event=>analyticsEventMeta(event).trash_kind==="submitted")
+      for(const tableName of Array.from(new Set(submitted.map(event=>analyticsEventMeta(event).table_name||analyticsTableName())))){
+        const sourceRows=submitted.filter(event=>(analyticsEventMeta(event).table_name||analyticsTableName())===tableName).map(event=>analyticsEventMeta(event).original_row).filter(Boolean)
+        if(sourceRows.length){
+          const {error:upsertError}=await supa.from(tableName).upsert(sourceRows,{onConflict:"id",ignoreDuplicates:true})
+          if(upsertError)throw upsertError
+        }
+      }
+      const restoredAt=new Date().toISOString()
+      await insertAnalyticsEventsForForm(formId,formSlug,[
+        ...batchEvents.map(event=>({event_type:"response_restored",metadata:{trash_event_id:event.id,restored_at:restoredAt,restore_reason:"form_restored"}})),
+        {event_type:"analytics_scope_restored",metadata:{trash_event_id:scopeEvent.id,batch_id:meta.batch_id,restored_at:restoredAt,restore_reason:"form_restored"}},
+      ])
+      restoredScopes+=1
+    }
+    return restoredScopes
   }
   function analyticsCandidateTableNames(){
     const preferred=analyticsTableName()
@@ -4861,21 +4898,35 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               const dpM=pvDpM[id]??(parsed?parsed.getMonth():today.getMonth())
               const setDpY=(y:number)=>setPvDpY(p=>({...p,[id]:y}))
               const setDpM=(m:number)=>setPvDpM(p=>({...p,[id]:m}))
+              const setDpD=(d:number)=>setPvDpD(p=>({...p,[id]:d}))
               const displayVal=parsed?`${parsed.getFullYear()}년 ${parsed.getMonth()+1}월 ${parsed.getDate()}일`:""
               const MONTHS=["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"]
               const minYear=today.getFullYear()-80
               const maxYear=today.getFullYear()+40
               const daysInMonth=new Date(dpY,dpM+1,0).getDate()
-              const selectedDay=Math.min(Math.max(1,parsed?parsed.getDate():today.getDate()),daysInMonth)
-              const commitDate=(year:number,month:number,day:number,close=false)=>{
+              const selectedDay=Math.min(Math.max(1,pvDpD[id]??(parsed?parsed.getDate():today.getDate())),daysInMonth)
+              const setDraftDate=(year:number,month:number,day:number)=>{
                 const safeYear=Math.min(maxYear,Math.max(minYear,year))
                 const safeMonth=Math.min(11,Math.max(0,month))
                 const safeDay=Math.min(new Date(safeYear,safeMonth+1,0).getDate(),Math.max(1,day))
                 setDpY(safeYear)
                 setDpM(safeMonth)
+                setDpD(safeDay)
+              }
+              const applyDate=(year:number,month:number,day:number)=>{
+                const safeYear=Math.min(maxYear,Math.max(minYear,year))
+                const safeMonth=Math.min(11,Math.max(0,month))
+                const safeDay=Math.min(new Date(safeYear,safeMonth+1,0).getDate(),Math.max(1,day))
                 setVal(`${safeYear}-${String(safeMonth+1).padStart(2,"0")}-${String(safeDay).padStart(2,"0")}`)
                 clearError(id)
-                if(close)setDpOpen(false)
+                setDpOpen(false)
+              }
+              const openPicker=()=>{
+                if(!dpOpen){
+                  const base=parsed&&!Number.isNaN(parsed.getTime())?parsed:today
+                  setDraftDate(base.getFullYear(),base.getMonth(),base.getDate())
+                }
+                setDpOpen(!dpOpen)
               }
               const WHEEL_ITEM_HEIGHT=42
               const WHEEL_VISIBLE_ITEMS=5
@@ -4883,7 +4934,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               const years=Array.from({length:maxYear-minYear+1},(_,idx)=>minYear+idx)
               const months=Array.from({length:12},(_,idx)=>idx)
               const days=Array.from({length:daysInMonth},(_,idx)=>idx+1)
-              const wheelColumn=(label:string,values:number[],activeValue:number,format:(value:number)=>string,onSelect:(value:number,close?:boolean)=>void,closeOnClick=false)=>{
+              const wheelColumn=(label:string,values:number[],activeValue:number,format:(value:number)=>string,onSelect:(value:number)=>void)=>{
                 const activeIndex=Math.max(0,values.indexOf(activeValue))
                 const syncKey=`${values.length}-${activeIndex}`
                 const handleScrollEnd=(el:HTMLDivElement)=>{
@@ -4892,7 +4943,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   el.dataset.userScrolling="0"
                   el.dataset.syncKey=`${values.length}-${idx}`
                   el.scrollTo({top:idx*WHEEL_ITEM_HEIGHT,behavior:"smooth"})
-                  if(typeof nextValue==="number"&&nextValue!==activeValue)onSelect(nextValue,false)
+                  if(typeof nextValue==="number"&&nextValue!==activeValue)onSelect(nextValue)
                 }
                 return <div>
                   <div style={{fontSize:11,fontWeight:600,color:FC.t3,textAlign:"center" as const,marginBottom:6,fontFamily:FONT}}>{label}</div>
@@ -4907,7 +4958,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       {values.map((value,idx)=>{
                         const isActive=value===activeValue
                         const distance=Math.abs(idx-activeIndex)
-                        return <button key={value} onClick={()=>onSelect(value,closeOnClick)}
+                        return <button key={value} onClick={()=>onSelect(value)}
                           style={{width:"100%",height:WHEEL_ITEM_HEIGHT,scrollSnapAlign:"center" as const,border:"none",background:"transparent",color:isActive?FC.t1:distance===1?FC.t2:FC.t3,fontFamily:FONT,fontSize:isActive?18:distance===1?15:12.5,fontWeight:isActive?700:500,cursor:"pointer",transition:"all .12s ease"}}>
                           {format(value)}
                         </button>
@@ -4918,7 +4969,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 </div>
               }
               return <div style={{position:"relative" as const,display:"inline-block"}}>
-                <div onClick={()=>setDpOpen(!dpOpen)}
+                <div onClick={openPicker}
                   style={{height:fh,display:"inline-flex",alignItems:"center",gap:10,padding:"0 14px",borderRadius:fr2,border:`1px solid ${dpOpen?accentC:FC.fieldBorder}`,background:FC.fieldBg,cursor:"pointer",userSelect:"none" as const,transition:"border .15s"}}>
                   <span style={{fontSize:13,color:displayVal?FC.t1:FC.t3,fontFamily:FONT}}>{displayVal||"날짜를 선택해주세요"}</span>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,color:FC.t3}}><rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.4"/><path d="M5 2v2M11 2v2M2 7h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
@@ -4926,19 +4977,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 {dpOpen&&<div style={{position:"absolute" as const,top:"calc(100% + 6px)",left:0,zIndex:200,background:FC.bg,border:`1px solid ${FC.fieldBorder}`,borderRadius:20,padding:"14px",boxShadow:"0 12px 36px rgba(0,0,0,0.18)",width:342}}>
                   <style>{`.cf-date-wheel-list{scrollbar-width:none;-ms-overflow-style:none}.cf-date-wheel-list::-webkit-scrollbar{display:none;width:0;height:0}`}</style>
                   <div style={{display:"grid",gridTemplateColumns:"1.15fr 0.82fr 0.82fr",gap:10}}>
-                    {wheelColumn("년",years,dpY,value=>`${value}년`,value=>commitDate(value,dpM,selectedDay))}
-                    {wheelColumn("월",months,dpM,value=>MONTHS[value],value=>commitDate(dpY,value,selectedDay))}
-                    {wheelColumn("일",days,selectedDay,value=>`${value}일`,(value,close)=>commitDate(dpY,dpM,value,close),true)}
+                    {wheelColumn("년",years,dpY,value=>`${value}년`,value=>setDraftDate(value,dpM,selectedDay))}
+                    {wheelColumn("월",months,dpM,value=>MONTHS[value],value=>setDraftDate(dpY,value,selectedDay))}
+                    {wheelColumn("일",days,selectedDay,value=>`${value}일`,value=>setDraftDate(dpY,dpM,value))}
                   </div>
-                  <div style={{marginTop:12,borderTop:`1px solid ${FC.fieldBorder}`,paddingTop:11,display:"flex",justifyContent:"center"}}>
-                    <button onClick={()=>{setDpY(today.getFullYear());setDpM(today.getMonth());const y=today.getFullYear();const mo=String(today.getMonth()+1).padStart(2,"0");const da=String(today.getDate()).padStart(2,"0");setVal(`${y}-${mo}-${da}`);setDpOpen(false)}}
-                      style={{padding:"5px 20px",borderRadius:8,border:`1px solid ${accentC}44`,background:accentC+"0f",color:accentC,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
+                  <div style={{marginTop:12,borderTop:`1px solid ${FC.fieldBorder}`,paddingTop:11,display:"flex",justifyContent:"center",gap:8}}>
+                    <button onClick={()=>setDraftDate(today.getFullYear(),today.getMonth(),today.getDate())}
+                      style={{padding:"5px 14px",borderRadius:8,border:`1px solid ${FC.fieldBorder}`,background:"transparent",color:FC.t3,fontFamily:FONT,fontSize:12.5,cursor:"pointer"}}>
                       오늘
                     </button>
-                    {val&&<button onClick={()=>{setVal("");setDpOpen(false)}}
-                      style={{marginLeft:8,padding:"5px 14px",borderRadius:8,border:`1px solid ${FC.fieldBorder}`,background:"transparent",color:FC.t3,fontFamily:FONT,fontSize:12.5,cursor:"pointer"}}>
-                      초기화
-                    </button>}
+                    <button onClick={()=>applyDate(dpY,dpM,selectedDay)}
+                      style={{padding:"5px 20px",borderRadius:8,border:`1px solid ${accentC}`,background:accentC,color:cfg.cta.color||"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
+                      확인
+                    </button>
                   </div>
                 </div>}
               </div>
