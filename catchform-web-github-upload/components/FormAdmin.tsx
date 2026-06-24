@@ -4790,6 +4790,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               const prevM=()=>{if(dpM===0){setDpY(dpY-1);setDpM(11)}else setDpM(dpM-1)}
               const nextM=()=>{if(dpM===11){setDpY(dpY+1);setDpM(0)}else setDpM(dpM+1)}
               const MONTHS=["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"]
+              const yearOptions=Array.from({length:121},(_,idx)=>today.getFullYear()-80+idx)
+              const pickerSelectStyle:React.CSSProperties={height:30,border:`1px solid ${FC.fieldBorder}`,borderRadius:8,background:FC.fieldBg,color:FC.t1,fontFamily:FONT,fontSize:12.5,fontWeight:600,padding:"0 8px",outline:"none",cursor:"pointer"}
               return <div style={{position:"relative" as const,display:"inline-block"}}>
                 <div onClick={()=>setDpOpen(!dpOpen)}
                   style={{height:fh,display:"inline-flex",alignItems:"center",gap:10,padding:"0 14px",borderRadius:fr2,border:`1px solid ${dpOpen?accentC:FC.fieldBorder}`,background:FC.fieldBg,cursor:"pointer",userSelect:"none" as const,transition:"border .15s"}}>
@@ -4803,7 +4805,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=FC.fieldBg} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
                       <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M10 4l-4 4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </button>
-                    <span style={{fontSize:14,fontWeight:600,color:FC.t1,fontFamily:FONT}}>{dpY}년 {MONTHS[dpM]}</span>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <select aria-label="년도 선택" value={dpY} onChange={e=>setDpY(Number(e.target.value))} style={{...pickerSelectStyle,minWidth:88}}>
+                        {yearOptions.map(year=><option key={year} value={year}>{year}년</option>)}
+                      </select>
+                      <select aria-label="월 선택" value={dpM} onChange={e=>setDpM(Number(e.target.value))} style={{...pickerSelectStyle,minWidth:72}}>
+                        {MONTHS.map((month,idx)=><option key={month} value={idx}>{month}</option>)}
+                      </select>
+                    </div>
                     <button onClick={nextM} style={{width:28,height:28,borderRadius:8,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:FC.t2}}
                       onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=FC.fieldBg} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
                       <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
