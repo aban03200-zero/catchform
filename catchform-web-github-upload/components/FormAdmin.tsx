@@ -4797,25 +4797,43 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 clearError(id)
                 if(close)setDpOpen(false)
               }
-              const wheelOffsets=[-2,-1,0,1,2]
-              const wheelColumn=(label:string,items:{key:string;label:string;active:boolean;disabled:boolean;onClick:()=>void}[],onWheel:(delta:number)=>void)=>(
-                <div>
+              const WHEEL_ITEM_HEIGHT=42
+              const WHEEL_VISIBLE_ITEMS=5
+              const WHEEL_SPACER_HEIGHT=WHEEL_ITEM_HEIGHT*2
+              const years=Array.from({length:maxYear-minYear+1},(_,idx)=>minYear+idx)
+              const months=Array.from({length:12},(_,idx)=>idx)
+              const days=Array.from({length:daysInMonth},(_,idx)=>idx+1)
+              const wheelColumn=(label:string,values:number[],activeValue:number,format:(value:number)=>string,onSelect:(value:number,close?:boolean)=>void,closeOnClick=false)=>{
+                const activeIndex=Math.max(0,values.indexOf(activeValue))
+                const syncKey=`${values.length}-${activeIndex}`
+                const handleScrollEnd=(el:HTMLDivElement)=>{
+                  const idx=Math.min(values.length-1,Math.max(0,Math.round(el.scrollTop/WHEEL_ITEM_HEIGHT)))
+                  const nextValue=values[idx]
+                  el.dataset.userScrolling="0"
+                  el.dataset.syncKey=`${values.length}-${idx}`
+                  el.scrollTo({top:idx*WHEEL_ITEM_HEIGHT,behavior:"smooth"})
+                  if(typeof nextValue==="number"&&nextValue!==activeValue)onSelect(nextValue,false)
+                }
+                return <div>
                   <div style={{fontSize:11,fontWeight:600,color:FC.t3,textAlign:"center" as const,marginBottom:6,fontFamily:FONT}}>{label}</div>
-                  <div onWheel={e=>{e.preventDefault();onWheel(e.deltaY>0?1:-1)}}
-                    style={{position:"relative" as const,borderRadius:18,border:`1px solid ${FC.fieldBorder}`,background:FC.fieldBg,padding:"8px 7px",boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.02)",overflow:"hidden"}}>
-                    {items.map((item,idx)=>{
-                      const distance=Math.abs(idx-2)
-                      return <button key={item.key} onClick={item.disabled?undefined:item.onClick} disabled={item.disabled}
-                        style={{width:"100%",height:42,border:"none",borderTop:idx===2?`1px solid ${FC.fieldBorder}`:"1px solid transparent",borderBottom:idx===2?`1px solid ${FC.fieldBorder}`:"1px solid transparent",borderRadius:idx===2?10:0,background:item.active?accentC+"12":"transparent",color:item.disabled?"transparent":item.active?FC.t1:distance===1?FC.t2:FC.t3,fontFamily:FONT,fontSize:item.active?18:distance===1?15:12.5,fontWeight:item.active?700:500,cursor:item.disabled?"default":"pointer",transition:"all .12s ease"}}>
-                        {item.label||"-"}
+                  <div ref={node=>{if(node&&node.dataset.syncKey!==syncKey&&node.dataset.userScrolling!=="1"){node.dataset.syncKey=syncKey;node.scrollTop=activeIndex*WHEEL_ITEM_HEIGHT}}}
+                    onWheelCapture={e=>e.stopPropagation()}
+                    onWheel={e=>{e.preventDefault();e.stopPropagation();e.currentTarget.scrollTop+=e.deltaY}}
+                    onScroll={e=>{const el=e.currentTarget;el.dataset.userScrolling="1";window.clearTimeout(Number(el.dataset.scrollTimer||0));el.dataset.scrollTimer=String(window.setTimeout(()=>handleScrollEnd(el),90))}}
+                    style={{position:"relative" as const,height:WHEEL_ITEM_HEIGHT*WHEEL_VISIBLE_ITEMS,borderRadius:18,border:`1px solid ${FC.fieldBorder}`,background:FC.fieldBg,padding:"0 7px",boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.02)",overflowY:"auto" as const,overscrollBehavior:"contain",touchAction:"pan-y" as const,scrollSnapType:"y mandatory" as const,WebkitOverflowScrolling:"touch"}}>
+                    <div style={{height:WHEEL_SPACER_HEIGHT,flexShrink:0}}/>
+                    {values.map((value,idx)=>{
+                      const isActive=value===activeValue
+                      const distance=Math.abs(idx-activeIndex)
+                      return <button key={value} onClick={()=>onSelect(value,closeOnClick)}
+                        style={{width:"100%",height:WHEEL_ITEM_HEIGHT,scrollSnapAlign:"center" as const,border:"none",borderTop:isActive?`1px solid ${FC.fieldBorder}`:"1px solid transparent",borderBottom:isActive?`1px solid ${FC.fieldBorder}`:"1px solid transparent",borderRadius:isActive?10:0,background:isActive?accentC+"12":"transparent",color:isActive?FC.t1:distance===1?FC.t2:FC.t3,fontFamily:FONT,fontSize:isActive?18:distance===1?15:12.5,fontWeight:isActive?700:500,cursor:"pointer",transition:"all .12s ease"}}>
+                        {format(value)}
                       </button>
                     })}
+                    <div style={{height:WHEEL_SPACER_HEIGHT,flexShrink:0}}/>
                   </div>
                 </div>
-              )
-              const yearItems=wheelOffsets.map(offset=>{const year=dpY+offset;const disabled=year<minYear||year>maxYear;return{key:`year-${offset}`,label:disabled?"":`${year}년`,active:offset===0,disabled,onClick:()=>commitDate(year,dpM,selectedDay)}})
-              const monthItems=wheelOffsets.map(offset=>{const month=dpM+offset;const disabled=month<0||month>11;return{key:`month-${offset}`,label:disabled?"":MONTHS[month],active:offset===0,disabled,onClick:()=>commitDate(dpY,month,selectedDay)}})
-              const dayItems=wheelOffsets.map(offset=>{const day=selectedDay+offset;const disabled=day<1||day>daysInMonth;return{key:`day-${offset}`,label:disabled?"":`${day}일`,active:offset===0,disabled,onClick:()=>commitDate(dpY,dpM,day,true)}})
+              }
               return <div style={{position:"relative" as const,display:"inline-block"}}>
                 <div onClick={()=>setDpOpen(!dpOpen)}
                   style={{height:fh,display:"inline-flex",alignItems:"center",gap:10,padding:"0 14px",borderRadius:fr2,border:`1px solid ${dpOpen?accentC:FC.fieldBorder}`,background:FC.fieldBg,cursor:"pointer",userSelect:"none" as const,transition:"border .15s"}}>
@@ -4824,9 +4842,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 </div>
                 {dpOpen&&<div style={{position:"absolute" as const,top:"calc(100% + 6px)",left:0,zIndex:200,background:FC.bg,border:`1px solid ${FC.fieldBorder}`,borderRadius:20,padding:"14px",boxShadow:"0 12px 36px rgba(0,0,0,0.18)",width:342}}>
                   <div style={{display:"grid",gridTemplateColumns:"1.15fr 0.82fr 0.82fr",gap:10}}>
-                    {wheelColumn("년",yearItems,delta=>commitDate(dpY+delta,dpM,selectedDay))}
-                    {wheelColumn("월",monthItems,delta=>commitDate(dpY,dpM+delta,selectedDay))}
-                    {wheelColumn("일",dayItems,delta=>commitDate(dpY,dpM,selectedDay+delta))}
+                    {wheelColumn("년",years,dpY,value=>`${value}년`,value=>commitDate(value,dpM,selectedDay))}
+                    {wheelColumn("월",months,dpM,value=>MONTHS[value],value=>commitDate(dpY,value,selectedDay))}
+                    {wheelColumn("일",days,selectedDay,value=>`${value}일`,(value,close)=>commitDate(dpY,dpM,value,close),true)}
                   </div>
                   <div style={{marginTop:12,borderTop:`1px solid ${FC.fieldBorder}`,paddingTop:11,display:"flex",justifyContent:"center"}}>
                     <button onClick={()=>{setDpY(today.getFullYear());setDpM(today.getMonth());const y=today.getFullYear();const mo=String(today.getMonth()+1).padStart(2,"0");const da=String(today.getDate()).padStart(2,"0");setVal(`${y}-${mo}-${da}`);setDpOpen(false)}}

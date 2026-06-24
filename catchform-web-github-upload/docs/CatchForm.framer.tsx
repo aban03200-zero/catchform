@@ -1534,25 +1534,50 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     clearErr(f.id)
                     if (close) setDpOpen(p => ({ ...p, [f.id]: false }))
                 }
-                const wheelOffsets = [-2, -1, 0, 1, 2]
-                const wheelColumn = (label: string, items: { key: string; label: string; active: boolean; disabled: boolean; onClick: () => void }[], onWheel: (delta: number) => void) => (
+                const WHEEL_ITEM_HEIGHT = 42
+                const WHEEL_VISIBLE_ITEMS = 5
+                const WHEEL_SPACER_HEIGHT = WHEEL_ITEM_HEIGHT * 2
+                const years = Array.from({ length: maxYear - minYear + 1 }, (_, idx) => minYear + idx)
+                const months = Array.from({ length: 12 }, (_, idx) => idx)
+                const days = Array.from({ length: daysInMonth }, (_, idx) => idx + 1)
+                const wheelColumn = (label: string, values: number[], activeValue: number, format: (value: number) => string, onSelect: (value: number, close?: boolean) => void, closeOnClick = false) => {
+                    const activeIndex = Math.max(0, values.indexOf(activeValue))
+                    const syncKey = `${values.length}-${activeIndex}`
+                    const handleScrollEnd = (el: HTMLDivElement) => {
+                        const idx = Math.min(values.length - 1, Math.max(0, Math.round(el.scrollTop / WHEEL_ITEM_HEIGHT)))
+                        const nextValue = values[idx]
+                        el.dataset.userScrolling = "0"
+                        el.dataset.syncKey = `${values.length}-${idx}`
+                        el.scrollTo({ top: idx * WHEEL_ITEM_HEIGHT, behavior: "smooth" })
+                        if (typeof nextValue === "number" && nextValue !== activeValue) onSelect(nextValue, false)
+                    }
+                    return (
                     <div>
                         <div style={{ fontSize: 11, fontWeight: 600, color: FC.t3, textAlign: "center", marginBottom: 6, fontFamily: FONT }}>{label}</div>
-                        <div onWheel={e => { e.preventDefault(); onWheel(e.deltaY > 0 ? 1 : -1) }}
-                            style={{ position: "relative", borderRadius: 18, border: `1px solid ${FC.fieldBorder}`, background: FC.fieldBg, padding: "8px 7px", boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.02)", overflow: "hidden" }}>
-                            {items.map((item, idx) => {
-                                const distance = Math.abs(idx - 2)
-                                return <button key={item.key} onClick={item.disabled ? undefined : item.onClick} disabled={item.disabled}
-                                    style={{ width: "100%", height: 42, border: "none", borderTop: idx === 2 ? `1px solid ${FC.fieldBorder}` : "1px solid transparent", borderBottom: idx === 2 ? `1px solid ${FC.fieldBorder}` : "1px solid transparent", borderRadius: idx === 2 ? 10 : 0, background: item.active ? accentBg + "12" : "transparent", color: item.disabled ? "transparent" : item.active ? FC.t1 : distance === 1 ? FC.t2 : FC.t3, fontFamily: FONT, fontSize: item.active ? 18 : distance === 1 ? 15 : 12.5, fontWeight: item.active ? 700 : 500, cursor: item.disabled ? "default" : "pointer", transition: "all .12s ease" }}>
-                                    {item.label || "-"}
+                        <div ref={node => { if (node && node.dataset.syncKey !== syncKey && node.dataset.userScrolling !== "1") { node.dataset.syncKey = syncKey; node.scrollTop = activeIndex * WHEEL_ITEM_HEIGHT } }}
+                            onWheelCapture={e => e.stopPropagation()}
+                            onWheel={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.scrollTop += e.deltaY }}
+                            onScroll={e => {
+                                const el = e.currentTarget
+                                el.dataset.userScrolling = "1"
+                                window.clearTimeout(Number(el.dataset.scrollTimer || 0))
+                                el.dataset.scrollTimer = String(window.setTimeout(() => handleScrollEnd(el), 90))
+                            }}
+                            style={{ position: "relative", height: WHEEL_ITEM_HEIGHT * WHEEL_VISIBLE_ITEMS, borderRadius: 18, border: `1px solid ${FC.fieldBorder}`, background: FC.fieldBg, padding: "0 7px", boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.02)", overflowY: "auto", overscrollBehavior: "contain", touchAction: "pan-y", scrollSnapType: "y mandatory", WebkitOverflowScrolling: "touch" }}>
+                            <div style={{ height: WHEEL_SPACER_HEIGHT, flexShrink: 0 }} />
+                            {values.map((value, idx) => {
+                                const isActive = value === activeValue
+                                const distance = Math.abs(idx - activeIndex)
+                                return <button key={value} onClick={() => onSelect(value, closeOnClick)}
+                                    style={{ width: "100%", height: WHEEL_ITEM_HEIGHT, scrollSnapAlign: "center", border: "none", borderTop: isActive ? `1px solid ${FC.fieldBorder}` : "1px solid transparent", borderBottom: isActive ? `1px solid ${FC.fieldBorder}` : "1px solid transparent", borderRadius: isActive ? 10 : 0, background: isActive ? accentBg + "12" : "transparent", color: isActive ? FC.t1 : distance === 1 ? FC.t2 : FC.t3, fontFamily: FONT, fontSize: isActive ? 18 : distance === 1 ? 15 : 12.5, fontWeight: isActive ? 700 : 500, cursor: "pointer", transition: "all .12s ease" }}>
+                                    {format(value)}
                                 </button>
                             })}
+                            <div style={{ height: WHEEL_SPACER_HEIGHT, flexShrink: 0 }} />
                         </div>
                     </div>
-                )
-                const yearItems = wheelOffsets.map(offset => { const year = dy + offset; const disabled = year < minYear || year > maxYear; return { key: `year-${offset}`, label: disabled ? "" : `${year}년`, active: offset === 0, disabled, onClick: () => commitDate(year, dm, selectedDay) } })
-                const monthItems = wheelOffsets.map(offset => { const month = dm + offset; const disabled = month < 0 || month > 11; return { key: `month-${offset}`, label: disabled ? "" : MONTHS[month], active: offset === 0, disabled, onClick: () => commitDate(dy, month, selectedDay) } })
-                const dayItems = wheelOffsets.map(offset => { const day = selectedDay + offset; const disabled = day < 1 || day > daysInMonth; return { key: `day-${offset}`, label: disabled ? "" : `${day}일`, active: offset === 0, disabled, onClick: () => commitDate(dy, dm, day, true) } })
+                    )
+                }
                 return <div style={{ position: "relative", display: "inline-block" }}>
                     <div onClick={() => setDpOpen(p => ({ ...p, [f.id]: !p[f.id] }))} style={{ height: fh, display: "inline-flex", alignItems: "center", gap: 10, padding: "0 14px", borderRadius: fr, border: `1px solid ${open ? accentBg : fieldErr ? FC.red : FC.fieldBorder}`, background: FC.fieldBg, cursor: "pointer", userSelect: "none", transition: "border .15s" }}>
                         <span style={{ fontSize: 13, color: displayVal ? FC.t1 : FC.t3, fontFamily: FONT }}>{displayVal || "날짜를 선택해주세요"}</span>
@@ -1560,9 +1585,9 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     </div>
                     {open && <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 200, background: FC.bg || "#fff", border: `1px solid ${FC.fieldBorder}`, borderRadius: 20, padding: 14, boxShadow: "0 12px 36px rgba(0,0,0,0.18)", width: 342 }}>
                         <div style={{ display: "grid", gridTemplateColumns: "1.15fr 0.82fr 0.82fr", gap: 10 }}>
-                            {wheelColumn("년", yearItems, delta => commitDate(dy + delta, dm, selectedDay))}
-                            {wheelColumn("월", monthItems, delta => commitDate(dy, dm + delta, selectedDay))}
-                            {wheelColumn("일", dayItems, delta => commitDate(dy, dm, selectedDay + delta))}
+                            {wheelColumn("년", years, dy, value => `${value}년`, value => commitDate(value, dm, selectedDay))}
+                            {wheelColumn("월", months, dm, value => MONTHS[value], value => commitDate(dy, value, selectedDay))}
+                            {wheelColumn("일", days, selectedDay, value => `${value}일`, (value, close) => commitDate(dy, dm, value, close), true)}
                         </div>
                         <div style={{ marginTop: 12, borderTop: `1px solid ${FC.fieldBorder}`, paddingTop: 11, display: "flex", justifyContent: "center", gap: 8 }}>
                             <button onClick={() => { const t = today; setVal(f.id, `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`); setDpOpen(p => ({ ...p, [f.id]: false })) }}
