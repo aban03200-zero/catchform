@@ -5411,6 +5411,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	    const accent=chartBlue, accentSoft=A.blue2
 	    const rows=Array.isArray(analyticsRows)?analyticsRows:[]
 	    const events=Array.isArray(analyticsEvents)?analyticsEvents:[]
+	    const rawEvents=Array.isArray(analyticsTrashEvents)?analyticsTrashEvents:[]
 	    const trashRecords=activeAnalyticsTrashRecords()
 	    const eventMeta=(e:any)=>{try{return typeof e?.metadata==="string"?JSON.parse(e.metadata||"{}"):(e?.metadata||{})}catch{return{}}}
 	    const fields=getAnalyticsFields()
@@ -5678,21 +5679,28 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const detailQrLinks=(cfg.integrations?.qrLinks||[]).filter(link=>link.type==="detail")
     const detailQrUrls=new Set(detailQrLinks.map(link=>normalizeQrUrl(link.url)).filter(Boolean))
     const detailQrCodes=new Set(detailQrLinks.map(link=>String(link.code||"")).filter(Boolean))
-    const qrEventScope=(e:any):"form"|"detail"=>{
+    const qrEventSource=(rawEvents.length?rawEvents:events).filter((event:any)=>!analyticsTrashTypes.includes(event.event_type))
+    const qrEventScope=(e:any):"form"|"detail"|"unknown"=>{
       const m=eventMeta(e)
       const explicitType=String(m.qr_type||m.type||"").toLowerCase()
+      if(explicitType==="form")return"form"
       if(explicitType==="detail"||String(m.d||"")==="1")return"detail"
       const target=normalizeQrUrl(m.qr_target||m.target_url||m.to||m.url)
       const code=String(m.qr_code||m.code||m.q||"")
       if((target&&detailQrUrls.has(target))||(code&&detailQrCodes.has(code)))return"detail"
-      return String(m.qr_type||"").toLowerCase()==="detail"||String(m.d||"")==="1"?"detail":"form"
+      if(e.event_type==="qr_scan")return"unknown"
+      return"form"
     }
-    const allQrEvents=events.filter(isQrEvent)
+    const allQrEvents=qrEventSource.filter(isQrEvent)
     const hasDetailQr=detailQrLinks.length>0||allQrEvents.some((e:any)=>qrEventScope(e)==="detail")
     const activeQrScope=hasDetailQr?qrAnalyticsScope:"form"
-    const qrEvents=allQrEvents.filter((e:any)=>qrEventScope(e)===activeQrScope)
-    const qrScanEvents=events.filter((e:any)=>qrEventScope(e)===activeQrScope&&(e.event_type==="qr_scan"||(isQrEvent(e)&&e.event_type==="started"&&!eventMeta(e).cf_qr_redirected)))
-    const qrVisitEvents=events.filter((e:any)=>qrEventScope(e)===activeQrScope&&isQrEvent(e)&&["started","page_view","completed"].includes(e.event_type))
+    const matchesQrScope=(e:any)=>{
+      const scope=qrEventScope(e)
+      return scope===activeQrScope||scope==="unknown"
+    }
+    const qrEvents=allQrEvents.filter((e:any)=>matchesQrScope(e))
+    const qrScanEvents=qrEventSource.filter((e:any)=>matchesQrScope(e)&&(e.event_type==="qr_scan"||(isQrEvent(e)&&e.event_type==="started"&&!eventMeta(e).cf_qr_redirected)))
+    const qrVisitEvents=qrEventSource.filter((e:any)=>matchesQrScope(e)&&isQrEvent(e)&&["started","page_view","completed"].includes(e.event_type))
     const qrScanTotal=qrScanEvents.length
     const qrUniqueScans=new Set(qrScanEvents.map((e:any)=>e.session_id||e.id)).size
     const qrVisits=activeQrScope==="detail"?qrScanTotal:(new Set(qrVisitEvents.map((e:any)=>e.session_id||e.id)).size||qrUniqueScans)
