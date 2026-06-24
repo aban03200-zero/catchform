@@ -4816,21 +4816,24 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 }
                 return <div>
                   <div style={{fontSize:11,fontWeight:600,color:FC.t3,textAlign:"center" as const,marginBottom:6,fontFamily:FONT}}>{label}</div>
-                  <div ref={node=>{if(node&&node.dataset.syncKey!==syncKey&&node.dataset.userScrolling!=="1"){node.dataset.syncKey=syncKey;node.scrollTop=activeIndex*WHEEL_ITEM_HEIGHT}}}
-                    onWheelCapture={e=>e.stopPropagation()}
-                    onWheel={e=>{e.preventDefault();e.stopPropagation();e.currentTarget.scrollTop+=e.deltaY}}
-                    onScroll={e=>{const el=e.currentTarget;el.dataset.userScrolling="1";window.clearTimeout(Number(el.dataset.scrollTimer||0));el.dataset.scrollTimer=String(window.setTimeout(()=>handleScrollEnd(el),90))}}
-                    style={{position:"relative" as const,height:WHEEL_ITEM_HEIGHT*WHEEL_VISIBLE_ITEMS,borderRadius:18,border:`1px solid ${FC.fieldBorder}`,background:FC.fieldBg,padding:"0 7px",boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.02)",overflowY:"auto" as const,overscrollBehavior:"contain",touchAction:"pan-y" as const,scrollSnapType:"y mandatory" as const,WebkitOverflowScrolling:"touch"}}>
-                    <div style={{height:WHEEL_SPACER_HEIGHT,flexShrink:0}}/>
-                    {values.map((value,idx)=>{
-                      const isActive=value===activeValue
-                      const distance=Math.abs(idx-activeIndex)
-                      return <button key={value} onClick={()=>onSelect(value,closeOnClick)}
-                        style={{width:"100%",height:WHEEL_ITEM_HEIGHT,scrollSnapAlign:"center" as const,border:"none",borderTop:isActive?`1px solid ${FC.fieldBorder}`:"1px solid transparent",borderBottom:isActive?`1px solid ${FC.fieldBorder}`:"1px solid transparent",borderRadius:isActive?10:0,background:isActive?accentC+"12":"transparent",color:isActive?FC.t1:distance===1?FC.t2:FC.t3,fontFamily:FONT,fontSize:isActive?18:distance===1?15:12.5,fontWeight:isActive?700:500,cursor:"pointer",transition:"all .12s ease"}}>
-                        {format(value)}
-                      </button>
-                    })}
-                    <div style={{height:WHEEL_SPACER_HEIGHT,flexShrink:0}}/>
+                  <div style={{position:"relative" as const,height:WHEEL_ITEM_HEIGHT*WHEEL_VISIBLE_ITEMS,borderRadius:18,border:`1px solid ${FC.fieldBorder}`,background:FC.fieldBg,boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.02)",overflow:"hidden"}}>
+                    <div style={{position:"absolute" as const,left:7,right:7,top:WHEEL_SPACER_HEIGHT,height:WHEEL_ITEM_HEIGHT,borderTop:`1px solid ${FC.fieldBorder}`,borderBottom:`1px solid ${FC.fieldBorder}`,borderRadius:10,background:accentC+"12",pointerEvents:"none" as const,zIndex:1}}/>
+                    <div className="cf-date-wheel-list" ref={node=>{if(node&&node.dataset.syncKey!==syncKey&&node.dataset.userScrolling!=="1"){node.dataset.syncKey=syncKey;node.scrollTop=activeIndex*WHEEL_ITEM_HEIGHT}}}
+                      onWheelCapture={e=>e.stopPropagation()}
+                      onWheel={e=>{e.preventDefault();e.stopPropagation();e.currentTarget.scrollTop+=e.deltaY}}
+                      onScroll={e=>{const el=e.currentTarget;el.dataset.userScrolling="1";window.clearTimeout(Number(el.dataset.scrollTimer||0));el.dataset.scrollTimer=String(window.setTimeout(()=>handleScrollEnd(el),90))}}
+                      style={{position:"relative" as const,zIndex:2,height:"100%",padding:"0 7px",boxSizing:"border-box" as const,overflowY:"auto" as const,overscrollBehavior:"contain",touchAction:"pan-y" as const,scrollSnapType:"y mandatory" as const,WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
+                      <div style={{height:WHEEL_SPACER_HEIGHT,flexShrink:0}}/>
+                      {values.map((value,idx)=>{
+                        const isActive=value===activeValue
+                        const distance=Math.abs(idx-activeIndex)
+                        return <button key={value} onClick={()=>onSelect(value,closeOnClick)}
+                          style={{width:"100%",height:WHEEL_ITEM_HEIGHT,scrollSnapAlign:"center" as const,border:"none",background:"transparent",color:isActive?FC.t1:distance===1?FC.t2:FC.t3,fontFamily:FONT,fontSize:isActive?18:distance===1?15:12.5,fontWeight:isActive?700:500,cursor:"pointer",transition:"all .12s ease"}}>
+                          {format(value)}
+                        </button>
+                      })}
+                      <div style={{height:WHEEL_SPACER_HEIGHT,flexShrink:0}}/>
+                    </div>
                   </div>
                 </div>
               }
@@ -4841,6 +4844,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,color:FC.t3}}><rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.4"/><path d="M5 2v2M11 2v2M2 7h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
                 </div>
                 {dpOpen&&<div style={{position:"absolute" as const,top:"calc(100% + 6px)",left:0,zIndex:200,background:FC.bg,border:`1px solid ${FC.fieldBorder}`,borderRadius:20,padding:"14px",boxShadow:"0 12px 36px rgba(0,0,0,0.18)",width:342}}>
+                  <style>{`.cf-date-wheel-list{scrollbar-width:none;-ms-overflow-style:none}.cf-date-wheel-list::-webkit-scrollbar{display:none;width:0;height:0}`}</style>
                   <div style={{display:"grid",gridTemplateColumns:"1.15fr 0.82fr 0.82fr",gap:10}}>
                     {wheelColumn("년",years,dpY,value=>`${value}년`,value=>commitDate(value,dpM,selectedDay))}
                     {wheelColumn("월",months,dpM,value=>MONTHS[value],value=>commitDate(dpY,value,selectedDay))}
