@@ -15,6 +15,7 @@ type BrandId = "SNIPERFACTORY"|"INSIDEOUT"|"SFACSPACE"
 type DashboardFormType = "alert"|"application"|"recruit"|"survey"|"evaluation"|"other"
 type DashboardManualStatus = ""|"draft"|"active"|"closed"
 type RecruitmentPeriodMode = "pre"|"formal"
+type ConsentPosition = "start"|"end"
 type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; alwaysOpen?:boolean; manualStatus?:DashboardManualStatus; isPublished?:boolean; publishedAt?:string; editPasswordHash?:string; formTrashedAt?:string }
 type AdminRole = ""|"admin"|"master"
 type DashboardSettingsState = {item:any;formName:string;brand:BrandId;formTypeTag:DashboardFormType;operationStart:string;operationEnd:string;alwaysOpen:boolean;manualStatus:DashboardManualStatus;currentEditPasswordDraft:string;editPasswordDraft:string;clearEditPassword:boolean}
@@ -26,7 +27,7 @@ type FormField = { id:string; type:FieldType; label:string; placeholder?:string;
 type QrLink = { code:string; url:string; label?:string; type?:string; createdAt?:string }
 type Cfg = {
   header: { imageUrl:string; programId:string; programUnlinked?:boolean; recruitmentPeriodMode?:RecruitmentPeriodMode; overline:string; title:string; educationStart:string; educationEnd:string; tuitionFree:boolean; tuitionFreeText:string; tuitionAmount:string; stipend:string; noticeEnabled:boolean; noticeIconEnabled:boolean; noticeIconText:string; noticeText:string; noticeShape?:"pill"|"rect"; applicationType?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
-  form: { fields:FormField[]; showNum:boolean; dupText:string; pages:number; pageLabels?:string[] }
+  form: { fields:FormField[]; showNum:boolean; dupText:string; pages:number; pageLabels?:string[]; consentPosition?:ConsentPosition }
   consents: { enabled:boolean; required:boolean; title:string; consentType?:string; body:string; checkLabel:string; policyUrl:string }[]
   cta: { label:string; loadLabel:string; height:number; bg:string; color:string }
   modal: { title:string; body:string; btnLabel:string; btnUrl:string; btnReplace:boolean }
@@ -502,25 +503,37 @@ function downloadQrFile(text:string,baseName:string,format:QrFileFormat){
 }
 
 // ─── Static data ──────────────────────────────────────────────────────────
-const POLICIES = [
-  {label:"개인정보처리방침", url:"https://insideout.or.kr/signup/privacy-policy"},
-  {label:"개인정보 수집 및 이용동의", url:"https://insideout.or.kr/signup/privacy-consent"},
-  {label:"서비스 이용약관", url:"https://insideout.or.kr/signup/terms"},
-  {label:"마케팅 정보 수신 동의", url:"https://insideout.or.kr/signup/marketing-consent"},
-]
 const CONSENT_TYPES = [
   {key:"privacy_policy",    label:"개인정보처리방침",        answerKey:"privacy_policy_consent",    isPrivacy:false},
   {key:"privacy_consent",   label:"개인정보 수집 및 이용동의", answerKey:"privacy_consent",            isPrivacy:true},
   {key:"terms",             label:"서비스 이용약관",          answerKey:"terms_consent",              isPrivacy:false},
   {key:"marketing_consent", label:"마케팅 정보 수신 동의",    answerKey:"marketing_consent",          isPrivacy:false},
 ]
-const CONSENT_POLICY_URL: Record<string,string> = {
-  privacy_policy: "https://insideout.or.kr/signup/privacy-policy",
-  privacy_consent: "https://insideout.or.kr/signup/privacy-consent",
-  terms: "https://insideout.or.kr/signup/terms",
-  marketing_consent: "https://insideout.or.kr/signup/marketing-consent",
+const CONSENT_POLICY_URLS: Record<string,Record<string,string>> = {
+  INSIDEOUT: {
+    privacy_policy: "https://insideout.or.kr/signup/privacy-policy",
+    privacy_consent: "https://insideout.or.kr/signup/privacy-consent",
+    terms: "https://insideout.or.kr/signup/terms",
+    marketing_consent: "https://insideout.or.kr/signup/marketing-consent",
+  },
+  SNIPERFACTORY: {
+    privacy_policy: "https://sniperfactory.com/terms/privacy",
+    privacy_consent: "https://sniperfactory.com/terms/consent",
+    terms: "https://sniperfactory.com/terms/service",
+    marketing_consent: "https://sniperfactory.com/terms/marketing",
+  },
 }
-const policyUrlForConsent = (type:string) => CONSENT_POLICY_URL[type] || ""
+const consentPolicyBrandKey = (brand:string) => String(brand||"").toUpperCase()==="SNIPERFACTORY" ? "SNIPERFACTORY" : "INSIDEOUT"
+const consentTypeFromTitle = (title:string) => {
+  const text=String(title||"")
+  if(text.includes("처리방침"))return"privacy_policy"
+  if(text.includes("수집")||text.includes("이용동의"))return"privacy_consent"
+  if(text.includes("서비스")||text.includes("약관"))return"terms"
+  if(text.includes("마케팅"))return"marketing_consent"
+  return""
+}
+const consentLabelForType = (type:string) => CONSENT_TYPES.find(c=>c.key===type)?.label || "법적 문서"
+const policyUrlForConsent = (type:string,brand?:string) => CONSENT_POLICY_URLS[consentPolicyBrandKey(brand||"")][type] || ""
 
 // ─── Default guide content ────────────────────────────────────────────────
 const DEFAULT_GUIDE_SECTIONS = [
@@ -925,18 +938,18 @@ function mergeCfg(raw:any):Cfg {
       const df=d.form
       const pages=rf.pages||df.pages||1
       if(legacyKdtFields){
-        return {showNum:rf.showNum!==false,dupText:rf.dupText||"이미 신청 내역이 있어요.",pages:legacyKdtPages,pageLabels:rf.pageLabels||KDT_FORM_PAGE_LABELS,fields:legacyKdtFields.map((f:any)=>({...f,page:f.page||1}))}
+        return {showNum:rf.showNum!==false,dupText:rf.dupText||"이미 신청 내역이 있어요.",pages:legacyKdtPages,pageLabels:rf.pageLabels||KDT_FORM_PAGE_LABELS,consentPosition:rf.consentPosition==="start"?"start":"end",fields:legacyKdtFields.map((f:any)=>({...f,page:f.page||1}))}
       }
       // backward compat: old q1/q2/q3/q4 → fields array
       if(!rf.fields&&(rf.q1Label||rf.q2Label)){
-        return {showNum:rf.showNum!==false,dupText:rf.dupText||df.dupText,pages:pages,fields:[
+        return {showNum:rf.showNum!==false,dupText:rf.dupText||df.dupText,pages:pages,consentPosition:rf.consentPosition==="start"?"start":"end",fields:[
           {id:"name",type:"text",label:rf.q1Label||"이름을 입력해주세요.",placeholder:rf.q1Ph||"예) 홍길동",required:true},
           {id:"phone",type:"phone",label:rf.q2Label||"연락 가능한 휴대폰 번호를 입력해 주세요.",placeholder:rf.q2Ph||"예) 010-1234-5678",helper:rf.q2Helper||"",required:true,dupCheck:true},
           {id:"email",type:"email",label:rf.q3Label||"이메일 주소를 입력해주세요.",placeholder:rf.q3Ph||"예) example@insideout.or.kr",helper:rf.q3Helper||"",required:true},
           {id:"referral",type:"dropdown",label:rf.q4Label||"어디서 알게 되셨나요?",placeholder:rf.q4Ph||"선택해주세요.",required:false,opts:rf.opts||DEFOPTS,etcPh:rf.etcPh||"기타 경로를 입력해주세요."},
         ]}
       }
-      return {showNum:rf.showNum!==false,dupText:rf.dupText||df.dupText,pages:rf.pages||df.pages||1,pageLabels:rf.pageLabels||df.pageLabels,fields:(rf.fields||df.fields).map((f:any)=>({...f,page:f.page||1}))}
+      return {showNum:rf.showNum!==false,dupText:rf.dupText||df.dupText,pages:rf.pages||df.pages||1,pageLabels:rf.pageLabels||df.pageLabels,consentPosition:rf.consentPosition==="start"?"start":"end",fields:(rf.fields||df.fields).map((f:any)=>({...f,page:f.page||1}))}
     })(),
     consents:Array.isArray(raw.consents)&&raw.consents.length>0?raw.consents.map((c:any)=>({...d.consents[0],...c})):(raw.consent?[{...d.consents[0],...raw.consent}]:dc(d.consents)),
     cta:{...d.cta,...(raw.cta||{})},
@@ -958,6 +971,12 @@ function applyBrandDefaults(config:Cfg,brand:string):Cfg{
   const next=dc(config)
   const normalizedBrand=canonicalBrand(brand||next.brand||"")
   next.brand=normalizedBrand||next.brand
+  next.form={...next.form,consentPosition:next.form.consentPosition==="start"?"start":"end"}
+  next.consents=(next.consents||[]).map(cs=>{
+    const consentType=cs.consentType||consentTypeFromTitle(cs.title)
+    const policyUrl=consentType?policyUrlForConsent(consentType,normalizedBrand):cs.policyUrl
+    return {...cs,...(consentType?{consentType}:{}),...(policyUrl?{policyUrl}:{}),...(!cs.title&&consentType?{title:consentLabelForType(consentType)}:{})}
+  })
   if(normalizedBrand==="SNIPERFACTORY"&&(!next.modal.btnUrl||next.modal.btnUrl==="https://insideout.or.kr/program")){
     next.modal.btnUrl="https://sniperfactory.com/program"
   }
@@ -2303,7 +2322,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setSaving(true);setSaveErr("")
     try{
       const slug=saveSlug.trim()||makeAutoSlug()
-      const cfgFinal={...cfg,brand:currentBrand,dashboard:{...(cfg.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft" as DashboardManualStatus}}
+      const cfgFinal=applyBrandDefaults({...cfg,brand:currentBrand,dashboard:{...(cfg.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft" as DashboardManualStatus}},currentBrand)
       const{data:ins,error}=await supa.from("form_configs").insert({name:saveName.trim(),slug,config:cfgFinal,brand:dbBrandValue(currentBrand)}).select("id,slug").single()
       if(error)throw error
       setShowSave(false);setSaveName("");setSaveSlug("")
@@ -2323,7 +2342,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	    }
 	    setShowUpdateModal(false)
 	    if(!silent)showToast(`"${loadedName}" 수정 완료!`)
-	    const cfgFinal={...cfg,brand:currentBrand}
+	    const cfgFinal=applyBrandDefaults({...cfg,brand:currentBrand},currentBrand)
 	    const updatedAt=new Date().toISOString()
 	    fullFormCache.current[loadedId]={updatedAt,data:{config:cfgFinal,slug:savedSlug,name:loadedName,brand:currentBrand}}
 	    supa.from("form_configs").update({config:cfgFinal,brand:dbBrandValue(currentBrand),updated_at:updatedAt}).eq("id",loadedId)
@@ -2359,7 +2378,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     try{
       const now=new Date().toISOString()
       const dashboard=cfg.dashboard||{}
-      const nextCfg:Cfg=mergeRecruitmentPeriodIntoConfig({
+      const nextCfg:Cfg=applyBrandDefaults(mergeRecruitmentPeriodIntoConfig({
         ...cfg,
         brand:currentBrand,
         dashboard:{
@@ -2368,7 +2387,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           publishedAt:dashboard.publishedAt||now,
           manualStatus:!dashboard.manualStatus||dashboard.manualStatus==="draft"?"active":dashboard.manualStatus,
         },
-      })
+      }),currentBrand)
       const{error}=await supa.from("form_configs").update({config:nextCfg,brand:dbBrandValue(currentBrand),updated_at:now}).eq("id",loadedId)
       if(error)throw error
       setCfg(nextCfg)
@@ -2383,7 +2402,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     }finally{setActionLoading("")}
   }
   async function setGoogleSheetsSyncStatus(status:"sent"|"error",message:string,patch:Partial<NonNullable<NonNullable<Cfg["integrations"]>["googleSheets"]>>={}){
-    const nextCfg={
+    const nextCfg=applyBrandDefaults({
       ...cfg,
       brand:currentBrand,
       integrations:{
@@ -2397,7 +2416,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           lastSyncMessage:message
         }
       }
-    }
+    },currentBrand)
     setCfg(nextCfg)
     if(supa&&loadedId){
       await supa.from("form_configs").update({config:nextCfg,brand:dbBrandValue(currentBrand),updated_at:new Date().toISOString()}).eq("id",loadedId)
@@ -2937,7 +2956,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setAutoSaving(false)
     autoSaveTimer.current=setTimeout(()=>{
       setAutoSaving(true)
-      const cfgFinal={...cfg,brand:currentBrand}
+      const cfgFinal=applyBrandDefaults({...cfg,brand:currentBrand},currentBrand)
       supa.from("form_configs").update({config:cfgFinal,brand:dbBrandValue(currentBrand),updated_at:new Date().toISOString()}).eq("id",loadedId)
         .then(({error})=>{
           setAutoSaving(false)
@@ -3803,6 +3822,45 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const fh=cfg.styles.fieldH||44
   const qg=cfg.styles.qGap||16
   const fr=cfg.styles.theme==="dark"?"6px":"8px"
+  const previewConsentPosition:ConsentPosition=cfg.form.consentPosition==="start"?"start":"end"
+  const previewPageShowsConsents=previewConsentPosition==="start"?(!isMultiPage||pvPage===1):(!isMultiPage||pvPage===formPages)
+  const renderPreviewConsents=()=>cfg.consents.filter(cs=>cs.enabled).map((cs,idx)=>{
+    const policyType=cs.consentType||consentTypeFromTitle(cs.title)
+    const policyUrl=policyUrlForConsent(policyType,currentBrand)||cs.policyUrl
+    return <div key={idx} style={{marginBottom:qg}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <div style={{fontSize:14,fontWeight:600,color:FC.t1,display:"flex",alignItems:"center",gap:3}}>
+          {cs.title}{cs.required&&<span style={{color:accentBg,fontSize:14,fontWeight:600,lineHeight:1}}>*</span>}
+        </div>
+        {policyUrl&&<a href={policyUrl} target="_blank" rel="noopener" style={{fontSize:12,fontWeight:600,color:accentBg,textDecoration:"none",padding:"2px 9px",borderRadius:5,border:`1px solid ${accentBg}44`,flexShrink:0}}>보기</a>}
+      </div>
+      {(()=>{
+        const lines=cs.body.split("\n")
+        const LIMIT=3
+        const needsAccordion=lines.length>LIMIT
+        const open=consentBodyOpen[idx]||false
+        const setOpen=(v:boolean|((p:boolean)=>boolean))=>setConsentBodyOpen(a=>{const n=[...a];n[idx]=typeof v==="function"?v(a[idx]||false):v;return n})
+        const visible=needsAccordion&&!open?lines.slice(0,LIMIT).join("\n"):cs.body
+        const renderBody=(text:string)=><span dangerouslySetInnerHTML={{__html:mdToHtml(text)}}/>
+        return <div style={{borderTop:`1px solid ${FC.fieldBorder}`,paddingTop:10,marginBottom:10}}>
+          <div style={{fontSize:12,color:FC.t2,lineHeight:1.7}}>
+            {renderBody(visible)}
+          </div>
+          {needsAccordion&&<button onClick={()=>setOpen(v=>!v)}
+            style={{display:"flex",alignItems:"center",gap:4,marginTop:4,background:"none",border:"none",cursor:"pointer",color:accentBg,fontFamily:FONT,fontSize:11.5,fontWeight:600,padding:0}}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{transform:open?"rotate(180deg)":"none",transition:"transform .2s"}}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            {open?"접기":"전체 보기"}
+          </button>}
+        </div>
+      })()}
+      <div style={{display:"flex",alignItems:"center",gap:9,cursor:"pointer"}} onClick={()=>setPvOk(v=>!v)}>
+        <div style={{width:16,height:16,borderRadius:4,border:`1px solid ${pvOk?accentBg+"cc":FC.fieldBorder}`,background:pvOk?accentBg+"d9":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s"}}>
+          {pvOk&&<span style={{color:"#fff",fontSize:11,fontWeight:600}}>✓</span>}
+        </div>
+        <span style={{fontSize:13,color:FC.t2}}>{cs.checkLabel}</span>
+      </div>
+    </div>
+  })
 
   // ── Nav items ─────────────────────────────────────────────────────────
   const NAV=[
@@ -4250,6 +4308,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
 
       case "consent": return <div style={pd}>
+        <F label="동의 위치" hint="폼 시작 부분 또는 제출 직전 중 어디에 동의 섹션을 표시할지 선택합니다." A={A}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            {[
+              {key:"start" as ConsentPosition,label:"맨앞"},
+              {key:"end" as ConsentPosition,label:"맨뒤"},
+            ].map(item=>{
+              const selected=(cfg.form.consentPosition||"end")===item.key
+              return <button key={item.key} onClick={()=>setCfg(p=>({...p,form:{...p.form,consentPosition:item.key}}))}
+                style={{height:36,borderRadius:A.r,border:`1.5px solid ${selected?A.blue:A.border}`,background:selected?A.blue2:A.card2,color:selected?A.blue:A.t2,fontFamily:FONT,fontSize:13,fontWeight:selected?700:500,cursor:"pointer"}}>
+                {item.label}
+              </button>
+            })}
+          </div>
+        </F>
         {cfg.consents.map((cs,idx)=><FG key={idx} A={A} last={idx===cfg.consents.length-1}>
           <div style={{display:"flex",alignItems:"center",marginBottom:12}}>
             <span style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const}}>동의 항목 {idx+1}</span>
@@ -4267,24 +4339,31 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <select value={cs.consentType||""} onChange={e=>{
               const nextType=e.target.value
               const ct=CONSENT_TYPES.find(c=>c.key===nextType)
-              const nextPolicyUrl=policyUrlForConsent(nextType)
+              const nextPolicyUrl=policyUrlForConsent(nextType,currentBrand)
               patchConsent(idx,{
                 consentType:nextType,
                 ...(ct?{title:ct.label}:{}),
-                ...(nextPolicyUrl?{policyUrl:nextPolicyUrl}:{}),
+                policyUrl:nextPolicyUrl,
               })
             }} style={{...selS}}>
               <option value="">— 동의 유형을 선택해주세요 —</option>
               {CONSENT_TYPES.map(ct=><option key={ct.key} value={ct.key}>{ct.label}</option>)}
             </select>
           </F>
-          <F label="법적 문서 선택" hint="제목 옆 '보기' 버튼으로 연결됩니다." A={A}>
-            <select value={cs.policyUrl||""} onChange={e=>uc(idx,"policyUrl",e.target.value)}
-              style={{...selS,border:`1.5px solid ${!cs.policyUrl?A.red:A.border}`}}>
-              <option value="">— 문서를 선택해주세요 —</option>
-              {POLICIES.map(p=><option key={p.url} value={p.url}>{p.label}</option>)}
-            </select>
-            {!cs.policyUrl&&<div style={{marginTop:5,fontSize:11.5,color:A.red}}>⚠ 법적 문서를 반드시 선택해주세요.</div>}
+          <F label="법적 문서" hint="동의 유형과 현재 브랜드에 맞는 문서가 자동으로 연결됩니다." A={A}>
+            {(()=>{
+              const type=cs.consentType||consentTypeFromTitle(cs.title)
+              const autoUrl=type?policyUrlForConsent(type,currentBrand):""
+              const resolvedUrl=autoUrl||cs.policyUrl||""
+              return <div style={{border:`1.5px solid ${resolvedUrl?A.border:A.red}`,borderRadius:A.r,background:A.card2,padding:"9px 10px",fontFamily:FONT}}>
+                <div style={{fontSize:12.5,fontWeight:600,color:resolvedUrl?A.t1:A.red,marginBottom:4}}>
+                  {type?consentLabelForType(type):"동의 유형을 먼저 선택해주세요"}
+                </div>
+                {resolvedUrl
+                  ? <a href={resolvedUrl} target="_blank" rel="noopener" style={{fontSize:11.5,color:A.blue,textDecoration:"none",wordBreak:"break-all"}}>{resolvedUrl}</a>
+                  : <div style={{fontSize:11.5,color:A.red}}>동의 유형 선택 시 자동으로 연결됩니다.</div>}
+              </div>
+            })()}
           </F>
           <F label="본문" A={A}>
             <ConsentBodyEditor value={cs.body} onChange={v=>uc(idx,"body",v)} A={A}/>
@@ -4434,7 +4513,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           const current=existing.find(link=>link.code===code&&link.type===type)
           if(current?.url===activeQrUrl)return
           const link:QrLink={code,url:activeQrUrl,label:qrLabel,type,createdAt:new Date().toISOString()}
-          const nextCfg:Cfg={
+          const nextCfg:Cfg=applyBrandDefaults({
             ...cfg,
             brand:currentBrand,
             integrations:{
@@ -4442,7 +4521,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               googleSheets:{...DEFAULT_GOOGLE_SHEETS,...(cfg.integrations?.googleSheets||{})},
               qrLinks:[link,...existing.filter(item=>!(item.code===code&&item.type===type))].slice(0,80),
             },
-          }
+          },currentBrand)
           setCfg(nextCfg)
           if(loadedId){
             const updatedAt=new Date().toISOString()
@@ -4659,7 +4738,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
         </div>}
         {/* Dynamic fields */}
-        {fields.map((field:any,i:number)=>{
+          {previewConsentPosition==="start"&&previewPageShowsConsents&&renderPreviewConsents()}
+          {fields.map((field:any,i:number)=>{
           // KDT section_desc
           if(field.type==="section_desc") return <div key={field.id} style={{padding:"14px 16px",borderRadius:fr2,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`}}>
             <div style={{fontSize:14,fontWeight:600,color:FC.t1,marginBottom:field.desc?6:0}}>{field.label}</div>
@@ -5022,40 +5102,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             })()}
           </div>
         })}
-        {/* Consents — 단계형 폼은 마지막 단계에만 표시 */}
-        {(!isMultiPage||pvPage===formPages)&&cfg.consents.filter(cs=>cs.enabled).map((cs,idx)=><div key={idx} style={{marginBottom:qg}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-            <div style={{fontSize:14,fontWeight:600,color:FC.t1,display:"flex",alignItems:"center",gap:3}}>
-              {cs.title}{cs.required&&<span style={{color:accentBg,fontSize:14,fontWeight:600,lineHeight:1}}>*</span>}
-            </div>
-            {cs.policyUrl&&<a href={cs.policyUrl} target="_blank" rel="noopener" style={{fontSize:12,fontWeight:600,color:accentBg,textDecoration:"none",padding:"2px 9px",borderRadius:5,border:`1px solid ${accentBg}44`,flexShrink:0}}>보기</a>}
-          </div>
-          {(()=>{
-            const lines=cs.body.split("\n")
-            const LIMIT=3
-            const needsAccordion=lines.length>LIMIT
-            const open=consentBodyOpen[idx]||false
-            const setOpen=(v:boolean|((p:boolean)=>boolean))=>setConsentBodyOpen(a=>{const n=[...a];n[idx]=typeof v==="function"?v(a[idx]||false):v;return n})
-            const visible=needsAccordion&&!open?lines.slice(0,LIMIT).join("\n"):cs.body
-            const renderBody=(text:string)=><span dangerouslySetInnerHTML={{__html:mdToHtml(text)}}/>
-            return <div style={{borderTop:`1px solid ${FC.fieldBorder}`,paddingTop:10,marginBottom:10}}>
-              <div style={{fontSize:12,color:FC.t2,lineHeight:1.7}}>
-                {renderBody(visible)}
-              </div>
-              {needsAccordion&&<button onClick={()=>setOpen(v=>!v)}
-                style={{display:"flex",alignItems:"center",gap:4,marginTop:4,background:"none",border:"none",cursor:"pointer",color:accentBg,fontFamily:FONT,fontSize:11.5,fontWeight:600,padding:0}}>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{transform:open?"rotate(180deg)":"none",transition:"transform .2s"}}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                {open?"접기":"전체 보기"}
-              </button>}
-            </div>
-          })()}
-          <div style={{display:"flex",alignItems:"center",gap:9,cursor:"pointer"}} onClick={()=>setPvOk(v=>!v)}>
-            <div style={{width:16,height:16,borderRadius:4,border:`1px solid ${pvOk?accentBg+"cc":FC.fieldBorder}`,background:pvOk?accentBg+"d9":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s"}}>
-              {pvOk&&<span style={{color:"#fff",fontSize:11,fontWeight:600}}>✓</span>}
-            </div>
-            <span style={{fontSize:13,color:FC.t2}}>{cs.checkLabel}</span>
-          </div>
-        </div>)}
+        {previewConsentPosition==="end"&&previewPageShowsConsents&&renderPreviewConsents()}
         {/* CTA — first: next only, middle: prev+next, last: submit */}
         <div style={{display:"flex",gap:10}}>
           {isMultiPage&&pvPage>1&&<button onClick={()=>setPvPage(p=>p-1)}

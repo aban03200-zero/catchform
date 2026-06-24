@@ -35,6 +35,7 @@ const publicEnv = {
 type Opt = { label: string; value: string; isEtc: boolean; nextPage?: number }
 type HelperItem = { text: string; callout?: boolean }
 type RecruitmentPeriodMode = "pre"|"formal"
+type ConsentPosition = "start"|"end"
 type FieldType = "text"|"name"|"email"|"phone"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"
 type FormField = {
     id: string; type: FieldType; label: string; placeholder?: string
@@ -59,7 +60,7 @@ type Cfg = {
         imageFit?: "contain"|"cover"; imagePosX?: number; imagePosY?: number
         imageCropX?: number; imageCropY?: number; imageCropW?: number; imageCropH?: number; imageNaturalW?: number; imageNaturalH?: number
     }
-    form: { fields: FormField[]; showNum: boolean; dupText: string; pages: number; pageLabels?: string[] }
+    form: { fields: FormField[]; showNum: boolean; dupText: string; pages: number; pageLabels?: string[]; consentPosition?: ConsentPosition }
     consents: { enabled: boolean; required: boolean; title: string; consentType?: string; body: string; checkLabel: string; policyUrl: string }[]
     cta: { label: string; loadLabel: string; height: number; bg: string; color: string }
     modal: { title: string; body: string; btnLabel: string; btnUrl: string; btnReplace: boolean }
@@ -71,6 +72,31 @@ type Cfg = {
     formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"
     kdtFields?: KdtField[]
 }
+
+const CONSENT_POLICY_URLS: Record<string,Record<string,string>> = {
+    INSIDEOUT: {
+        privacy_policy: "https://insideout.or.kr/signup/privacy-policy",
+        privacy_consent: "https://insideout.or.kr/signup/privacy-consent",
+        terms: "https://insideout.or.kr/signup/terms",
+        marketing_consent: "https://insideout.or.kr/signup/marketing-consent",
+    },
+    SNIPERFACTORY: {
+        privacy_policy: "https://sniperfactory.com/terms/privacy",
+        privacy_consent: "https://sniperfactory.com/terms/consent",
+        terms: "https://sniperfactory.com/terms/service",
+        marketing_consent: "https://sniperfactory.com/terms/marketing",
+    },
+}
+const consentPolicyBrandKey = (brand:string) => String(brand||"").toUpperCase()==="SNIPERFACTORY" ? "SNIPERFACTORY" : "INSIDEOUT"
+const consentTypeFromTitle = (title:string) => {
+    const text=String(title||"")
+    if(text.includes("처리방침"))return"privacy_policy"
+    if(text.includes("수집")||text.includes("이용동의"))return"privacy_consent"
+    if(text.includes("서비스")||text.includes("약관"))return"terms"
+    if(text.includes("마케팅"))return"marketing_consent"
+    return""
+}
+const policyUrlForConsent = (type:string,brand?:string) => CONSENT_POLICY_URLS[consentPolicyBrandKey(brand||"")][type] || ""
 
 // ─── Supabase ─────────────────────────────────────────────────────────────
 let _sb: SupabaseClient | null = null
@@ -161,6 +187,7 @@ function normalizeRuntimeConfig(config: Cfg): Cfg {
             dupText: config.form?.dupText || "",
             pages,
             pageLabels: config.form?.pageLabels || ["기본 정보", "상세 정보", "자격 요건 및 동의"],
+            consentPosition: config.form?.consentPosition === "start" ? "start" : "end",
             fields: legacyFields.map((field: any) => ({ ...field, page: field.page || 1 })),
         },
         formType: "blank",
@@ -532,6 +559,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         ? Math.max(3, ...(cfg.kdtFields || []).map(f => f.page || 1))
         : (cfg.form.pages || 1)
     const isMultiPage = formPages > 1
+    const consentPosition: ConsentPosition = cfg.form.consentPosition === "start" ? "start" : "end"
 
     // State
     const [page, setPage] = React.useState(1)
@@ -881,6 +909,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             : cfg.form.fields
 
     const isLastPage = page === formPages
+    const currentPageShowsConsents = consentPosition === "start" ? (!isMultiPage || page === 1) : (!isMultiPage || isLastPage)
 
     React.useEffect(() => {
         draftLoadedRef.current = false
@@ -1083,14 +1112,14 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 if (!(vals[f.id] || "").trim()) return false
             }
         }
-        if (isLastPage) {
+        if (currentPageShowsConsents) {
             const enabledConsents = cfg.consents.filter(c => c.enabled && c.required)
             for (let i = 0; i < enabledConsents.length; i++) {
                 if (!consentOk[i]) return false
             }
         }
         return true
-    }, [currentFields, vals, checked, consentOk, isLastPage, fileObjects])
+    }, [currentFields, vals, checked, consentOk, currentPageShowsConsents, fileObjects])
 
     const inp: React.CSSProperties = {
         width: "100%", height: fh, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`,
@@ -1848,6 +1877,39 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     }
 
     const enabledConsents = cfg.consents.filter(c => c.enabled)
+    const showConsentsAtStart = consentPosition === "start" && currentPageShowsConsents
+    const showConsentsAtEnd = consentPosition === "end" && currentPageShowsConsents
+    const renderConsents = () => enabledConsents.map((cs, idx) => {
+        const lines = cs.body.split("\n")
+        const LIMIT = 3
+        const open = consentOpen[idx] || false
+        const needsAccordion = lines.length > LIMIT
+        const visible = needsAccordion && !open ? cs.body : cs.body
+        const type = (cs as any).consentType || consentTypeFromTitle(cs.title)
+        const policyUrl = policyUrlForConsent(type, cfg.brand) || cs.policyUrl
+        return <div key={idx} style={{ marginBottom: qg }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <div style={{ fontSize: 14, fontWeight:600, color: FC.t1, display: "flex", alignItems: "center", gap: 3 }}>
+                    {cs.title}{cs.required && <span style={{ color: accentBg, fontSize: 14, fontWeight:600 }}>*</span>}
+                </div>
+                {policyUrl && <a href={policyUrl} target="_blank" rel="noopener" style={{ fontSize: 12, fontWeight:600, color: accentBg, textDecoration: "none", padding: "2px 9px", borderRadius: 5, border: `1px solid ${accentBg}44`, flexShrink: 0 }}>보기</a>}
+            </div>
+            <div style={{ borderTop: `1px solid ${FC.fieldBorder}`, paddingTop: 10, marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: FC.t2, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: mdToHtml(visible) }} />
+                {needsAccordion && <button onClick={() => setConsentOpen(p => { const n = [...p]; n[idx] = !n[idx]; return n })} style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4, background: "none", border: "none", cursor: "pointer", color: accentBg, fontFamily: FONT, fontSize: 11.5, fontWeight: 600, padding: 0 }}>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .2s" }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    {open ? "접기" : "전체 보기"}
+                </button>}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer" }} onClick={() => setConsentOk(p => { const n = [...p]; n[idx] = !n[idx]; return n })}>
+                <div style={{ width: 16, height: 16, borderRadius: 4, border: `1px solid ${consentOk[idx] ? accentBg + "cc" : FC.fieldBorder}`, background: consentOk[idx] ? accentBg + "d9" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .15s" }}>
+                    {consentOk[idx] && <span style={{ color: "#fff", fontSize: 11, fontWeight:600 }}>✓</span>}
+                </div>
+                <span style={{ fontSize: 13, color: FC.t2 }}>{cs.checkLabel}</span>
+            </div>
+            {errors[`consent_${idx}`] && <div style={{ fontSize: 12, color: FC.red, marginTop: 5, fontFamily: FONT }}>{errors[`consent_${idx}`]}</div>}
+        </div>
+    })
 
     // Apply background to entire page
     React.useEffect(() => {
@@ -1967,39 +2029,12 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 </div>
             </div>}
 
+            {showConsentsAtStart && renderConsents()}
+
             {/* Fields */}
             {currentFields.map((field, i) => renderField(field, i))}
 
-            {/* Consents (last page or single page) */}
-            {(!isMultiPage || isLastPage) && enabledConsents.map((cs, idx) => {
-                const lines = cs.body.split("\n")
-                const LIMIT = 3
-                const open = consentOpen[idx] || false
-                const needsAccordion = lines.length > LIMIT
-                const visible = needsAccordion && !open ? cs.body : cs.body
-                return <div key={idx} style={{ marginBottom: qg }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                        <div style={{ fontSize: 14, fontWeight:600, color: FC.t1, display: "flex", alignItems: "center", gap: 3 }}>
-                            {cs.title}{cs.required && <span style={{ color: accentBg, fontSize: 14, fontWeight:600 }}>*</span>}
-                        </div>
-                        {cs.policyUrl && <a href={cs.policyUrl} target="_blank" rel="noopener" style={{ fontSize: 12, fontWeight:600, color: accentBg, textDecoration: "none", padding: "2px 9px", borderRadius: 5, border: `1px solid ${accentBg}44`, flexShrink: 0 }}>보기</a>}
-                    </div>
-                    <div style={{ borderTop: `1px solid ${FC.fieldBorder}`, paddingTop: 10, marginBottom: 10 }}>
-                        <div style={{ fontSize: 12, color: FC.t2, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: mdToHtml(visible) }} />
-                        {needsAccordion && <button onClick={() => setConsentOpen(p => { const n = [...p]; n[idx] = !n[idx]; return n })} style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4, background: "none", border: "none", cursor: "pointer", color: accentBg, fontFamily: FONT, fontSize: 11.5, fontWeight: 600, padding: 0 }}>
-                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .2s" }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                            {open ? "접기" : "전체 보기"}
-                        </button>}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer" }} onClick={() => setConsentOk(p => { const n = [...p]; n[idx] = !n[idx]; return n })}>
-                        <div style={{ width: 16, height: 16, borderRadius: 4, border: `1px solid ${consentOk[idx] ? accentBg + "cc" : FC.fieldBorder}`, background: consentOk[idx] ? accentBg + "d9" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .15s" }}>
-                            {consentOk[idx] && <span style={{ color: "#fff", fontSize: 11, fontWeight:600 }}>✓</span>}
-                        </div>
-                        <span style={{ fontSize: 13, color: FC.t2 }}>{cs.checkLabel}</span>
-                    </div>
-                    {errors[`consent_${idx}`] && <div style={{ fontSize: 12, color: FC.red, marginTop: 5, fontFamily: FONT }}>{errors[`consent_${idx}`]}</div>}
-                </div>
-            })}
+            {showConsentsAtEnd && renderConsents()}
 
             {dupErr && !showDupModal && <div style={{ fontSize: 13, color: FC.red, textAlign: "center", marginBottom: 12, fontFamily: FONT }}>{dupErr}</div>}
 
