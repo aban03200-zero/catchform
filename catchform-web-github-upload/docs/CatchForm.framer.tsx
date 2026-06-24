@@ -1519,59 +1519,52 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 const dm = dpM[f.id] ?? (parsed ? parsed.getMonth() : today.getMonth())
                 const open = dpOpen[f.id] || false
                 const displayVal = parsed ? `${parsed.getFullYear()}년 ${parsed.getMonth() + 1}월 ${parsed.getDate()}일` : ""
-                const DAYS = ["일", "월", "화", "수", "목", "금", "토"]
                 const MONTHS = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
-                const yearOptions = Array.from({ length: 121 }, (_, idx) => today.getFullYear() - 80 + idx)
-                const pickerSelectStyle: React.CSSProperties = { height: 30, border: `1px solid ${FC.fieldBorder}`, borderRadius: 8, background: FC.fieldBg, color: FC.t1, fontFamily: FONT, fontSize: 12.5, fontWeight: 600, padding: "0 8px", outline: "none", cursor: "pointer" }
-                const firstDay = new Date(dy, dm, 1).getDay()
+                const minYear = today.getFullYear() - 80
+                const maxYear = today.getFullYear() + 40
                 const daysInMonth = new Date(dy, dm + 1, 0).getDate()
-                const cells: Array<number | null> = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)]
-                const selectDate = (d: number) => {
-                    const dt = new Date(dy, dm, d)
-                    setVal(f.id, `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`)
-                    setDpOpen(p => ({ ...p, [f.id]: false }))
+                const selectedDay = Math.min(Math.max(1, parsed ? parsed.getDate() : today.getDate()), daysInMonth)
+                const commitDate = (year: number, month: number, day: number, close = false) => {
+                    const safeYear = Math.min(maxYear, Math.max(minYear, year))
+                    const safeMonth = Math.min(11, Math.max(0, month))
+                    const safeDay = Math.min(new Date(safeYear, safeMonth + 1, 0).getDate(), Math.max(1, day))
+                    setDpY(p => ({ ...p, [f.id]: safeYear }))
+                    setDpM(p => ({ ...p, [f.id]: safeMonth }))
+                    setVal(f.id, `${safeYear}-${String(safeMonth + 1).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`)
                     clearErr(f.id)
+                    if (close) setDpOpen(p => ({ ...p, [f.id]: false }))
                 }
-                const prevM = () => { if (dm === 0) { setDpY(p => ({ ...p, [f.id]: dy - 1 })); setDpM(p => ({ ...p, [f.id]: 11 })) } else setDpM(p => ({ ...p, [f.id]: dm - 1 })) }
-                const nextM = () => { if (dm === 11) { setDpY(p => ({ ...p, [f.id]: dy + 1 })); setDpM(p => ({ ...p, [f.id]: 0 })) } else setDpM(p => ({ ...p, [f.id]: dm + 1 })) }
+                const wheelOffsets = [-2, -1, 0, 1, 2]
+                const wheelColumn = (label: string, items: { key: string; label: string; active: boolean; disabled: boolean; onClick: () => void }[], onWheel: (delta: number) => void) => (
+                    <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: FC.t3, textAlign: "center", marginBottom: 6, fontFamily: FONT }}>{label}</div>
+                        <div onWheel={e => { e.preventDefault(); onWheel(e.deltaY > 0 ? 1 : -1) }}
+                            style={{ position: "relative", borderRadius: 18, border: `1px solid ${FC.fieldBorder}`, background: FC.fieldBg, padding: "8px 7px", boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.02)", overflow: "hidden" }}>
+                            {items.map((item, idx) => {
+                                const distance = Math.abs(idx - 2)
+                                return <button key={item.key} onClick={item.disabled ? undefined : item.onClick} disabled={item.disabled}
+                                    style={{ width: "100%", height: 42, border: "none", borderTop: idx === 2 ? `1px solid ${FC.fieldBorder}` : "1px solid transparent", borderBottom: idx === 2 ? `1px solid ${FC.fieldBorder}` : "1px solid transparent", borderRadius: idx === 2 ? 10 : 0, background: item.active ? accentBg + "12" : "transparent", color: item.disabled ? "transparent" : item.active ? FC.t1 : distance === 1 ? FC.t2 : FC.t3, fontFamily: FONT, fontSize: item.active ? 18 : distance === 1 ? 15 : 12.5, fontWeight: item.active ? 700 : 500, cursor: item.disabled ? "default" : "pointer", transition: "all .12s ease" }}>
+                                    {item.label || "-"}
+                                </button>
+                            })}
+                        </div>
+                    </div>
+                )
+                const yearItems = wheelOffsets.map(offset => { const year = dy + offset; const disabled = year < minYear || year > maxYear; return { key: `year-${offset}`, label: disabled ? "" : `${year}년`, active: offset === 0, disabled, onClick: () => commitDate(year, dm, selectedDay) } })
+                const monthItems = wheelOffsets.map(offset => { const month = dm + offset; const disabled = month < 0 || month > 11; return { key: `month-${offset}`, label: disabled ? "" : MONTHS[month], active: offset === 0, disabled, onClick: () => commitDate(dy, month, selectedDay) } })
+                const dayItems = wheelOffsets.map(offset => { const day = selectedDay + offset; const disabled = day < 1 || day > daysInMonth; return { key: `day-${offset}`, label: disabled ? "" : `${day}일`, active: offset === 0, disabled, onClick: () => commitDate(dy, dm, day, true) } })
                 return <div style={{ position: "relative", display: "inline-block" }}>
                     <div onClick={() => setDpOpen(p => ({ ...p, [f.id]: !p[f.id] }))} style={{ height: fh, display: "inline-flex", alignItems: "center", gap: 10, padding: "0 14px", borderRadius: fr, border: `1px solid ${open ? accentBg : fieldErr ? FC.red : FC.fieldBorder}`, background: FC.fieldBg, cursor: "pointer", userSelect: "none", transition: "border .15s" }}>
                         <span style={{ fontSize: 13, color: displayVal ? FC.t1 : FC.t3, fontFamily: FONT }}>{displayVal || "날짜를 선택해주세요"}</span>
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ color: FC.t3, flexShrink: 0 }}><rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.4" /><path d="M5 2v2M11 2v2M2 7h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
                     </div>
-                    {open && <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 200, background: FC.bg || "#fff", border: `1px solid ${FC.fieldBorder}`, borderRadius: 12, padding: 16, boxShadow: "0 8px 32px rgba(0,0,0,0.16)", minWidth: 280 }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                            <button onClick={prevM} style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: FC.t2 }}>
-                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M10 4l-4 4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                            </button>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <select aria-label="년도 선택" value={dy} onChange={e => setDpY(p => ({ ...p, [f.id]: Number(e.target.value) }))} style={{ ...pickerSelectStyle, minWidth: 88 }}>
-                                    {yearOptions.map(year => <option key={year} value={year}>{year}년</option>)}
-                                </select>
-                                <select aria-label="월 선택" value={dm} onChange={e => setDpM(p => ({ ...p, [f.id]: Number(e.target.value) }))} style={{ ...pickerSelectStyle, minWidth: 72 }}>
-                                    {MONTHS.map((month, idx) => <option key={month} value={idx}>{month}</option>)}
-                                </select>
-                            </div>
-                            <button onClick={nextM} style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: FC.t2 }}>
-                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                            </button>
+                    {open && <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 200, background: FC.bg || "#fff", border: `1px solid ${FC.fieldBorder}`, borderRadius: 20, padding: 14, boxShadow: "0 12px 36px rgba(0,0,0,0.18)", width: 342 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1.15fr 0.82fr 0.82fr", gap: 10 }}>
+                            {wheelColumn("년", yearItems, delta => commitDate(dy + delta, dm, selectedDay))}
+                            {wheelColumn("월", monthItems, delta => commitDate(dy, dm + delta, selectedDay))}
+                            {wheelColumn("일", dayItems, delta => commitDate(dy, dm, selectedDay + delta))}
                         </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", marginBottom: 4 }}>
-                            {DAYS.map((d, di) => <div key={d} style={{ textAlign: "center", fontSize: 11, fontWeight: 600, color: di === 0 ? "#FF5C5C" : di === 6 ? accentBg : FC.t3, padding: "4px 0", fontFamily: FONT }}>{d}</div>)}
-                        </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2 }}>
-                            {cells.map((d, ci) => {
-                                if (!d) return <div key={"e" + ci} />
-                                const dateStr = `${dy}-${String(dm + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`
-                                const isSel = val === dateStr
-                                const isToday = today.getFullYear() === dy && today.getMonth() === dm && today.getDate() === d
-                                const dow = (firstDay + d - 1) % 7
-                                return <button key={d} onClick={() => selectDate(d)} style={{ aspectRatio: "1", borderRadius: 8, border: isToday && !isSel ? `1.5px solid ${accentBg}` : "none", background: isSel ? accentBg : "transparent", color: isSel ? "#fff" : dow === 0 ? "#FF5C5C" : dow === 6 ? accentBg : FC.t1, fontFamily: FONT, fontSize: 12.5, fontWeight: isSel ? 600 : 400, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                    {d}
-                                </button>
-                            })}
-                        </div>
-                        <div style={{ marginTop: 10, borderTop: `1px solid ${FC.fieldBorder}`, paddingTop: 10, display: "flex", justifyContent: "center", gap: 8 }}>
+                        <div style={{ marginTop: 12, borderTop: `1px solid ${FC.fieldBorder}`, paddingTop: 11, display: "flex", justifyContent: "center", gap: 8 }}>
                             <button onClick={() => { const t = today; setVal(f.id, `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`); setDpOpen(p => ({ ...p, [f.id]: false })) }}
                                 style={{ padding: "5px 20px", borderRadius: 8, border: `1px solid ${accentBg}44`, background: accentBg + "0f", color: accentBg, fontFamily: FONT, fontSize: 12.5, fontWeight:600, cursor: "pointer" }}>오늘</button>
                             {val && <button onClick={() => { setVal(f.id, ""); setDpOpen(p => ({ ...p, [f.id]: false })) }}

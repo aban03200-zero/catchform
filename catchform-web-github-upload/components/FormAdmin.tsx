@@ -4782,65 +4782,53 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               const setDpY=(y:number)=>setPvDpY(p=>({...p,[id]:y}))
               const setDpM=(m:number)=>setPvDpM(p=>({...p,[id]:m}))
               const displayVal=parsed?`${parsed.getFullYear()}년 ${parsed.getMonth()+1}월 ${parsed.getDate()}일`:""
-              const DAYS=["일","월","화","수","목","금","토"]
-              const firstDay=new Date(dpY,dpM,1).getDay()
-              const daysInMonth=new Date(dpY,dpM+1,0).getDate()
-              const cells:Array<number|null>=[...Array(firstDay).fill(null),...Array.from({length:daysInMonth},(_,i)=>i+1)]
-              const selectDate=(d:number)=>{const dt=new Date(dpY,dpM,d);const y=dt.getFullYear();const mo=String(dt.getMonth()+1).padStart(2,"0");const da=String(d).padStart(2,"0");setVal(`${y}-${mo}-${da}`);setDpOpen(false)}
-              const prevM=()=>{if(dpM===0){setDpY(dpY-1);setDpM(11)}else setDpM(dpM-1)}
-              const nextM=()=>{if(dpM===11){setDpY(dpY+1);setDpM(0)}else setDpM(dpM+1)}
               const MONTHS=["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"]
-              const yearOptions=Array.from({length:121},(_,idx)=>today.getFullYear()-80+idx)
-              const pickerSelectStyle:React.CSSProperties={height:30,border:`1px solid ${FC.fieldBorder}`,borderRadius:8,background:FC.fieldBg,color:FC.t1,fontFamily:FONT,fontSize:12.5,fontWeight:600,padding:"0 8px",outline:"none",cursor:"pointer"}
+              const minYear=today.getFullYear()-80
+              const maxYear=today.getFullYear()+40
+              const daysInMonth=new Date(dpY,dpM+1,0).getDate()
+              const selectedDay=Math.min(Math.max(1,parsed?parsed.getDate():today.getDate()),daysInMonth)
+              const commitDate=(year:number,month:number,day:number,close=false)=>{
+                const safeYear=Math.min(maxYear,Math.max(minYear,year))
+                const safeMonth=Math.min(11,Math.max(0,month))
+                const safeDay=Math.min(new Date(safeYear,safeMonth+1,0).getDate(),Math.max(1,day))
+                setDpY(safeYear)
+                setDpM(safeMonth)
+                setVal(`${safeYear}-${String(safeMonth+1).padStart(2,"0")}-${String(safeDay).padStart(2,"0")}`)
+                clearError(id)
+                if(close)setDpOpen(false)
+              }
+              const wheelOffsets=[-2,-1,0,1,2]
+              const wheelColumn=(label:string,items:{key:string;label:string;active:boolean;disabled:boolean;onClick:()=>void}[],onWheel:(delta:number)=>void)=>(
+                <div>
+                  <div style={{fontSize:11,fontWeight:600,color:FC.t3,textAlign:"center" as const,marginBottom:6,fontFamily:FONT}}>{label}</div>
+                  <div onWheel={e=>{e.preventDefault();onWheel(e.deltaY>0?1:-1)}}
+                    style={{position:"relative" as const,borderRadius:18,border:`1px solid ${FC.fieldBorder}`,background:FC.fieldBg,padding:"8px 7px",boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.02)",overflow:"hidden"}}>
+                    {items.map((item,idx)=>{
+                      const distance=Math.abs(idx-2)
+                      return <button key={item.key} onClick={item.disabled?undefined:item.onClick} disabled={item.disabled}
+                        style={{width:"100%",height:42,border:"none",borderTop:idx===2?`1px solid ${FC.fieldBorder}`:"1px solid transparent",borderBottom:idx===2?`1px solid ${FC.fieldBorder}`:"1px solid transparent",borderRadius:idx===2?10:0,background:item.active?accentC+"12":"transparent",color:item.disabled?"transparent":item.active?FC.t1:distance===1?FC.t2:FC.t3,fontFamily:FONT,fontSize:item.active?18:distance===1?15:12.5,fontWeight:item.active?700:500,cursor:item.disabled?"default":"pointer",transition:"all .12s ease"}}>
+                        {item.label||"-"}
+                      </button>
+                    })}
+                  </div>
+                </div>
+              )
+              const yearItems=wheelOffsets.map(offset=>{const year=dpY+offset;const disabled=year<minYear||year>maxYear;return{key:`year-${offset}`,label:disabled?"":`${year}년`,active:offset===0,disabled,onClick:()=>commitDate(year,dpM,selectedDay)}})
+              const monthItems=wheelOffsets.map(offset=>{const month=dpM+offset;const disabled=month<0||month>11;return{key:`month-${offset}`,label:disabled?"":MONTHS[month],active:offset===0,disabled,onClick:()=>commitDate(dpY,month,selectedDay)}})
+              const dayItems=wheelOffsets.map(offset=>{const day=selectedDay+offset;const disabled=day<1||day>daysInMonth;return{key:`day-${offset}`,label:disabled?"":`${day}일`,active:offset===0,disabled,onClick:()=>commitDate(dpY,dpM,day,true)}})
               return <div style={{position:"relative" as const,display:"inline-block"}}>
                 <div onClick={()=>setDpOpen(!dpOpen)}
                   style={{height:fh,display:"inline-flex",alignItems:"center",gap:10,padding:"0 14px",borderRadius:fr2,border:`1px solid ${dpOpen?accentC:FC.fieldBorder}`,background:FC.fieldBg,cursor:"pointer",userSelect:"none" as const,transition:"border .15s"}}>
                   <span style={{fontSize:13,color:displayVal?FC.t1:FC.t3,fontFamily:FONT}}>{displayVal||"날짜를 선택해주세요"}</span>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,color:FC.t3}}><rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.4"/><path d="M5 2v2M11 2v2M2 7h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
                 </div>
-                {dpOpen&&<div style={{position:"absolute" as const,top:"calc(100% + 6px)",left:0,zIndex:200,background:FC.bg,border:`1px solid ${FC.fieldBorder}`,borderRadius:12,padding:"16px",boxShadow:"0 8px 32px rgba(0,0,0,0.16)",minWidth:280}}>
-                  {/* 헤더 */}
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                    <button onClick={prevM} style={{width:28,height:28,borderRadius:8,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:FC.t2}}
-                      onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=FC.fieldBg} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M10 4l-4 4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <select aria-label="년도 선택" value={dpY} onChange={e=>setDpY(Number(e.target.value))} style={{...pickerSelectStyle,minWidth:88}}>
-                        {yearOptions.map(year=><option key={year} value={year}>{year}년</option>)}
-                      </select>
-                      <select aria-label="월 선택" value={dpM} onChange={e=>setDpM(Number(e.target.value))} style={{...pickerSelectStyle,minWidth:72}}>
-                        {MONTHS.map((month,idx)=><option key={month} value={idx}>{month}</option>)}
-                      </select>
-                    </div>
-                    <button onClick={nextM} style={{width:28,height:28,borderRadius:8,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:FC.t2}}
-                      onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=FC.fieldBg} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
+                {dpOpen&&<div style={{position:"absolute" as const,top:"calc(100% + 6px)",left:0,zIndex:200,background:FC.bg,border:`1px solid ${FC.fieldBorder}`,borderRadius:20,padding:"14px",boxShadow:"0 12px 36px rgba(0,0,0,0.18)",width:342}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1.15fr 0.82fr 0.82fr",gap:10}}>
+                    {wheelColumn("년",yearItems,delta=>commitDate(dpY+delta,dpM,selectedDay))}
+                    {wheelColumn("월",monthItems,delta=>commitDate(dpY,dpM+delta,selectedDay))}
+                    {wheelColumn("일",dayItems,delta=>commitDate(dpY,dpM,selectedDay+delta))}
                   </div>
-                  {/* 요일 헤더 */}
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",marginBottom:4}}>
-                    {DAYS.map((d,i)=><div key={d} style={{textAlign:"center" as const,fontSize:11,fontWeight:600,color:i===0?"#FF5C5C":i===6?accentC:FC.t3,padding:"4px 0",fontFamily:FONT}}>{d}</div>)}
-                  </div>
-                  {/* 날짜 그리드 */}
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
-                    {cells.map((d,ci)=>{
-                      if(!d) return <div key={"e"+ci}/>
-                      const dateStr=`${dpY}-${String(dpM+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`
-                      const isSelected=val===dateStr
-                      const isToday=today.getFullYear()===dpY&&today.getMonth()===dpM&&today.getDate()===d
-                      const dow=(firstDay+d-1)%7
-                      const color=isSelected?"#fff":dow===0?"#FF5C5C":dow===6?accentC:FC.t1
-                      return <button key={d} onClick={()=>selectDate(d)}
-                        style={{aspectRatio:"1",borderRadius:8,border:isToday&&!isSelected?`1.5px solid ${accentC}`:"none",background:isSelected?accentC:"transparent",color,fontFamily:FONT,fontSize:12.5,fontWeight:isSelected?600:isToday?600:400,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"background .1s"}}
-                        onMouseEnter={e=>{if(!isSelected)(e.currentTarget as HTMLElement).style.background=FC.fieldBg}}
-                        onMouseLeave={e=>{if(!isSelected)(e.currentTarget as HTMLElement).style.background="transparent"}}>
-                        {d}
-                      </button>
-                    })}
-                  </div>
-                  {/* 오늘 버튼 */}
-                  <div style={{marginTop:10,borderTop:`1px solid ${FC.fieldBorder}`,paddingTop:10,display:"flex",justifyContent:"center"}}>
+                  <div style={{marginTop:12,borderTop:`1px solid ${FC.fieldBorder}`,paddingTop:11,display:"flex",justifyContent:"center"}}>
                     <button onClick={()=>{setDpY(today.getFullYear());setDpM(today.getMonth());const y=today.getFullYear();const mo=String(today.getMonth()+1).padStart(2,"0");const da=String(today.getDate()).padStart(2,"0");setVal(`${y}-${mo}-${da}`);setDpOpen(false)}}
                       style={{padding:"5px 20px",borderRadius:8,border:`1px solid ${accentC}44`,background:accentC+"0f",color:accentC,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
                       오늘
