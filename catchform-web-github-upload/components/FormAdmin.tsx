@@ -2832,11 +2832,25 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         return (res.data||[]).map((row:any)=>({...row,__tableName:tableName}))
       }))
       const rows=rowResults.flat().sort((a:any,b:any)=>new Date(b.created_at||0).getTime()-new Date(a.created_at||0).getTime())
-      const ev=await supa.from("form_response_events").select("*").eq("form_id",loadedId).order("created_at",{ascending:false}).limit(5000)
-      const rawEvents=ev.error?[]:(ev.data||[])
+      const eventResults=await Promise.all([
+        supa.from("form_response_events").select("*").eq("form_id",loadedId).order("created_at",{ascending:false}).limit(5000),
+        savedSlug
+          ? supa.from("form_response_events").select("*").eq("form_slug",savedSlug).order("created_at",{ascending:false}).limit(5000)
+          : Promise.resolve({data:[],error:null} as any),
+      ])
+      const eventError=eventResults.find(result=>result.error)?.error
+      if(eventError)throw eventError
+      const rawEvents=Array.from(new Map(eventResults.flatMap(result=>result.data||[]).map((event:any)=>[event.id,event])).values())
+        .sort((a:any,b:any)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())
       const closedIds=new Set(rawEvents.filter(event=>["response_restored","analytics_scope_restored","response_purged","analytics_scope_purged"].includes(event.event_type)).map(event=>analyticsEventMeta(event).trash_event_id).filter(Boolean))
       const purgedDraftSessions=new Set(rawEvents.filter(event=>event.event_type==="response_purged").map(event=>analyticsEventMeta(event).session_id).filter(Boolean))
-      const activeScope=[...rawEvents].filter(event=>event.event_type==="analytics_scope_trashed"&&!closedIds.has(event.id)).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
+      const activeScope=[...rawEvents]
+        .filter(event=>event.event_type==="analytics_scope_trashed"&&!closedIds.has(event.id))
+        .filter(event=>{
+          const batchId=analyticsEventMeta(event).batch_id
+          return batchId&&rawEvents.some(item=>item.event_type==="response_trashed"&&!closedIds.has(item.id)&&analyticsEventMeta(item).batch_id===batchId)
+        })
+        .sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
       const trashedDraftSessions=new Set(rawEvents.filter(event=>event.event_type==="response_trashed"&&!closedIds.has(event.id)&&analyticsEventMeta(event).trash_kind==="draft"&&!purgedDraftSessions.has(analyticsEventMeta(event).session_id)).map(event=>analyticsEventMeta(event).session_id).filter(Boolean))
       const visibleEvents=rawEvents.filter(event=>!analyticsTrashTypes.includes(event.event_type))
         .filter(event=>!activeScope||new Date(event.created_at).getTime()>new Date(activeScope.created_at).getTime())
@@ -5650,12 +5664,31 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const m=eventMeta(e)
       return e.event_type==="qr_scan"||m.cf_qr==="1"||m.utm_source==="qr"||m.utm_medium==="qrcode"||String(m.source||"").toLowerCase()==="qr"
     }
+    const normalizeQrUrl=(value:any)=>{
+      const raw=String(value||"").trim()
+      if(!raw)return""
+      try{
+        const url=new URL(raw)
+        url.hash=""
+        return url.toString().replace(/\/$/,"")
+      }catch{
+        return raw.replace(/\/$/,"")
+      }
+    }
+    const detailQrLinks=(cfg.integrations?.qrLinks||[]).filter(link=>link.type==="detail")
+    const detailQrUrls=new Set(detailQrLinks.map(link=>normalizeQrUrl(link.url)).filter(Boolean))
+    const detailQrCodes=new Set(detailQrLinks.map(link=>String(link.code||"")).filter(Boolean))
     const qrEventScope=(e:any):"form"|"detail"=>{
       const m=eventMeta(e)
+      const explicitType=String(m.qr_type||m.type||"").toLowerCase()
+      if(explicitType==="detail"||String(m.d||"")==="1")return"detail"
+      const target=normalizeQrUrl(m.qr_target||m.target_url||m.to||m.url)
+      const code=String(m.qr_code||m.code||m.q||"")
+      if((target&&detailQrUrls.has(target))||(code&&detailQrCodes.has(code)))return"detail"
       return String(m.qr_type||"").toLowerCase()==="detail"||String(m.d||"")==="1"?"detail":"form"
     }
     const allQrEvents=events.filter(isQrEvent)
-    const hasDetailQr=(cfg.integrations?.qrLinks||[]).some(link=>link.type==="detail")||allQrEvents.some((e:any)=>qrEventScope(e)==="detail")
+    const hasDetailQr=detailQrLinks.length>0||allQrEvents.some((e:any)=>qrEventScope(e)==="detail")
     const activeQrScope=hasDetailQr?qrAnalyticsScope:"form"
     const qrEvents=allQrEvents.filter((e:any)=>qrEventScope(e)===activeQrScope)
     const qrScanEvents=events.filter((e:any)=>qrEventScope(e)===activeQrScope&&(e.event_type==="qr_scan"||(isQrEvent(e)&&e.event_type==="started"&&!eventMeta(e).cf_qr_redirected)))
