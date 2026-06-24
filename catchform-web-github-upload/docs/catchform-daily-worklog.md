@@ -25,6 +25,7 @@
 - QR/분석 이벤트 조회를 `form_id`뿐 아니라 현재 `form_slug` 기준으로도 함께 가져오도록 보강하고, 응답 삭제 batch가 없는 `analytics_scope_trashed` 기록은 QR 데이터를 숨기지 않도록 변경
 - 예전 QR 이벤트처럼 `qr_type`이 비어 있어도 저장된 상세페이지 QR 링크의 target URL과 맞으면 `상세페이지 QR` 데이터로 분류되도록 보강
 - QR 데이터 탭은 응답 휴지통 필터가 적용된 이벤트가 아니라 원본 `form_response_events`에서 관리자 제어 이벤트만 제외해 집계하도록 변경하고, 유형을 판별할 수 없는 과거 `qr_scan`도 현재 QR 탭에서 보이도록 보강
+- 관리자 클라이언트 조회가 RLS 등으로 원본 QR 이벤트를 빈 배열로 받는 경우를 대비해, admin/master 세션을 확인한 뒤 서버 전용 `SUPABASE_SERVICE_ROLE_KEY`로 `form_response_events`를 다시 조회하는 fallback API 추가
 
 ### 확인 필요
 

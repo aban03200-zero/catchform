@@ -2838,9 +2838,28 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           ? supa.from("form_response_events").select("*").eq("form_slug",savedSlug).order("created_at",{ascending:false}).limit(5000)
           : Promise.resolve({data:[],error:null} as any),
       ])
-      const eventError=eventResults.find(result=>result.error)?.error
-      if(eventError)throw eventError
-      const rawEvents=Array.from(new Map(eventResults.flatMap(result=>result.data||[]).map((event:any)=>[event.id,event])).values())
+      let eventError=eventResults.find(result=>result.error)?.error
+      let rawEventRows=eventError?[]:eventResults.flatMap(result=>result.data||[])
+      if((eventError||rawEventRows.length===0)&&typeof window!=="undefined"){
+        try{
+          const {data:sessionData}=await supa.auth.getSession()
+          const token=sessionData?.session?.access_token||""
+          if(token){
+            const params=new URLSearchParams({formId:loadedId})
+            if(savedSlug)params.set("slug",savedSlug)
+            const response=await fetch(`/api/admin/form-response-events?${params.toString()}`,{headers:{authorization:`Bearer ${token}`},cache:"no-store"})
+            if(response.ok){
+              const payload=await response.json()
+              if(Array.isArray(payload?.events)){
+                rawEventRows=payload.events
+                eventError=null
+              }
+            }
+          }
+        }catch{}
+      }
+      if(eventError&&rawEventRows.length===0)throw eventError
+      const rawEvents=Array.from(new Map(rawEventRows.map((event:any)=>[event.id,event])).values())
         .sort((a:any,b:any)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())
       const closedIds=new Set(rawEvents.filter(event=>["response_restored","analytics_scope_restored","response_purged","analytics_scope_purged"].includes(event.event_type)).map(event=>analyticsEventMeta(event).trash_event_id).filter(Boolean))
       const purgedDraftSessions=new Set(rawEvents.filter(event=>event.event_type==="response_purged").map(event=>analyticsEventMeta(event).session_id).filter(Boolean))
