@@ -1608,11 +1608,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       setTimeout(()=>{setToast(null);setToastLeaving(false)},300)
     },4000)
   }
-  React.useEffect(()=>{
-    if(sec!=="qr"||qrMode!=="custom"||qrCustomUrl.trim())return
-    const savedDetailQr=(cfg.integrations?.qrLinks||[]).find(link=>link.type==="detail"&&link.url)
-    if(savedDetailQr?.url)setQrCustomUrl(savedDetailQr.url)
-  },[sec,qrMode,qrCustomUrl,cfg.integrations?.qrLinks])
+  function resetQrEditorState(nextCfg?:Cfg){
+    const savedDetailQr=(nextCfg?.integrations?.qrLinks||[]).find(link=>link.type==="detail"&&link.url)
+    setQrCustomUrl(savedDetailQr?.url||"")
+    setQrGeneratedUrl("")
+    setQrGeneratedMatrix(null)
+    setQrGeneratedError("")
+  }
 
   function renderActionLoading(){
     if(!actionLoading)return null
@@ -1832,6 +1834,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const branded=applyBrandDefaults(base,brand)
     setShowTemplateModal(false);setPendingBrand(null)
     setCfg(branded);setLoadedId("");setLoadedName("");setSavedSlug("");setCurrentBrand(brand)
+    resetQrEditorState(branded)
     setSec("header");setPvTab("form")
     setView("builder")
   }
@@ -1867,6 +1870,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       setLoadedName(full.name||item.name||"")
       setSavedSlug(full.slug||item.slug||"")
       setCurrentBrand(brand)
+      resetQrEditorState(branded)
       setSec("header");setPvTab("form")
       setView("builder")
     } catch(e){showToast("폼 불러오기 실패",false)}
@@ -1935,11 +1939,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const full=await getFullFormRow(item)
       const merged=mergeCfg(full.config||{})
       const brand=canonicalBrand(merged.brand||full.brand||item.brand||"")
-      setCfg(applyBrandDefaults(merged,brand))
+      const branded=applyBrandDefaults(merged,brand)
+      setCfg(branded)
       setLoadedId(item.id||"")
       setLoadedName(full.name||item.name||"")
       setSavedSlug(full.slug||item.slug||"")
       setCurrentBrand(brand)
+      resetQrEditorState(branded)
       setAnalyticsTab("responses")
       setAnalyticsResponseScope("submitted")
       setQrAnalyticsScope("form")
@@ -2193,9 +2199,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setActionLoading("폼을 불러오는 중이에요.")
     try{
       const full=await getFullFormRow(item||{id,name})
-      setCfg(mergeCfg(full.config))
+      const merged=mergeCfg(full.config)
+      setCfg(merged)
       setLoadedId(id);setLoadedName(name)
       if(full.slug)setSavedSlug(full.slug)
+      resetQrEditorState(merged)
       showToast(`"${name}" 불러옴`)
     } finally{setActionLoading("")}
   }
