@@ -4581,7 +4581,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         const formQrCode=savedSlug||loadedId?compactQrCode(`${savedSlug||loadedId}|form`):""
         const persistedQrLink=qrMode==="form"
           ? existingQrLinks.find(link=>link.type==="form"&&link.code===formQrCode&&link.url===activeQrUrl)
-          : existingQrLinks.find(link=>link.type==="detail"&&link.code===customQrCode&&link.url===activeQrUrl)
+          : existingQrLinks.find(link=>link.type==="detail"&&link.code===customQrCode)
+        const detailQrTargetChanged=qrMode==="custom"&&!!savedDetailQrLink&&savedDetailQrLink.url!==activeQrUrl
         const qrMatrix=qrGeneratedUrl===trackedQrUrl?qrGeneratedMatrix:(persistedQrLink?safeMakeQrMatrix(trackedQrUrl):null)
         const qrError=qrGeneratedUrl===trackedQrUrl?qrGeneratedError:""
         const ensureQrLinkSaved=async()=>{
@@ -4618,7 +4619,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             setQrGeneratedMatrix(makeQrMatrix(trackedQrUrl))
             setQrGeneratedUrl(trackedQrUrl)
             setQrGeneratedError("")
-            showToast("QR 미리보기를 생성했어요")
+            showToast(detailQrTargetChanged?"기존 QR의 이동 링크를 변경했어요":"QR 미리보기를 생성했어요")
           }catch(e){
             setQrGeneratedMatrix(null)
             setQrGeneratedUrl(trackedQrUrl)
@@ -4677,7 +4678,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               </div>
               <button onClick={onQrGenerate} disabled={!activeQrUrl}
                 style={{width:"100%",height:40,borderRadius:A.r,border:"none",background:activeQrUrl?A.blue:A.border2,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:activeQrUrl?"pointer":"not-allowed"}}>
-                {qrMatrix?"QR 다시 생성":"QR 생성"}
+                {detailQrTargetChanged?"링크 변경 저장":qrMatrix?"QR 다시 생성":"QR 생성"}
               </button>
               {qrError&&<div style={{fontSize:12,color:A.red,lineHeight:1.5,textAlign:"center" as const}}>{qrError}</div>}
               <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,width:"100%"}}>
