@@ -4565,7 +4565,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         const qrBrand=currentBrand==="SNIPERFACTORY"?"sf":currentBrand==="INSIDEOUT"?"io":currentBrand==="SFACSPACE"?"sp":""
         const compactLoadedId=compactFormId(loadedId)
         const qrFormRef=compactLoadedId?`i=${encodeURIComponent(compactLoadedId)}`:`s=${encodeURIComponent(savedSlug||"")}`
-        const customQrCode=qrMode==="custom"&&activeQrUrl?compactQrCode(`${savedSlug||loadedId||"detail"}|${activeQrUrl}`):""
+        const existingQrLinks=Array.isArray(cfg.integrations?.qrLinks)?cfg.integrations!.qrLinks!:[]
+        const savedDetailQrLink=existingQrLinks.find(link=>link.type==="detail"&&link.code)
+        const customQrCode=qrMode==="custom"&&activeQrUrl
+          ? savedDetailQrLink?.code||compactQrCode(`${loadedId||savedSlug||"detail"}|detail`)
+          :""
         const canUseShortCustomQr=!!(loadedId&&supa&&customQrCode)
         const trackedQrUrl=activeQrUrl&&trackerBase
           ? qrMode==="form"
@@ -4574,7 +4578,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               ? `${trackerBase}/qr?${qrFormRef}&q=${encodeURIComponent(customQrCode)}${qrBrand?`&b=${qrBrand}`:""}&d=1`
               : `${trackerBase}/qr?u=${encodeURIComponent(activeQrUrl)}${savedSlug?`&s=${encodeURIComponent(savedSlug)}`:""}${qrBrand?`&b=${qrBrand}`:""}&d=1`
           : activeQrUrl
-        const existingQrLinks=Array.isArray(cfg.integrations?.qrLinks)?cfg.integrations!.qrLinks!:[]
         const formQrCode=savedSlug||loadedId?compactQrCode(`${savedSlug||loadedId}|form`):""
         const persistedQrLink=qrMode==="form"
           ? existingQrLinks.find(link=>link.type==="form"&&link.code===formQrCode&&link.url===activeQrUrl)
@@ -4656,7 +4659,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   `https://`를 포함한 전체 URL을 입력하면 스캔 시 바로 열립니다.
                   </div>}
               {activeQrUrl&&<div style={{marginTop:7,fontSize:11.5,color:A.t3,lineHeight:1.5}}>
-                QR 스캔은 응답 및 분석의 QR 데이터 탭에 기록됩니다.
+                {qrMode==="custom"
+                  ?"URL을 변경해도 기존 QR 이미지는 유지되고 이동할 링크만 바뀝니다."
+                  :"QR 스캔은 응답 및 분석의 QR 데이터 탭에 기록됩니다."}
               </div>}
             </F>
           </FG>
