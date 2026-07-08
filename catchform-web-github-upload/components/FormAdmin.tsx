@@ -1564,6 +1564,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [showAddField,setShowAddField]=React.useState(false)
   const [panelDragIdx,setPanelDragIdx]=React.useState<number|null>(null)
   const [panelDragOver,setPanelDragOver]=React.useState<number|null>(null)
+  const [sectionDragIdx,setSectionDragIdx]=React.useState<number|null>(null)
+  const [sectionDragOver,setSectionDragOver]=React.useState<number|null>(null)
+  const [sectionDragInsertAt,setSectionDragInsertAt]=React.useState<number|null>(null)
   const [optionDrag,setOptionDrag]=React.useState<null|{fieldIdx:number;optIdx:number}>(null)
   const [optionDragOver,setOptionDragOver]=React.useState<null|{fieldIdx:number;optIdx:number}>(null)
   // Consent body editor states (one per consent slot, using index 0-2)
@@ -2162,8 +2165,48 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(isKdt){const kdtDef=["기본 정보","상세 정보","자격 요건 및 동의"];return(cfg.form.pageLabels||[])[p-1]||kdtDef[p-1]||`섹션${p}`}
     return(cfg.form.pageLabels||[])[p-1]||`섹션${p}`
   }
+  function pageLabelFromConfig(source:Cfg,p:number):string{
+    const kdt=source.formType==="kdt"&&!!source.kdtFields
+    if(kdt){const kdtDef=["기본 정보","상세 정보","자격 요건 및 동의"];return(source.form.pageLabels||[])[p-1]||kdtDef[p-1]||`섹션${p}`}
+    return(source.form.pageLabels||[])[p-1]||`섹션${p}`
+  }
   function setPageLabel(p:number,label:string){
     setCfg(prev=>{const arr=[...(prev.form.pageLabels||Array.from({length:formPages},(_,i)=>""))];arr[p-1]=label;return{...prev,form:{...prev.form,pageLabels:arr}}})
+  }
+  function moveSection(from:number,to:number){
+    const pageCount=formPages
+    if(from===to||from<0||to<0||from>=pageCount||to>=pageCount)return
+    const order=Array.from({length:pageCount},(_,i)=>i+1)
+    const [movedPage]=order.splice(from,1)
+    order.splice(to,0,movedPage)
+    const pageMap=new Map<number,number>()
+    order.forEach((oldPage,newIdx)=>pageMap.set(oldPage,newIdx+1))
+    const nextActivePage=pageMap.get(pvPage)||pvPage
+    setCfg(prev=>{
+      const sourceIsKdt=prev.formType==="kdt"&&!!prev.kdtFields
+      const labels=Array.from({length:pageCount},(_,i)=>pageLabelFromConfig(prev,i+1))
+      const [movedLabel]=labels.splice(from,1)
+      labels.splice(to,0,movedLabel)
+      const reorderPageItems=<T extends {page?:number}>(items:T[])=>{
+        const grouped=new Map<number,T[]>()
+        const outside:T[]=[]
+        items.forEach(item=>{
+          const oldPage=Number(item.page||1)
+          const nextPage=pageMap.get(oldPage)
+          if(!nextPage){outside.push(item);return}
+          const nextItem={...item,page:nextPage}
+          grouped.set(oldPage,[...(grouped.get(oldPage)||[]),nextItem])
+        })
+        return [...order.flatMap(oldPage=>grouped.get(oldPage)||[]),...outside]
+      }
+      const nextForm={...prev.form,pages:Math.max(prev.form.pages||1,pageCount),pageLabels:labels}
+      if(sourceIsKdt)return{...prev,form:nextForm,kdtFields:reorderPageItems(prev.kdtFields||[])}
+      return{...prev,form:{...nextForm,fields:reorderPageItems(prev.form.fields||[])}}
+    })
+    setPvPage(nextActivePage)
+    setEditIdx(null)
+    setSelectedFieldId(null)
+    setReplaceId(null)
   }
   function moveActiveField(from:number,to:number){if(isKdt){const kf=cfg.kdtFields||[];const pageFields=kf.filter(f=>f.page===pvPage);const gFrom=kf.indexOf(pageFields[from]);const gTo=kf.indexOf(pageFields[to]);moveKdtField(gFrom,gTo)}else if(isMultiPage){const pageF=cfg.form.fields.filter(f=>(f.page||1)===pvPage);const gFrom=cfg.form.fields.indexOf(pageF[from]);const gTo=cfg.form.fields.indexOf(pageF[to]);moveField(gFrom,gTo)}else{moveField(from,to)}}
   function reorderActiveFieldOption(fieldIdx:number,from:number,to:number){
@@ -4112,11 +4155,56 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               </button>
             </div>
             {/* 섹션 리스트 */}
-            {Array.from({length:formPages},(_,i)=>i+1).map(p=>{
+            {Array.from({length:formPages},(_,i)=>i+1).map((p,i)=>{
               const isActive=pvPage===p
-              return <div key={p} style={{borderBottom:p<formPages?`1px solid ${A.border}`:"none"}}>
+              const isDragging=sectionDragIdx===i
+              const isDragOver=sectionDragOver===i
+              return <div key={p}
+                onDragOver={e=>{
+                  if(sectionDragIdx===null)return
+                  e.preventDefault()
+                  setSectionDragOver(i)
+                  const rect=(e.currentTarget as HTMLElement).getBoundingClientRect()
+                  setSectionDragInsertAt(e.clientY<rect.top+rect.height/2?i:i+1)
+                }}
+                onDrop={e=>{
+                  e.preventDefault()
+                  if(sectionDragIdx!==null&&sectionDragInsertAt!==null){
+                    let target=sectionDragInsertAt
+                    if(target>sectionDragIdx)target-=1
+                    moveSection(sectionDragIdx,target)
+                  }
+                  setSectionDragIdx(null);setSectionDragOver(null);setSectionDragInsertAt(null)
+                }}
+                onDragLeave={()=>{setSectionDragOver(null);setSectionDragInsertAt(null)}}
+                style={{position:"relative" as const,borderBottom:p<formPages?`1px solid ${A.border}`:"none",opacity:isDragging?0.45:1,transition:"opacity .15s"}}>
+                {sectionDragInsertAt===i&&sectionDragIdx!==i&&<div style={{position:"absolute" as const,top:-1,left:10,right:10,height:2,borderRadius:1,background:A.blue,zIndex:5,pointerEvents:"none" as const}}/>}
+                {sectionDragInsertAt===i+1&&sectionDragIdx!==i&&i===formPages-1&&<div style={{position:"absolute" as const,bottom:-1,left:10,right:10,height:2,borderRadius:1,background:A.blue,zIndex:5,pointerEvents:"none" as const}}/>}
                 <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 10px",background:isActive?A.blue2:"transparent",cursor:"pointer",transition:"background .1s"}}
                   onClick={()=>{setPvPage(p);setEditIdx(null)}}>
+                  <div
+                    draggable
+                    title="드래그해서 섹션 순서 변경"
+                    onMouseDown={e=>e.stopPropagation()}
+                    onClick={e=>e.stopPropagation()}
+                    onDragStart={e=>{
+                      e.stopPropagation()
+                      setSectionDragIdx(i)
+                      setSectionDragOver(null)
+                      setSectionDragInsertAt(null)
+                      setPanelDragIdx(null)
+                      setPanelDragOver(null)
+                      setEditIdx(null)
+                      e.dataTransfer.effectAllowed="move"
+                      try{e.dataTransfer.setData("text/plain",String(i))}catch{}
+                    }}
+                    onDragEnd={e=>{
+                      e.stopPropagation()
+                      setSectionDragIdx(null);setSectionDragOver(null);setSectionDragInsertAt(null)
+                    }}
+                    style={{width:16,height:20,display:"flex",alignItems:"center",justifyContent:"center",cursor:isDragging?"grabbing":"grab",color:isActive?A.blue:A.t4,flexShrink:0}}>
+                    <DragHandleIcon size={13}/>
+                  </div>
                   {/* 활성 인디케이터 */}
                   <div style={{width:3,height:16,borderRadius:2,background:isActive?A.blue:A.border,flexShrink:0,transition:"background .15s"}}/>
                   {/* 이름 — 더블클릭 시 편집 */}
@@ -4138,6 +4226,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.color=A.red}}
                     onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.color=A.t3}}>×</button>}
                 </div>
+                {isDragOver&&sectionDragIdx!==i&&sectionDragInsertAt===null&&<div style={{height:2,background:A.blue,borderRadius:1,margin:"0 10px"}}/>}
               </div>
             })}
           </div>
