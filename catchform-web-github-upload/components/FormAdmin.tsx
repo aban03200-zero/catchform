@@ -1585,6 +1585,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [toastLeaving,setToastLeaving]=React.useState(false)
   const toastRef=React.useRef<any>(null)
   const [deletedField,setDeletedField]=React.useState<{field:FormField;idx:number}|null>(null)
+  const [appUpdateAvailable,setAppUpdateAvailable]=React.useState(false)
+  const appVersionRef=React.useRef("")
+  const dashboardRefreshTimer=React.useRef<any>(null)
+  const dashboardRefreshBusy=React.useRef(false)
   React.useEffect(()=>{setSlugDraft(savedSlug||saveSlug||"")},[savedSlug,saveSlug])
   React.useEffect(()=>{
     if(!optionDrag||typeof window==="undefined")return
@@ -1627,6 +1631,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{fontSize:14,fontWeight:600,color:A.t1}}>{actionLoading}</div>
         <div style={{fontSize:12.5,color:A.t3}}>잠시만 기다려주세요.</div>
       </div>
+    </div>
+  }
+  function renderUpdateRefreshPrompt(){
+    if(!appUpdateAvailable)return null
+    return <div style={{position:"absolute" as const,right:24,bottom:24,zIndex:110000,padding:"12px 14px",borderRadius:A.r2,background:A.card,border:`1px solid ${A.blue}44`,boxShadow:A.shadow,display:"flex",alignItems:"center",gap:12,maxWidth:360}}>
+      <div style={{width:32,height:32,borderRadius:A.r,background:A.blue2,color:A.blue,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+        <svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M8 2v4l2-2M8 6 6 4M3.5 9.5a4.5 4.5 0 0 0 8.2 2.6M12.5 6.5a4.5 4.5 0 0 0-8.2-2.6" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </div>
+      <div style={{minWidth:0,flex:1}}>
+        <div style={{fontSize:13,fontWeight:600,color:A.t1,marginBottom:3}}>새로운 기능이 업데이트되었어요.</div>
+        <div style={{fontSize:12,color:A.t3,lineHeight:1.45}}>새로고침하면 최신 화면으로 사용할 수 있어요.</div>
+      </div>
+      <button onClick={()=>window.location.reload()} style={{height:34,padding:"0 12px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",flexShrink:0}}>새로고침</button>
     </div>
   }
 
@@ -1719,6 +1736,55 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     withTimeout(sb.from("categories").select("id,name"),8000,"카테고리 목록 확인 시간이 초과됐어요.").then(({data})=>{if(data)setCats(data)}).catch(()=>{})
   },[supabaseUrl,supabaseAnonKey])
 
+  React.useEffect(()=>{
+    if(typeof window==="undefined")return
+    let stopped=false
+    const checkVersion=async()=>{
+      try{
+        const res=await fetch(`/api/version?ts=${Date.now()}`,{cache:"no-store"})
+        if(!res.ok)return
+        const data=await res.json().catch(()=>null)
+        const version=String(data?.version||"")
+        if(!version)return
+        if(!appVersionRef.current){appVersionRef.current=version;return}
+        if(version!==appVersionRef.current&&!stopped)setAppUpdateAvailable(true)
+      }catch{}
+    }
+    checkVersion()
+    const id=window.setInterval(checkVersion,60000)
+    const onFocus=()=>checkVersion()
+    const onVisibility=()=>{if(document.visibilityState==="visible")checkVersion()}
+    window.addEventListener("focus",onFocus)
+    document.addEventListener("visibilitychange",onVisibility)
+    return()=>{
+      stopped=true
+      window.clearInterval(id)
+      window.removeEventListener("focus",onFocus)
+      document.removeEventListener("visibilitychange",onVisibility)
+    }
+  },[])
+
+  React.useEffect(()=>{
+    if(!supa||!authUser||view!=="dashboard")return
+    const refresh=()=>scheduleDashboardRefresh()
+    const channel=supa
+      .channel(`form-configs-dashboard-${authUser.id||Date.now()}`)
+      .on("postgres_changes",{event:"*",schema:"public",table:"form_configs"},refresh)
+      .subscribe()
+    const poll=window.setInterval(refresh,30000)
+    const onFocus=()=>refresh()
+    const onVisibility=()=>{if(document.visibilityState==="visible")refresh()}
+    window.addEventListener("focus",onFocus)
+    document.addEventListener("visibilitychange",onVisibility)
+    return()=>{
+      window.clearInterval(poll)
+      clearTimeout(dashboardRefreshTimer.current)
+      window.removeEventListener("focus",onFocus)
+      document.removeEventListener("visibilitychange",onVisibility)
+      supa.removeChannel(channel)
+    }
+  },[supa,authUser,view])
+
   // ── Auth functions ────────────────────────────────────────────────────
   async function doLogin(){
     if(!supa){setLoginErr("Supabase 연결 정보가 없어요.");return}
@@ -1746,17 +1812,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   async function doLogout(){if(supa)await supa.auth.signOut();setAuthUser(null);setAuthRole("");setView("login");setSbSt("idle");setLoginEmail("");setLoginPw("")}
 
-  async function loadDashboard(sb:any){
-    setDashLoading(true)
+  async function loadDashboard(sb:any,opts:{silent?:boolean}={}){
+    const silent=!!opts.silent
+    if(!silent)setDashLoading(true)
     setDashLoadingMore(false)
     setDashHasMore(true)
     setDashNextOffset(0)
     try{
-      const all=await fetchFormSummaries(sb,DASHBOARD_PAGE_SIZE,0)
+      const refreshLimit=silent?Math.max(DASHBOARD_PAGE_SIZE,dashNextOffset||0):DASHBOARD_PAGE_SIZE
+      const all=await fetchFormSummaries(sb,refreshLimit,0)
       const trashed=all.filter(isFormTrashed)
       const active=all.filter((item:any)=>!isFormTrashed(item))
       setDashNextOffset(all.length)
-      setDashHasMore(all.length===DASHBOARD_PAGE_SIZE)
+      setDashHasMore(all.length===refreshLimit)
       setFormTrashItems(trashed)
       setSnList(active.filter((x:any)=>(x.config?.brand||x.brand)==="SNIPERFACTORY"))
       setIoList(active.filter((x:any)=>(x.config?.brand||x.brand)==="INSIDEOUT"))
@@ -1766,8 +1834,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const warm=()=>active.slice(0,16).forEach((item:any)=>prefetchFullFormRow(item))
       if(typeof window!=="undefined"&&"requestIdleCallback" in window)(window as any).requestIdleCallback(warm,{timeout:1200})
       else setTimeout(warm,350)
-    } catch(e){showToast((e as any)?.message||"폼 목록을 불러오지 못했어요.",false)}
-    finally {setDashLoading(false)}
+    } catch(e){if(!silent)showToast((e as any)?.message||"폼 목록을 불러오지 못했어요.",false)}
+    finally {if(!silent)setDashLoading(false)}
+  }
+
+  function scheduleDashboardRefresh(delay=700){
+    if(!supa||!authUser||view!=="dashboard")return
+    clearTimeout(dashboardRefreshTimer.current)
+    dashboardRefreshTimer.current=setTimeout(async()=>{
+      if(dashboardRefreshBusy.current)return
+      dashboardRefreshBusy.current=true
+      try{await loadDashboard(supa,{silent:true})}
+      finally{dashboardRefreshBusy.current=false}
+    },delay)
   }
 
   async function loadMoreDashboard(){
@@ -3798,6 +3877,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </>}
         </div>
       </>}
+      {renderUpdateRefreshPrompt()}
       {renderActionLoading()}
       {/* TOAST */}
       {toast&&(
@@ -4375,8 +4455,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   {(field as any).type!=="info"&&<div style={{padding:"4px 12px"}}><TRow label="필수 입력" on={!!(field as any).required} toggle={()=>patchActiveField(idx,{required:!(field as any).required})} A={A}/></div>}
                   {((field as any).type==="dropdown"||(field as any).type==="button_select"||(field as any).type==="checkbox")&&(()=>{
                     return <div style={{padding:"10px 12px"}}>
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                        <span style={{fontSize:12,fontWeight:600,color:A.t2}}>답변 옵션</span>
+                      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:8}}>
+                        <div>
+                          <span style={{fontSize:12,fontWeight:600,color:A.t2}}>답변 옵션</span>
+                          <div style={{fontSize:11.5,color:A.t3,lineHeight:1.45,marginTop:3}}>옵션 문구는 더블클릭해서 수정할 수 있어요.</div>
+                        </div>
                         {((field as any).type==="button_select"||(field as any).type==="checkbox")&&<div style={{display:"flex",alignItems:"center",gap:4}}>
                           <span style={{fontSize:11,color:A.t3}}>열</span>
                           {[1,2,3].map(c=>{const cur=((field as any).cols||0)===c||(!(field as any).cols&&c===1);return(
@@ -4404,7 +4487,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                               style={{width:18,height:26,display:"flex",alignItems:"center",justifyContent:"center",cursor:"grab",color:A.t3,flexShrink:0}}>
                               <DragHandleIcon size={13}/>
                             </div>
-                            <span onDoubleClick={e=>{const s=e.currentTarget;s.contentEditable="true";s.focus();const r=document.createRange();r.selectNodeContents(s);window.getSelection()?.removeAllRanges();window.getSelection()?.addRange(r)}}
+                            <span title="더블클릭해서 옵션 문구 수정" onDoubleClick={e=>{const s=e.currentTarget;s.contentEditable="true";s.focus();const r=document.createRange();r.selectNodeContents(s);window.getSelection()?.removeAllRanges();window.getSelection()?.addRange(r)}}
                               onBlur={e=>{e.currentTarget.contentEditable="false";const newOpts=[...((field as any).opts||[])];newOpts[oi]={...newOpts[oi],label:e.currentTarget.textContent||o.label,value:newOpts[oi].value||e.currentTarget.textContent||o.label};patchActiveField(idx,{opts:newOpts})}}
                               onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();(e.currentTarget as HTMLElement).blur()}}}
                               style={{flex:1,fontSize:12.5,color:A.t1,whiteSpace:"pre-wrap" as const,lineHeight:1.4,outline:"none",cursor:"text",borderRadius:3,padding:"1px 2px"}}>{o.label}</span>
@@ -6415,6 +6498,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
         </div>
       )}
+      {renderUpdateRefreshPrompt()}
     </div>
     } catch(e){
       const msg=(e as any)?.message||"알 수 없는 오류"
@@ -6847,6 +6931,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </div>
       )}
 
+      {renderUpdateRefreshPrompt()}
       {renderActionLoading()}
 
       {/* TOAST */}
