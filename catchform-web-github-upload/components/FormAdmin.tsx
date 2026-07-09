@@ -1518,6 +1518,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   // ── Analytics state ───────────────────────────────────────────────────
   const [analyticsTab,setAnalyticsTab]=React.useState<"questions"|"responses"|"period"|"dropoff"|"qr">("responses")
   const [analyticsResponseScope,setAnalyticsResponseScope]=React.useState<"submitted"|"draft">("submitted")
+  const [analyticsCsvSort,setAnalyticsCsvSort]=React.useState<"desc"|"asc">("desc")
   const [qrAnalyticsScope,setQrAnalyticsScope]=React.useState<"form"|"detail">("form")
   const [analyticsRows,setAnalyticsRows]=React.useState<any[]>([])
   const [selectedAnalyticsRowIds,setSelectedAnalyticsRowIds]=React.useState<string[]>([])
@@ -3134,7 +3135,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const headers=["날짜","시간",...fields.map(f=>f.label)]
     const csvEscape=(v:any)=>`"${String(v??"").replace(/"/g,'""')}"`
     const lines=[headers.map(csvEscape).join(",")]
-    srcRows.forEach(row=>{
+    const csvRows=[...(srcRows||[])].sort((a:any,b:any)=>{
+      const at=new Date(a?.created_at||0).getTime()
+      const bt=new Date(b?.created_at||0).getTime()
+      const aTime=Number.isFinite(at)?at:0
+      const bTime=Number.isFinite(bt)?bt:0
+      return analyticsCsvSort==="asc"?aTime-bTime:bTime-aTime
+    })
+    csvRows.forEach(row=>{
       const [date,time]=fmtAnalyticsDate(row.created_at)
       const values=[date,time,...fields.map(f=>analyticsAnswer(row,f))]
       lines.push(values.map(csvEscape).join(","))
@@ -6033,6 +6041,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	          </div>}
 	        </div>
 	        {topIconButton("refresh","새로고침",loadAnalytics,<path d="M13 3v4H9M3 13V9h4M12.2 8.8A4.5 4.5 0 0 1 4.5 12M3.8 7.2A4.5 4.5 0 0 1 11.5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>)}
+        {activeAnalyticsTab==="responses"&&<div style={{position:"relative" as const}}>
+          <select value={analyticsCsvSort} onChange={e=>setAnalyticsCsvSort(e.target.value as "desc"|"asc")} title="시트 다운로드 날짜 정렬"
+            style={{height:32,minWidth:116,padding:"0 30px 0 10px",appearance:"none" as any,WebkitAppearance:"none" as any,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,outline:"none",cursor:"pointer"}}>
+            <option value="desc">날짜 내림차순</option>
+            <option value="asc">날짜 오름차순</option>
+          </select>
+          <SelectChevron color={A.t2}/>
+        </div>}
         <button onClick={()=>exportAnalyticsCsv()} style={{height:32,padding:"0 13px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>시트 다운로드
         </button>
