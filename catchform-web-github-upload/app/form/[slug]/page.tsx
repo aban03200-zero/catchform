@@ -129,13 +129,14 @@ async function getInitialForm(slug: string) {
 export default async function FormSlugPage({
   params,
 }: {
-  params: { slug: string }
+  params: Promise<{ slug: string }>
 }) {
-  const initialForm = await getInitialForm(params.slug)
+  const { slug } = await params
+  const initialForm = await getInitialForm(slug)
 
   return (
     <CatchFormClient
-      slug={params.slug}
+      slug={slug}
       formId={initialForm?.id || ""}
       configJson={initialForm?.config ? JSON.stringify(initialForm.config) : ""}
     />

@@ -3,7 +3,9 @@ import { NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
 
-function readHeader(h: Headers, names: string[]) {
+type HeaderReader = Pick<Headers, "get">
+
+function readHeader(h: HeaderReader, names: string[]) {
   for (const name of names) {
     const value = h.get(name)
     if (value) {
@@ -17,7 +19,7 @@ function readHeader(h: Headers, names: string[]) {
   return ""
 }
 
-function readIpLocation(h: Headers) {
+function readIpLocation(h: HeaderReader) {
   const country = readHeader(h, [
     "x-vercel-ip-country",
     "cf-ipcountry",
@@ -99,7 +101,7 @@ async function reverseGeocode(lat: number, lon: number) {
 }
 
 export async function GET(request: Request) {
-  const h = headers()
+  const h = await headers()
   const ipLocation = readIpLocation(h)
   const url = new URL(request.url)
   const lat = Number(url.searchParams.get("lat"))

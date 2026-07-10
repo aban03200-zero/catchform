@@ -78,10 +78,29 @@ type FormConfigRow = {
   config?: { brand?: string; integrations?: { qrLinks?: Array<{ code?: string; url?: string }> } }
 }
 
+function normalizeQrTarget(value: string) {
+  const raw = String(value || "").trim()
+  if (!raw) return ""
+  try {
+    const url = new URL(raw)
+    url.hash = ""
+    return url.toString().replace(/\/$/, "")
+  } catch {
+    return raw.replace(/\/$/, "")
+  }
+}
+
 function qrTargetFromConfig(row: FormConfigRow | null, code: string) {
   const links = row?.config?.integrations?.qrLinks || []
   const target = links.find((item) => item?.code === code)?.url || ""
   return /^https?:\/\//i.test(target) ? target : ""
+}
+
+function isStoredQrTarget(row: FormConfigRow | null, target: string) {
+  const normalized = normalizeQrTarget(target)
+  if (!normalized) return false
+  const links = row?.config?.integrations?.qrLinks || []
+  return links.some((item) => /^https?:\/\//i.test(item?.url || "") && normalizeQrTarget(item.url || "") === normalized)
 }
 
 async function findFormIdBySlug(slug: string) {
@@ -103,6 +122,30 @@ async function findFormIdBySlug(slug: string) {
     if (!response.ok) return null
     const rows = (await response.json()) as Array<{ id?: string }>
     return rows[0]?.id || null
+  } catch {
+    return null
+  }
+}
+
+async function findFormBySlug(slug: string): Promise<FormConfigRow | null> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+  if (!supabaseUrl || !supabaseAnonKey || !slug) return null
+
+  try {
+    const response = await fetch(
+      `${supabaseUrl.replace(/\/+$/, "")}/rest/v1/form_configs?select=id,slug,brand,config&slug=eq.${encodeURIComponent(slug)}&limit=1`,
+      {
+        headers: {
+          apikey: supabaseAnonKey,
+          authorization: `Bearer ${supabaseAnonKey}`,
+        },
+        cache: "no-store",
+      },
+    )
+    if (!response.ok) return null
+    const rows = (await response.json()) as FormConfigRow[]
+    return rows[0] || null
   } catch {
     return null
   }
@@ -226,14 +269,15 @@ export async function GET(req: NextRequest) {
   const slug = req.nextUrl.searchParams.get("slug") || req.nextUrl.searchParams.get("s") || ""
   const qrCode = req.nextUrl.searchParams.get("q") || ""
   const compactFormId = decodeCompactFormId(req.nextUrl.searchParams.get("i") || "")
-  const formRow = compactFormId ? await findFormById(compactFormId) : null
+  const formRow = compactFormId ? await findFormById(compactFormId) : slug ? await findFormBySlug(slug) : null
   const resolvedSlug = slug || formRow?.slug || ""
   const resolvedFormId = formRow?.id || compactFormId || (resolvedSlug ? await findFormIdBySlug(resolvedSlug) : "") || ""
   const resolvedBrand = formRow?.config?.brand || formRow?.brand || ""
-  const storedTarget = target ? "" : qrTargetFromConfig(formRow, qrCode) || (await findQrTargetBySlug(resolvedSlug, qrCode))
+  const storedTarget = qrTargetFromConfig(formRow, qrCode) || (target ? "" : await findQrTargetBySlug(resolvedSlug, qrCode))
+  const allowedTarget = target && isStoredQrTarget(formRow, target) ? target : storedTarget
   let targetUrl: URL
   try {
-    targetUrl = target || storedTarget ? new URL(target || storedTarget) : formUrlFromSlug(req, resolvedSlug, resolvedBrand)
+    targetUrl = allowedTarget ? new URL(allowedTarget) : formUrlFromSlug(req, resolvedSlug, resolvedBrand)
     if (!["http:", "https:"].includes(targetUrl.protocol)) throw new Error("invalid protocol")
   } catch {
     targetUrl = new URL("/", req.url)

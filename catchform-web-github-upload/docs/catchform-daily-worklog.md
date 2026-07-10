@@ -3,6 +3,21 @@
 이 파일은 CatchForm 작업 중 변경한 내용을 날짜별로 기록하는 문서입니다.
 앞으로 기능 수정, 배포 준비, 오류 수정, 성능 개선이 생기면 같은 형식으로 이어서 남깁니다.
 
+## 2026-07-10
+
+### 반영 내용
+
+- 2차 QA에서 확인된 보안 취약점 대응으로 Next.js를 `16.2.10`으로 업데이트하고, Bun audit 기준 남은 PostCSS 취약점은 `postcss@8.5.10` override로 해소
+- Next 16에 맞춰 `next typegen && tsc --noEmit` 방식으로 typecheck 스크립트를 변경하고, App Router의 비동기 `params`, `headers()` 타입 변경을 반영
+- `next lint` 제거 예정 경고에 대응해 ESLint 9 flat config를 추가하고 `npm run lint`가 `eslint .`로 동작하도록 변경
+- QR redirect에서 임의의 `u`/`to` 외부 URL로 바로 이동하지 않고, 폼 설정에 저장된 QR 링크 URL과 일치할 때만 외부 상세페이지로 이동하도록 제한
+
+### 확인 필요
+
+- Next 16은 Node.js `>=20.9.0`이 필요하므로 Vercel/운영 빌드 Node 버전이 20 이상인지 확인 필요
+- ESLint는 현재 기존 코드 특성상 경고는 남기되 error 없이 통과하는 기준으로 설정되어 있으며, React compiler 계열 신규 규칙은 별도 리팩터링 후보로 남김
+- 저장된 상세페이지 QR URL은 계속 동작하지만, 임의로 조작한 `/qr?u=외부주소` 링크는 폼 URL로 fallback됨
+
 ## 2026-07-09
 
 ### 반영 내용
