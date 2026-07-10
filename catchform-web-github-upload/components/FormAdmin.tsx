@@ -1113,6 +1113,16 @@ function FieldOptAdder({fieldIdx,onAdd,A}:{fieldIdx:number;onAdd:(lbl:string,val
 // ─── Markdown helpers ─────────────────────────────────────────────────────
 function mdToHtml(text:string):string{
   const esc=(s:string)=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+  const attr=(s:string)=>esc(s).replace(/"/g,"&quot;").replace(/'/g,"&#39;")
+  const safeHref=(raw:string)=>{
+    const href=String(raw||"").trim()
+    if(!href||/[\s"'<>]/.test(href))return"#"
+    try{
+      const url=new URL(href,"https://catchform.local")
+      if(["http:","https:","mailto:","tel:"].includes(url.protocol))return attr(href)
+    }catch{}
+    return"#"
+  }
   const fmt=(s:string)=>{
     const e=esc(s)
     return e
@@ -1120,7 +1130,7 @@ function mdToHtml(text:string):string{
       .replace(/__\*\*([^]*?)\*\*__/g,'<strong style="font-weight:600"><span style="text-decoration:underline">$1</span></strong>')
       .replace(/\*\*([^]*?)\*\*/g,'<strong style="font-weight:600">$1</strong>')
       .replace(/__([^]*?)__/g,'<span style="text-decoration:underline">$1</span>')
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" style="color:var(--link-color,#3182F6);text-decoration:underline" target="_blank">$1</a>')
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,(_match,label,href)=>`<a href="${safeHref(href)}" style="color:var(--link-color,#3182F6);text-decoration:underline" target="_blank" rel="noopener noreferrer">${label}</a>`)
   }
   const lines=text.split("\n")
   let html=""
@@ -6041,17 +6051,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	          </div>}
 	        </div>
 	        {topIconButton("refresh","새로고침",loadAnalytics,<path d="M13 3v4H9M3 13V9h4M12.2 8.8A4.5 4.5 0 0 1 4.5 12M3.8 7.2A4.5 4.5 0 0 1 11.5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>)}
-        {activeAnalyticsTab==="responses"&&<div style={{position:"relative" as const}}>
-          <select value={analyticsCsvSort} onChange={e=>setAnalyticsCsvSort(e.target.value as "desc"|"asc")} title="시트 다운로드 날짜 정렬"
-            style={{height:32,minWidth:116,padding:"0 30px 0 10px",appearance:"none" as any,WebkitAppearance:"none" as any,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,outline:"none",cursor:"pointer"}}>
-            <option value="desc">날짜 내림차순</option>
-            <option value="asc">날짜 오름차순</option>
-          </select>
-          <SelectChevron color={A.t2}/>
-        </div>}
-        <button onClick={()=>exportAnalyticsCsv()} style={{height:32,padding:"0 13px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>시트 다운로드
-        </button>
+	        {activeAnalyticsTab==="responses"&&<div style={{position:"relative" as const}}>
+	          <select value={analyticsCsvSort} onChange={e=>setAnalyticsCsvSort(e.target.value as "desc"|"asc")} title="시트 다운로드 날짜 정렬"
+	            style={{height:32,minWidth:116,padding:"0 30px 0 10px",appearance:"none" as any,WebkitAppearance:"none" as any,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,outline:"none",cursor:"pointer"}}>
+	            <option value="desc">날짜 내림차순</option>
+	            <option value="asc">날짜 오름차순</option>
+	          </select>
+	          <SelectChevron color={A.t2}/>
+	        </div>}
+	        {activeAnalyticsTab==="responses"&&<button onClick={()=>exportAnalyticsCsv(responseRows)} style={{height:32,padding:"0 13px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+	          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>시트 다운로드
+	        </button>}
       </div>
       <div style={{height:50,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 20px",gap:6,flexShrink:0}}>
         {tabs.map(t=>{const on=activeAnalyticsTab===t.id;return <React.Fragment key={t.id}>

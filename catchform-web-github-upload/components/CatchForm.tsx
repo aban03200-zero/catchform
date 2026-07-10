@@ -293,6 +293,16 @@ function imageImgStyle(img: any): React.CSSProperties {
 function mdToHtml(text: string): string {
     if (!text) return ""
     const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    const attr = (s: string) => esc(s).replace(/"/g, "&quot;").replace(/'/g, "&#39;")
+    const safeHref = (raw: string) => {
+        const href = String(raw || "").trim()
+        if (!href || /[\s"'<>]/.test(href)) return "#"
+        try {
+            const url = new URL(href, "https://catchform.local")
+            if (["http:", "https:", "mailto:", "tel:"].includes(url.protocol)) return attr(href)
+        } catch {}
+        return "#"
+    }
     const fmt = (s: string) => {
         const e = esc(s)
         return e
@@ -300,7 +310,7 @@ function mdToHtml(text: string): string {
             .replace(/__\*\*([^]*?)\*\*__/g, '<strong style="font-weight:600"><span style="text-decoration:underline">$1</span></strong>')
             .replace(/\*\*([^]*?)\*\*/g, '<strong style="font-weight:600">$1</strong>')
             .replace(/__([^]*?)__/g, '<span style="text-decoration:underline">$1</span>')
-            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color:var(--link-color,#3182F6);text-decoration:underline" target="_blank" rel="noopener">$1</a>')
+            .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_match, label, href) => `<a href="${safeHref(href)}" style="color:var(--link-color,#3182F6);text-decoration:underline" target="_blank" rel="noopener noreferrer">${label}</a>`)
     }
     const lines = text.split("\n")
     let html = ""
