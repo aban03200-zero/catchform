@@ -4316,7 +4316,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         return <div style={pd}>
           <FG title="광고 구좌" A={A}>
             <TRow label="광고 구좌 표시" on={!!ad.enabled} toggle={()=>uad("enabled",!ad.enabled)} A={A}/>
-            <div style={{fontSize:12,color:A.t3,lineHeight:1.6,marginTop:8}}>폼 내부 상단, 대표이미지 위에 카카오 비즈보드 형태의 광고 구좌가 표시됩니다.</div>
+            <div style={{fontSize:12,color:A.t3,lineHeight:1.6,marginTop:8}}>대표이미지와 폼 제목 아래, 공지와 질문 시작 전에 광고 구좌가 표시됩니다.</div>
           </FG>
           <FG title="광고 소재" A={A}>
             <F label="소재 방식" A={A}>
@@ -5238,9 +5238,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
     return <div style={{flex:1,overflowY:"auto" as const,display:"flex",justifyContent:"center",padding:"32px 20px 120px",background:FC.bg,"--link-color":accentBg} as React.CSSProperties}>
       <div style={{width:"100%",maxWidth:cfg.styles.maxW}}>
-        {cfg.ad?.enabled&&<div onClick={()=>setSec("ad")} style={{marginBottom:24,cursor:"pointer",outline:sec==="ad"?`2px solid ${accentBg}`:"none",outlineOffset:4,borderRadius:14}}>
-          {renderPreviewAdSlot({...DEFAULT_FORM_AD,...cfg.ad})}
-        </div>}
         {cfg.header.imageUrl&&<div style={{...imagePreviewBoxStyle(cfg.header,200),borderRadius:fr2,marginBottom:22,background:FC.fieldBg}}>
           <img src={cfg.header.imageUrl} alt="" style={imagePreviewImgStyle(cfg.header)}/>
         </div>}
@@ -5253,6 +5250,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {cfg.header.stipend&&<><span style={{opacity:.3}}>|</span><span>지급 수당 {cfg.header.stipend}</span></>}
           </div>
         </div>
+        {cfg.ad?.enabled&&<div onClick={()=>setSec("ad")} style={{marginBottom:24,cursor:"pointer",outline:sec==="ad"?`2px solid ${accentBg}`:"none",outlineOffset:4,borderRadius:14}}>
+          {renderPreviewAdSlot({...DEFAULT_FORM_AD,...cfg.ad})}
+        </div>}
         {pvPage===1&&cfg.header.noticeEnabled&&<div style={{display:"flex",justifyContent:"center",marginBottom:24}}>
           <div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"9px 16px",borderRadius:(cfg.header.noticeShape||"pill")==="pill"?999:10,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,fontSize:12.5,color:FC.t2}}>
             {cfg.header.noticeIconEnabled&&<span style={{width:17,height:17,borderRadius:"50%",border:`1px solid ${FC.fieldBorder}`,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,flexShrink:0}}>{cfg.header.noticeIconText}</span>}
@@ -5674,13 +5674,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const fr2 = cfg.styles.theme==="dark"?"6px":"8px"
     return <div style={{flex:1,overflowY:"auto" as const,display:"flex",justifyContent:"center",padding:"24px 20px 56px",background:FC.bg}}>
       <div style={{width:"100%",maxWidth:cfg.styles.maxW}}>
-        {cfg.ad?.enabled&&<div onClick={()=>setSec("ad")} style={{marginBottom:24,cursor:"pointer",outline:sec==="ad"?`2px solid ${accentBg}`:"none",outlineOffset:4,borderRadius:14}}>
-          {renderPreviewAdSlot({...DEFAULT_FORM_AD,...cfg.ad})}
-        </div>}
         {/* 헤더 */}
         {cfg.header.title&&<div style={{marginBottom:24}}>
           {cfg.header.overline&&<div style={{fontSize:12,fontWeight:600,color:accentBg,marginBottom:6}}>{cfg.header.overline}</div>}
           <div style={{fontSize:22,fontWeight:600,color:FC.t1,letterSpacing:"-0.5px"}}>{cfg.header.title}</div>
+        </div>}
+        {cfg.ad?.enabled&&<div onClick={()=>setSec("ad")} style={{marginBottom:24,cursor:"pointer",outline:sec==="ad"?`2px solid ${accentBg}`:"none",outlineOffset:4,borderRadius:14}}>
+          {renderPreviewAdSlot({...DEFAULT_FORM_AD,...cfg.ad})}
         </div>}
         {/* 스텝 인디케이터 — elastic stepper */}
         <div style={{display:"flex",gap:6,marginBottom:28}}>
