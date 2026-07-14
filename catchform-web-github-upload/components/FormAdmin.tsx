@@ -20,10 +20,11 @@ type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; o
 type AdminRole = ""|"admin"|"master"
 type DashboardSettingsState = {item:any;formName:string;brand:BrandId;formTypeTag:DashboardFormType;operationStart:string;operationEnd:string;alwaysOpen:boolean;manualStatus:DashboardManualStatus;currentEditPasswordDraft:string;editPasswordDraft:string;clearEditPassword:boolean}
 type KdtFieldType = FieldType|"section_desc"
-type KdtField = { id:string; label:string; type:KdtFieldType; required?:boolean; page?:number; options?:string[]; placeholder?:string; desc?:string }
-type FieldType = "text"|"name"|"phone"|"email"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"
+type KdtField = { id:string; label:string; type:KdtFieldType; required?:boolean; page?:number; options?:string[]; placeholder?:string; desc?:string; [key:string]:any }
+type AdMode = "image"|"split"
+type FieldType = "text"|"name"|"phone"|"email"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"|"ad"
 type HelperItem = { text:string; callout?:boolean }
-type FormField = { id:string; type:FieldType; label:string; placeholder?:string; helper?:string; helpers?:HelperItem[]; required?:boolean; opts?:Opt[]; etcPh?:string; dupCheck?:boolean; page?:number; cols?:number; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
+type FormField = { id:string; type:FieldType; label:string; placeholder?:string; helper?:string; helpers?:HelperItem[]; required?:boolean; opts?:Opt[]; etcPh?:string; dupCheck?:boolean; page?:number; cols?:number; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMode?:AdMode; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string }
 type QrLink = { code:string; url:string; label?:string; type?:string; createdAt?:string }
 type Cfg = {
   header: { imageUrl:string; programId:string; programUnlinked?:boolean; recruitmentPeriodMode?:RecruitmentPeriodMode; overline:string; title:string; educationStart:string; educationEnd:string; tuitionFree:boolean; tuitionFreeText:string; tuitionAmount:string; stipend:string; noticeEnabled:boolean; noticeIconEnabled:boolean; noticeIconText:string; noticeText:string; noticeShape?:"pill"|"rect"; applicationType?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
@@ -98,6 +99,8 @@ function mergeFormRows(existing:any[],incoming:any[]){
 const FILE_MAX_COUNT = 5
 const FILE_MAX_SIZE_MB = 10
 const FILE_LIMIT_TEXT = `최대 ${FILE_MAX_COUNT}개, 파일당 ${FILE_MAX_SIZE_MB}MB`
+const DISPLAY_ONLY_FIELD_TYPES = new Set(["info","section_desc","ad"])
+function isDisplayOnlyFieldType(type:any){return DISPLAY_ONLY_FIELD_TYPES.has(String(type||""))}
 const CATCHFORM_DIRECT_FORM_BASE_URL = "https://catchform.vercel.app/form"
 const FORM_SUMMARY_SELECT = "id,name,slug,updated_at,brand,config_brand:config->>brand,header_title:config->header->>title,program_id:config->header->>programId,recruitment_period_mode:config->header->>recruitmentPeriodMode,form_type:config->>formType,dashboard_meta:config->dashboard"
 const DEFAULT_GOOGLE_SHEETS = {enabled:false,mode:"existing" as const,accountEmail:"",sheetUrl:"",sheetName:"",webhookUrl:"",lastSyncStatus:"idle" as const,lastSyncAt:"",lastSyncMessage:""}
@@ -1067,6 +1070,7 @@ const FTYPE_ICONS:Record<string,React.ReactNode> = {
   time: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4"/><path d="M8 5v3l2 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   name: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.4"/><path d="M2.5 13.5c0-3.038 2.462-5.5 5.5-5.5s5.5 2.462 5.5 5.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>,
   referral: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="5" cy="8" r="2" stroke="currentColor" strokeWidth="1.4"/><circle cx="12" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.4"/><circle cx="12" cy="12" r="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M7 7l3.5-2.5M7 9l3.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
+  ad: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="4" width="12" height="8" rx="2" stroke="currentColor" strokeWidth="1.4"/><path d="M4.5 9.5 6.2 6.5 8 9.5M5.2 8.4h2.2M9.5 6.5h1.1c.9 0 1.5.6 1.5 1.5s-.6 1.5-1.5 1.5H9.5v-3z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
 }
 const FTYPES_DATA:{type:string;label:string;divider?:boolean}[] = [
   {type:"text",label:"단답형"},
@@ -1087,6 +1091,7 @@ const FTYPES_DATA:{type:string;label:string;divider?:boolean}[] = [
   {type:"time",label:"시간"},
   {type:"---4",label:"",divider:true},
   {type:"info",label:"안내 텍스트"},
+  {type:"ad",label:"광고"},
 ]
 
 // ─── FieldOptAdder component ────────────────────────────────────────────────
@@ -2176,14 +2181,31 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       date:     {id:"",         label:"날짜를 선택해주세요.",                    placeholder:"",                         required:false},
       time:     {id:"",         label:"시간을 선택해주세요.",                    placeholder:"",                         required:false},
       file:     {id:"",         label:"파일을 첨부해주세요.",                    placeholder:"파일 업로드",              required:false},
+      ad:       {id:"",         label:"광고 구좌",                               placeholder:"",                         required:false},
     }
     const preset = fieldDefs[type]
     const id = preset?.id ? preset.id : "f_"+Date.now()
-    const defaultLabel = type==="info" ? "안내 텍스트" : preset ? preset.label : "새 질문"
-    const defaultPh = type==="info" ? "" : preset ? preset.placeholder : "입력해주세요."
+    const defaultLabel = type==="info" ? "안내 텍스트" : type==="ad" ? "광고 구좌" : preset ? preset.label : "새 질문"
+    const defaultPh = type==="info"||type==="ad" ? "" : preset ? preset.placeholder : "입력해주세요."
     const extra:any = preset ? {required:preset.required} : {}
     if(preset?.helper)extra.helper=preset.helper
     if(type==="referral"){extra.opts=DEFOPTS;extra.etcPh="기타 경로를 입력해주세요."}
+    if(type==="ad"){
+      extra.adMode="image"
+      extra.adMainText="지금 가장 많이 찾는 프로그램"
+      extra.adSubText="혜택과 모집 일정을 한눈에 확인해보세요."
+      extra.adElementText="자세히 보기"
+      extra.adBg="#FEE500"
+      extra.adTextColor="#191919"
+      extra.adHref=""
+      extra.imageFit="cover"
+      extra.imagePosX=50
+      extra.imagePosY=50
+      extra.imageCropX=0
+      extra.imageCropY=0
+      extra.imageCropW=100
+      extra.imageCropH=100
+    }
     if(type==="dropdown"||type==="button_select"||type==="checkbox"){
       extra.opts=[
         {label:"예시 답변 1",value:"예시 답변 1",isEtc:false},
@@ -2626,9 +2648,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     return ""
   }
 
-	  function getAnalyticsFields(){
+  function getAnalyticsFields(){
     const raw:any[] = isKdt ? (cfg.kdtFields||[]) : (cfg.form.fields||[])
-    return raw.filter(f=>f.type!=="info"&&f.type!=="section_desc").map(f=>({
+    return raw.filter(f=>!isDisplayOnlyFieldType(f.type)).map(f=>({
       id:f.id,
       label:f.label||f.id,
       type:f.type,
@@ -3242,6 +3264,48 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     return hasImageCrop(img)
       ? croppedImageStyle(img)
       : {width:"100%",height:imageFit(img)==="cover"?"100%":"auto",display:"block",objectFit:imageFit(img),objectPosition:imagePos(img)}
+  }
+  function normalizeAdHref(raw:any){
+    const href=String(raw||"").trim()
+    if(!href)return""
+    try{
+      const base=typeof window!=="undefined"?window.location.origin:"https://catchform.local"
+      const url=new URL(href,base)
+      return ["http:","https:","mailto:","tel:"].includes(url.protocol)?url.href:""
+    }catch{return""}
+  }
+  function renderPreviewAdSlot(field:any){
+    const mode=field.adMode==="split"?"split":"image"
+    const bg=field.adBg||accentBg+"14"
+    const textColor=field.adTextColor||FC.t1
+    const href=normalizeAdHref(field.adHref)
+    const imageField={...field,imageFit:field.imageFit||"cover"}
+    const linkedBadge=href?<div style={{position:"absolute" as const,top:8,right:8,padding:"3px 7px",borderRadius:999,background:"rgba(0,0,0,0.45)",color:"#fff",fontSize:10.5,fontWeight:700,backdropFilter:"blur(6px)"}}>링크</div>:null
+    if(mode==="image"){
+      return <div style={{position:"relative" as const,borderRadius:14,overflow:"hidden",border:`1px solid ${FC.fieldBorder}`,background:FC.fieldBg}}>
+        {field.imageUrl
+          ? <div style={{...imagePreviewBoxStyle(imageField,112),borderRadius:14,background:FC.fieldBg}}>
+              <img src={field.imageUrl} alt={field.imageCaption||"광고"} style={imagePreviewImgStyle(imageField)}/>
+            </div>
+          : <div style={{height:96,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 16px",fontSize:13,color:FC.t3,fontWeight:600,border:`1.5px dashed ${FC.fieldBorder}`,borderRadius:14,background:FC.fieldBg}}>
+              광고 이미지를 업로드해주세요.
+            </div>}
+        {linkedBadge}
+      </div>
+    }
+    return <div style={{position:"relative" as const,minHeight:92,display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,padding:"15px 16px 15px 18px",borderRadius:14,border:`1px solid ${FC.fieldBorder}`,background:bg,color:textColor,overflow:"hidden"}}>
+      <div style={{minWidth:0,flex:1}}>
+        <div style={{fontSize:10.5,fontWeight:800,letterSpacing:"0.5px",opacity:0.58,marginBottom:5}}>AD</div>
+        <div style={{fontSize:17,fontWeight:800,lineHeight:1.25,letterSpacing:"-0.3px",whiteSpace:"pre-line" as const,wordBreak:"keep-all" as const}}>{field.adMainText||"광고 메인 문구"}</div>
+        <div style={{fontSize:12.5,fontWeight:500,lineHeight:1.45,opacity:0.72,marginTop:5,whiteSpace:"pre-line" as const,wordBreak:"keep-all" as const}}>{field.adSubText||"광고 서브 문구"}</div>
+      </div>
+      <div style={{width:92,height:62,borderRadius:12,background:"rgba(255,255,255,0.42)",border:"1px solid rgba(255,255,255,0.45)",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0,color:textColor,fontSize:13,fontWeight:800,textAlign:"center" as const,padding:8,boxSizing:"border-box" as const}}>
+        {field.adElementImageUrl
+          ? <img src={field.adElementImageUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+          : <span style={{lineHeight:1.25,whiteSpace:"pre-line" as const}}>{field.adElementText||"요소"}</span>}
+      </div>
+      {linkedBadge}
+    </div>
   }
   function patchImageFieldById(fieldId:string,patch:any){
     setCfg(p=>({
@@ -4387,9 +4451,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       {FTYPES.filter(ft=>!ft.divider).map(ft=><option key={ft.type} value={ft.type}>{ft.label}</option>)}
                     </select>
                   </div>}
-                  {(field as any).type!=="info"&&<div style={{padding:"10px 12px"}}><F label="질문 텍스트" A={A}><TArea value={(field as any).label||""} onChange={v=>patchActiveField(idx,{label:v})} minH={36} A={A}/></F></div>}
+                  {!isDisplayOnlyFieldType((field as any).type)&&<div style={{padding:"10px 12px"}}><F label="질문 텍스트" A={A}><TArea value={(field as any).label||""} onChange={v=>patchActiveField(idx,{label:v})} minH={36} A={A}/></F></div>}
                   {/* 안내 문구 (helper) — info 제외 */}
-                  {(field as any).type!=="info"&&(()=>{
+                  {!isDisplayOnlyFieldType((field as any).type)&&(()=>{
                     const rawHelpers:any[]=((field as any).helpers)||((field as any).helper?[{text:(field as any).helper,callout:false}]:[])
                     const helpers:HelperItem[]=rawHelpers.map((h:any)=>typeof h==="string"?{text:h,callout:false}:h)
                     const setHelpers=(arr:HelperItem[])=>patchActiveField(idx,{helpers:arr,helper:arr[0]?.text||""})
@@ -4465,12 +4529,94 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       }
                     </div>
                   </div>}
+                  {(field as any).type==="ad"&&<div style={{padding:"10px 12px"}}>
+                    <F label="광고 소재 방식" A={A}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                        {[
+                          {key:"image" as AdMode,label:"통이미지"},
+                          {key:"split" as AdMode,label:"텍스트 + 요소"},
+                        ].map(item=>{
+                          const selected=((field as any).adMode||"image")===item.key
+                          return <button key={item.key} onClick={()=>patchActiveField(idx,{adMode:item.key})}
+                            style={{height:34,borderRadius:A.r,border:`1.5px solid ${selected?A.blue:A.border}`,background:selected?A.blue2:A.card2,color:selected?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:selected?700:500,cursor:"pointer"}}>
+                            {item.label}
+                          </button>
+                        })}
+                      </div>
+                    </F>
+                    {((field as any).adMode||"image")==="image"
+                      ? <F label="통이미지" hint="카카오 비즈보드처럼 한 장짜리 배너 이미지를 넣습니다." A={A}>
+                          {(field as any).imageUrl
+                            ? <div>
+                                <div style={{...imagePreviewBoxStyle({...field,imageFit:(field as any).imageFit||"cover"},130),border:`1px solid ${A.border}`,marginBottom:6}}>
+                                  <img src={(field as any).imageUrl} alt="" style={imagePreviewImgStyle({...field,imageFit:(field as any).imageFit||"cover"})}/>
+                                  <button onClick={()=>patchActiveField(idx,{imageUrl:"",imageCaption:""})}
+                                    style={{position:"absolute",top:6,right:6,width:24,height:24,borderRadius:"50%",border:"none",background:"rgba(0,0,0,0.5)",color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,lineHeight:1}}>×</button>
+                                </div>
+                                {renderImageCropControls(field,()=>openImageCropModal("field",field,(field as any).id),()=>patchActiveField(idx,{imageFit:"contain"}))}
+                              </div>
+                            : <div>
+                                <label htmlFor={`ad_image_upload_${field.id}`} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,height:42,borderRadius:A.r,border:`1.5px dashed ${A.border}`,background:A.card2,cursor:"pointer",fontSize:12.5,color:A.t3,fontFamily:FONT,fontWeight:600}}>
+                                  이미지 파일 업로드
+                                </label>
+                                <input id={`ad_image_upload_${field.id}`} type="file" accept="image/*" style={{display:"none"}}
+                                  onChange={e=>{
+                                    const file=e.target.files?.[0]
+                                    if(!file)return
+                                    const reader=new FileReader()
+                                    reader.onload=ev=>{
+                                      const result=ev.target?.result as string
+                                      if(result){
+                                        patchActiveField(idx,{imageUrl:result,imageFit:"cover",imagePosX:50,imagePosY:50,imageCropX:0,imageCropY:0,imageCropW:100,imageCropH:100})
+                                        setImageNaturalSize("field",result,(field as any).id)
+                                      }
+                                    }
+                                    reader.readAsDataURL(file)
+                                    e.target.value=""
+                                  }}/>
+                              </div>}
+                        </F>
+                      : <div>
+                          <F label="메인 텍스트" A={A}><TArea value={(field as any).adMainText||""} onChange={v=>patchActiveField(idx,{adMainText:v})} minH={44} A={A}/></F>
+                          <F label="서브 텍스트" A={A}><TArea value={(field as any).adSubText||""} onChange={v=>patchActiveField(idx,{adSubText:v})} minH={44} A={A}/></F>
+                          <F label="오른쪽 요소 텍스트" hint="이미지를 넣으면 텍스트 대신 이미지가 표시됩니다." A={A}><TIn value={(field as any).adElementText||""} onChange={v=>patchActiveField(idx,{adElementText:v})} A={A}/></F>
+                          <F label="오른쪽 요소 이미지" A={A}>
+                            {(field as any).adElementImageUrl
+                              ? <div style={{display:"flex",alignItems:"center",gap:8}}>
+                                  <img src={(field as any).adElementImageUrl} alt="" style={{width:70,height:48,objectFit:"cover",borderRadius:A.r,border:`1px solid ${A.border}`}}/>
+                                  <button onClick={()=>patchActiveField(idx,{adElementImageUrl:""})} style={{height:32,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:12,cursor:"pointer"}}>삭제</button>
+                                </div>
+                              : <div>
+                                  <label htmlFor={`ad_element_upload_${field.id}`} style={{display:"flex",alignItems:"center",justifyContent:"center",height:36,borderRadius:A.r,border:`1.5px dashed ${A.border}`,background:A.card2,cursor:"pointer",fontSize:12.5,color:A.t3,fontFamily:FONT,fontWeight:600}}>이미지 업로드</label>
+                                  <input id={`ad_element_upload_${field.id}`} type="file" accept="image/*" style={{display:"none"}}
+                                    onChange={e=>{
+                                      const file=e.target.files?.[0]
+                                      if(!file)return
+                                      const reader=new FileReader()
+                                      reader.onload=ev=>{
+                                        const result=ev.target?.result as string
+                                        if(result)patchActiveField(idx,{adElementImageUrl:result})
+                                      }
+                                      reader.readAsDataURL(file)
+                                      e.target.value=""
+                                    }}/>
+                                </div>}
+                          </F>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                            <F label="배경색" A={A}><CIn value={(field as any).adBg||"#FEE500"} onChange={v=>patchActiveField(idx,{adBg:v})} A={A}/></F>
+                            <F label="글자색" A={A}><CIn value={(field as any).adTextColor||"#191919"} onChange={v=>patchActiveField(idx,{adTextColor:v})} A={A}/></F>
+                          </div>
+                        </div>}
+                    <F label="클릭 URL" hint="입력하면 실제 폼에서 광고 전체를 누를 수 있습니다." A={A}>
+                      <TIn value={(field as any).adHref||""} onChange={v=>patchActiveField(idx,{adHref:v})} placeholder="https://..." A={A}/>
+                    </F>
+                  </div>}
                   {/* 날짜는 예시 텍스트 없음, 드롭다운은 선택 안내 문구 */}
                   {(field as any).type==="dropdown"&&
                     <div style={{padding:"10px 12px"}}><F label="선택 안내 문구" hint="아무것도 선택하지 않았을 때 표시됩니다" A={A}><TIn value={(field as any).placeholder||"선택해주세요."} onChange={v=>patchActiveField(idx,{placeholder:v})} A={A}/></F></div>}
                   {(field as any).type==="file"&&
                     <div style={{padding:"10px 12px"}}><F label="버튼 안내 문구" hint={FILE_LIMIT_TEXT} A={A}><TIn value={(field as any).placeholder||"파일 업로드"} onChange={v=>patchActiveField(idx,{placeholder:v})} A={A}/></F></div>}
-                  {(field as any).type!=="info"&&<div style={{padding:"4px 12px"}}><TRow label="필수 입력" on={!!(field as any).required} toggle={()=>patchActiveField(idx,{required:!(field as any).required})} A={A}/></div>}
+                  {!isDisplayOnlyFieldType((field as any).type)&&<div style={{padding:"4px 12px"}}><TRow label="필수 입력" on={!!(field as any).required} toggle={()=>patchActiveField(idx,{required:!(field as any).required})} A={A}/></div>}
                   {((field as any).type==="dropdown"||(field as any).type==="button_select"||(field as any).type==="checkbox")&&(()=>{
                     return <div style={{padding:"10px 12px"}}>
                       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:8}}>
@@ -4548,7 +4694,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               {FTYPES_DATA.map(ft=>ft.divider?<div key={ft.type} style={{gridColumn:"1 / -1",height:1,background:A.border,margin:"4px 0"}}/>:<button key={ft.type} onClick={()=>{
                 if(isKdt){
                   const id="kdt_"+Date.now()
-                  setCfg(p=>({...p,kdtFields:[...(p.kdtFields||[]),{id,label:"새 질문",type:ft.type as KdtFieldType,page:pvPage,required:false}]}))
+                  const adExtra=ft.type==="ad"?{adMode:"image" as AdMode,adMainText:"지금 가장 많이 찾는 프로그램",adSubText:"혜택과 모집 일정을 한눈에 확인해보세요.",adElementText:"자세히 보기",adBg:"#FEE500",adTextColor:"#191919",adHref:"",imageFit:"cover" as const,imagePosX:50,imagePosY:50,imageCropX:0,imageCropY:0,imageCropW:100,imageCropH:100}:{}
+                  setCfg(p=>({...p,kdtFields:[...(p.kdtFields||[]),{id,label:ft.type==="ad"?"광고 구좌":"새 질문",type:ft.type as KdtFieldType,page:pvPage,required:false,...adExtra}]}))
                   const newKdtIdx=(cfg.kdtFields||[]).filter((f:any)=>f.page===pvPage).length
                   setEditIdx(newKdtIdx)
                 }else{
@@ -5075,7 +5222,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {/* Drop line — below (last item) */}
             {dragInsertAt===i+1&&dragIdx!==i&&i===(fields.length-1)&&<div style={{position:"absolute" as const,bottom:-qg/2-1,left:0,right:0,height:2,borderRadius:1,background:accentC,zIndex:10,pointerEvents:"none" as const}}/>}
             {/* Label row */}
-            {field.type!=="info"&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:cfg.styles.labelGap??8}}>
+            {!isDisplayOnlyFieldType(field.type)&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:cfg.styles.labelGap??8}}>
               {isSelected&&<span style={{cursor:"grab",color:FC.t3,fontSize:14,lineHeight:1,flexShrink:0,userSelect:"none" as const}}>⠿</span>}
               <div style={{fontSize:13.5,fontWeight:600,color:FC.t1,flex:1,whiteSpace:"pre-line" as const,lineHeight:1.3}}>
                 {field.label}{field.required&&<span style={{color:accentC,marginLeft:3}}>*</span>}
@@ -5087,7 +5234,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M1 4h10m-3-3 3 3-3 3M15 12H5m3 3-3-3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </button>
                 {replaceId===id&&<div style={{position:"absolute" as const,top:0,right:28,background:A.card||FC.bg||"#fff",border:`1px solid ${A.border||FC.fieldBorder}`,borderRadius:"8px",padding:6,zIndex:200,display:"flex",flexDirection:"column" as const,gap:2,minWidth:130,boxShadow:"0 4px 16px rgba(0,0,0,0.15)"}}>
-                  {FTYPES_DATA.map(ft=>{const cur=(field as any).type===ft.type;return(
+                  {FTYPES_DATA.filter(ft=>!ft.divider).map(ft=>{const cur=(field as any).type===ft.type;return(
                     <button key={ft.type} onClick={e=>{e.stopPropagation();patchActiveField(i,{type:ft.type as FieldType});setReplaceId(null)}}
                       style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:6,border:"none",background:cur?A.blue2||accentC+"18":"transparent",color:cur?A.blue||accentC:A.t1||FC.t1,fontFamily:FONT,fontSize:12.5,cursor:"pointer",textAlign:"left" as const,fontWeight:cur?600:400,transition:"background .1s"}}
                       onMouseEnter={e=>{if(!cur)(e.currentTarget as HTMLElement).style.background=A.card2||FC.fieldBg}}
@@ -5102,6 +5249,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {(()=>{
               const rawH:any[]=(field as any).helpers&&(field as any).helpers.length?(field as any).helpers:(field as any).helper?[{text:(field as any).helper,callout:false}]:[]
               const hs:HelperItem[]=rawH.map((h:any)=>typeof h==="string"?{text:h,callout:false}:h)
+              if(isDisplayOnlyFieldType(field.type))return null
               return hs.filter(h=>h.text.trim()).map((h,hi)=>
                 h.callout
                   ?<div key={hi} style={{display:"flex",gap:8,padding:"9px 12px",borderRadius:fr2,background:accentC+"0d",border:`1px solid ${accentC}33`,marginBottom:6}}>
@@ -5114,6 +5262,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {(field.type==="text"||field.type==="name")&&
               <input value={val} onChange={e=>setVal(e.target.value)} placeholder={field.placeholder||""} style={inp}
                 onFocus={e=>e.target.style.borderColor=accentC} onBlur={e=>e.target.style.borderColor=FC.fieldBorder}/>}
+            {field.type==="ad"&&renderPreviewAdSlot(field)}
             {field.type==="email"&&<div>
               <input value={val} onChange={e=>{setVal(e.target.value);clearError(id)}} placeholder={field.placeholder||""} style={{...inp,borderColor:pvFieldErrors[id]?FC.red||"#FF4B4B":FC.fieldBorder}}
                 onFocus={e=>e.target.style.borderColor=pvFieldErrors[id]?FC.red||"#FF4B4B":accentC}
@@ -5448,7 +5597,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               onClick={()=>{if(selectedFieldId===kdtId){setSelectedFieldId(null);setReplaceId(null)}else{setSelectedFieldId(kdtId);setReplaceId(null);setSec("form");const fi=curFields.findIndex((f:any)=>f.id===kdtId);if(fi>=0)setEditIdx(fi)}}}
               style={{position:"relative" as const,marginBottom:cfg.styles.qGap||20,opacity:dragIdx===idx?0.4:1,outline:kdtIsSelected?"2px solid "+accentBg:"none",outlineOffset:4,borderRadius:fr2,cursor:"pointer"}}>
               {dragInsertAt===idx&&dragIdx!==idx&&<div style={{position:"absolute" as const,top:-(cfg.styles.qGap||20)/2-1,left:0,right:0,height:2,borderRadius:1,background:accentBg,zIndex:10,pointerEvents:"none" as const}}/>}
-              {field.type!=="info"&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:cfg.styles.labelGap??8}}>
+              {!isDisplayOnlyFieldType(field.type)&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:cfg.styles.labelGap??8}}>
                 {kdtIsSelected&&<span style={{cursor:"grab",color:FC.t3,fontSize:14,lineHeight:1,flexShrink:0,userSelect:"none" as const}}>⠿</span>}
                 <div style={{fontSize:13.5,fontWeight:600,color:FC.t1,flex:1,whiteSpace:"pre-line" as const,lineHeight:1.3}}>
                   {field.label}{field.required&&<span style={{color:accentBg,marginLeft:3}}>*</span>}
@@ -5459,7 +5608,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M1 4h10m-3-3 3 3-3 3M15 12H5m3 3-3-3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </button>
                   {replaceId===kdtId&&<div style={{position:"absolute" as const,top:0,right:28,background:A.card||FC.bg||"#fff",border:`1px solid ${A.border||FC.fieldBorder}`,borderRadius:"8px",padding:6,zIndex:200,display:"flex",flexDirection:"column" as const,gap:2,minWidth:130,boxShadow:"0 4px 16px rgba(0,0,0,0.15)"}}>
-                    {FTYPES_DATA.map(ft=>{const cur=(field as any).type===ft.type;return(
+                    {FTYPES_DATA.filter(ft=>!ft.divider).map(ft=>{const cur=(field as any).type===ft.type;return(
                       <button key={ft.type} onClick={e=>{e.stopPropagation();patchActiveField(idx,{type:ft.type as FieldType});setReplaceId(null)}}
                         style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:6,border:"none",background:cur?A.blue2||accentBg+"18":"transparent",color:cur?A.blue||accentBg:A.t1||FC.t1,fontFamily:FONT,fontSize:12.5,cursor:"pointer",textAlign:"left" as const,fontWeight:cur?600:400}}
                         onMouseEnter={e=>{if(!cur)(e.currentTarget as HTMLElement).style.background=A.card2||FC.fieldBg}}
@@ -5471,7 +5620,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   </div>}
                 </div>}
               </div>}
-              {(()=>{const rawH:any[]=((field as any).helpers&&(field as any).helpers.length)?(field as any).helpers:((field as any).helper)?[{text:(field as any).helper,callout:false}]:[];const hs=rawH.map((h:any)=>typeof h==="string"?{text:h,callout:false}:h);return hs.filter((h:any)=>h.text&&h.text.trim()).map((h:any,hi:number)=>h.callout?<div key={hi} style={{display:"flex",gap:8,padding:"9px 12px",borderRadius:fr2,background:accentBg+"0d",border:`1px solid ${accentBg}33`,marginBottom:6}}><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><circle cx="8" cy="8" r="6" stroke={accentBg} strokeWidth="1.4"/><path d="M8 7v4M8 5.5v.5" stroke={accentBg} strokeWidth="1.4" strokeLinecap="round"/></svg><div style={{fontSize:12,color:accentBg,lineHeight:1.6,fontWeight:500}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>  </div>:<div key={hi} style={{fontSize:12,color:FC.t3,marginBottom:4,lineHeight:1.6}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>)})()}
+              {(()=>{if(isDisplayOnlyFieldType(field.type))return null;const rawH:any[]=((field as any).helpers&&(field as any).helpers.length)?(field as any).helpers:((field as any).helper)?[{text:(field as any).helper,callout:false}]:[];const hs=rawH.map((h:any)=>typeof h==="string"?{text:h,callout:false}:h);return hs.filter((h:any)=>h.text&&h.text.trim()).map((h:any,hi:number)=>h.callout?<div key={hi} style={{display:"flex",gap:8,padding:"9px 12px",borderRadius:fr2,background:accentBg+"0d",border:`1px solid ${accentBg}33`,marginBottom:6}}><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><circle cx="8" cy="8" r="6" stroke={accentBg} strokeWidth="1.4"/><path d="M8 7v4M8 5.5v.5" stroke={accentBg} strokeWidth="1.4" strokeLinecap="round"/></svg><div style={{fontSize:12,color:accentBg,lineHeight:1.6,fontWeight:500}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>  </div>:<div key={hi} style={{fontSize:12,color:FC.t3,marginBottom:4,lineHeight:1.6}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>)})()}
               {(field.type==="text"||field.type==="name")&&<input
                 value={pvKdtVals[field.id]||""}
                 onChange={e=>setPvKdtVals(v=>({...v,[field.id]:e.target.value}))}
@@ -5480,6 +5629,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 onFocus={e=>{e.target.style.borderColor=accentBg}}
                 onBlur={e=>{e.target.style.borderColor=FC.fieldBorder}}
               />}
+              {field.type==="ad"&&renderPreviewAdSlot(field)}
               {field.type==="date"&&<input type="date"
                 value={pvKdtVals[field.id]||""}
                 onChange={e=>setPvKdtVals(v=>({...v,[field.id]:e.target.value}))}

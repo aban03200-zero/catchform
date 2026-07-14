@@ -36,13 +36,15 @@ type Opt = { label: string; value: string; isEtc: boolean; nextPage?: number }
 type HelperItem = { text: string; callout?: boolean }
 type RecruitmentPeriodMode = "pre"|"formal"
 type ConsentPosition = "start"|"end"
-type FieldType = "text"|"name"|"email"|"phone"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"
+type AdMode = "image"|"split"
+type FieldType = "text"|"name"|"email"|"phone"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"|"ad"
 type FormField = {
     id: string; type: FieldType; label: string; placeholder?: string
     helper?: string; helpers?: HelperItem[]; required?: boolean
     opts?: Opt[]; etcPh?: string; dupCheck?: boolean; page?: number; cols?: number
     imageUrl?: string; imageCaption?: string; imageFit?: "contain"|"cover"; imagePosX?: number; imagePosY?: number
     imageCropX?: number; imageCropY?: number; imageCropW?: number; imageCropH?: number; imageNaturalW?: number; imageNaturalH?: number
+    adMode?: AdMode; adMainText?: string; adSubText?: string; adElementText?: string; adElementImageUrl?: string; adHref?: string; adBg?: string; adTextColor?: string
 }
 type KdtField = {
     id: string; label: string; type: string; required?: boolean
@@ -203,6 +205,8 @@ const FILE_MAX_COUNT = 5
 const FILE_MAX_SIZE_MB = 10
 const FILE_MAX_SIZE = FILE_MAX_SIZE_MB * 1024 * 1024
 const FILE_LIMIT_TEXT = `최대 ${FILE_MAX_COUNT}개, 파일당 ${FILE_MAX_SIZE_MB}MB`
+const DISPLAY_ONLY_FIELD_TYPES = new Set(["info", "section_desc", "ad"])
+function isDisplayOnlyFieldType(type: any) { return DISPLAY_ONLY_FIELD_TYPES.has(String(type || "")) }
 const imageFit = (img: any) => img?.imageFit === "cover" ? "cover" : "contain"
 const imagePos = (img: any) => `${img?.imagePosX ?? 50}% ${img?.imagePosY ?? 50}%`
 const cropNumber = (v: any, d: number, min: number, max: number) => Math.max(min, Math.min(max, Number.isFinite(Number(v)) ? Number(v) : d))
@@ -287,6 +291,46 @@ function imageImgStyle(img: any): React.CSSProperties {
     return hasImageCrop(img)
         ? croppedImageStyle(img)
         : { width: "100%", height: imageFit(img) === "cover" ? "100%" : "auto", display: "block", objectFit: imageFit(img), objectPosition: imagePos(img) }
+}
+function normalizeAdHref(raw: any) {
+    const href = String(raw || "").trim()
+    if (!href) return ""
+    try {
+        const base = typeof window !== "undefined" ? window.location.origin : "https://catchform.local"
+        const url = new URL(href, base)
+        return ["http:", "https:", "mailto:", "tel:"].includes(url.protocol) ? url.href : ""
+    } catch {
+        return ""
+    }
+}
+function renderAdSlot(field: any, FC: typeof DARK, accentBg: string, radius: string) {
+    const mode = field.adMode === "split" ? "split" : "image"
+    const href = normalizeAdHref(field.adHref)
+    const bg = field.adBg || accentBg + "14"
+    const textColor = field.adTextColor || FC.t1
+    const imageField = { ...field, imageFit: field.imageFit || "cover" }
+    const imageContent = field.imageUrl
+        ? <div style={imageBoxStyle(imageField, 112, 14, FC.fieldBg)}>
+            <img src={field.imageUrl} alt={field.imageCaption || "광고"} style={imageImgStyle(imageField)} />
+          </div>
+        : <div style={{ height: 92, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 16px", borderRadius: 14, border: `1px solid ${FC.fieldBorder}`, background: FC.fieldBg, color: FC.t3, fontSize: 13, fontWeight: 600 }}>
+            광고
+          </div>
+    const splitContent = <div style={{ minHeight: 92, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "15px 16px 15px 18px", borderRadius: 14, border: `1px solid ${FC.fieldBorder}`, background: bg, color: textColor, overflow: "hidden" }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: "0.5px", opacity: 0.58, marginBottom: 5 }}>AD</div>
+            <div style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.25, letterSpacing: "-0.3px", whiteSpace: "pre-line", wordBreak: "keep-all" }}>{field.adMainText || "광고 메인 문구"}</div>
+            <div style={{ fontSize: 12.5, fontWeight: 500, lineHeight: 1.45, opacity: 0.72, marginTop: 5, whiteSpace: "pre-line", wordBreak: "keep-all" }}>{field.adSubText || "광고 서브 문구"}</div>
+        </div>
+        <div style={{ width: 92, height: 62, borderRadius: 12, background: "rgba(255,255,255,0.42)", border: "1px solid rgba(255,255,255,0.45)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, color: textColor, fontSize: 13, fontWeight: 800, textAlign: "center", padding: 8, boxSizing: "border-box" }}>
+            {field.adElementImageUrl
+                ? <img src={field.adElementImageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                : <span style={{ lineHeight: 1.25, whiteSpace: "pre-line" }}>{field.adElementText || "요소"}</span>}
+        </div>
+    </div>
+    const content = mode === "split" ? splitContent : imageContent
+    if (!href) return <div style={{ borderRadius: radius }}>{content}</div>
+    return <a href={href} target="_blank" rel="noopener noreferrer" style={{ display: "block", borderRadius: radius, color: "inherit", textDecoration: "none" }}>{content}</a>
 }
 
 // ─── Markdown → HTML ──────────────────────────────────────────────────────
@@ -1113,7 +1157,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         for (const field of currentFields) {
             const f = field as FormField
             if (!f.required) continue
-            if (f.type === "info" || (f.type as any) === "section_desc") continue
+            if (isDisplayOnlyFieldType(f.type)) continue
             if (f.type === "checkbox") {
                 if (!(checked[f.id] || []).length) return false
             } else if (f.type === "file") {
@@ -1181,7 +1225,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const getDraftAnswers = () => {
         const allFields: any[] = isKdt ? (cfg.kdtFields || []) as any[] : cfg.form.fields as any[]
         return allFields
-            .filter(field => field.type !== "info" && field.type !== "section_desc")
+            .filter(field => !isDisplayOnlyFieldType(field.type))
             .map(field => {
                 const answer = field.type === "file" ? (fileNames[field.id] || []) : getFieldAnswer(field)
                 return { question: field.label || field.id, answer, answerKey: field.id }
@@ -1231,7 +1275,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         for (const field of currentFields) {
             const f = field as FormField
             if (!f.required) continue
-            if (f.type === "info" || (f.type as any) === "section_desc") continue
+            if (isDisplayOnlyFieldType(f.type)) continue
             const val = vals[f.id] || ""
             if (f.type === "checkbox") {
                 if (!(checked[f.id] || []).length) { newErrors[f.id] = "필수 입력 항목이에요."; hasErr = true }
@@ -1258,7 +1302,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     ]
     const getSheetResponseFields = () => {
         const raw: any[] = isKdt ? (cfg.kdtFields || []) as any[] : cfg.form.fields as any[]
-        return raw.filter(field => field.type !== "info" && field.type !== "section_desc")
+        return raw.filter(field => !isDisplayOnlyFieldType(field.type))
     }
     const updateGoogleSheetsSyncStatus = async (formConfigId: string | null, status: "sent"|"error", message: string, patch: Record<string, any> = {}) => {
         if (!supa || !formConfigId) return
@@ -1350,7 +1394,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         let hasErr = false
         const newErrors: Record<string, string> = {}
         for (const field of currentFields) {
-            if (field.type === "info" || field.type === "section_desc" as any) continue
+            if (isDisplayOnlyFieldType(field.type)) continue
             const val = vals[field.id] || ""
             const chk = checked[field.id] || []
             const fs:any = fileObjects[field.id] || []
@@ -1467,7 +1511,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             const allFields = isKdt ? (cfg.kdtFields || []) as any[] : cfg.form.fields
 
             for (const field of allFields) {
-                if (field.type === "info" || (field.type as any) === "section_desc") continue
+                if (isDisplayOnlyFieldType(field.type)) continue
                 const fid = field.id as string
                 const label = field.label as string
                 const answer: any = field.type === "file" ? await uploadFieldFile(field) : getFieldAnswer(field)
@@ -1589,6 +1633,9 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 <div style={{ fontSize: 14, fontWeight:600, color: FC.t1, marginBottom: (f as any).desc ? 6 : 0 }}>{f.label}</div>
                 {(f as any).desc && <div style={{ fontSize: 12.5, color: FC.t3, lineHeight: 1.7, whiteSpace: "pre-line" }}>{(f as any).desc}</div>}
             </div>
+        }
+        if (f.type === "ad") {
+            return <div key={f.id} style={{ marginBottom: qg }}>{renderAdSlot(f, FC, accentBg, fr)}</div>
         }
 
         const val = vals[f.id] || ""
