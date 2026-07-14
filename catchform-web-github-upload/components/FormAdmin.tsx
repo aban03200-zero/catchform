@@ -25,9 +25,11 @@ type AdMode = "image"|"split"
 type FieldType = "text"|"name"|"phone"|"email"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"|"ad"
 type HelperItem = { text:string; callout?:boolean }
 type FormField = { id:string; type:FieldType; label:string; placeholder?:string; helper?:string; helpers?:HelperItem[]; required?:boolean; opts?:Opt[]; etcPh?:string; dupCheck?:boolean; page?:number; cols?:number; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMode?:AdMode; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string }
+type FormAdConfig = { enabled:boolean; adMode:AdMode; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string }
 type QrLink = { code:string; url:string; label?:string; type?:string; createdAt?:string }
 type Cfg = {
   header: { imageUrl:string; programId:string; programUnlinked?:boolean; recruitmentPeriodMode?:RecruitmentPeriodMode; overline:string; title:string; educationStart:string; educationEnd:string; tuitionFree:boolean; tuitionFreeText:string; tuitionAmount:string; stipend:string; noticeEnabled:boolean; noticeIconEnabled:boolean; noticeIconText:string; noticeText:string; noticeShape?:"pill"|"rect"; applicationType?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
+  ad?: FormAdConfig
   form: { fields:FormField[]; showNum:boolean; dupText:string; pages:number; pageLabels?:string[]; consentPosition?:ConsentPosition }
   consents: { enabled:boolean; required:boolean; title:string; consentType?:string; body:string; checkLabel:string; policyUrl:string }[]
   cta: { label:string; loadLabel:string; height:number; bg:string; color:string }
@@ -104,6 +106,26 @@ function isDisplayOnlyFieldType(type:any){return DISPLAY_ONLY_FIELD_TYPES.has(St
 const CATCHFORM_DIRECT_FORM_BASE_URL = "https://catchform.vercel.app/form"
 const FORM_SUMMARY_SELECT = "id,name,slug,updated_at,brand,config_brand:config->>brand,header_title:config->header->>title,program_id:config->header->>programId,recruitment_period_mode:config->header->>recruitmentPeriodMode,form_type:config->>formType,dashboard_meta:config->dashboard"
 const DEFAULT_GOOGLE_SHEETS = {enabled:false,mode:"existing" as const,accountEmail:"",sheetUrl:"",sheetName:"",webhookUrl:"",lastSyncStatus:"idle" as const,lastSyncAt:"",lastSyncMessage:""}
+const DEFAULT_FORM_AD:FormAdConfig = {
+  enabled:false,
+  adMode:"image",
+  imageUrl:"",
+  imageCaption:"",
+  imageFit:"cover",
+  imagePosX:50,
+  imagePosY:50,
+  imageCropX:0,
+  imageCropY:0,
+  imageCropW:100,
+  imageCropH:100,
+  adMainText:"지금 가장 많이 찾는 프로그램",
+  adSubText:"혜택과 모집 일정을 한눈에 확인해보세요.",
+  adElementText:"자세히 보기",
+  adElementImageUrl:"",
+  adHref:"",
+  adBg:"#FEE500",
+  adTextColor:"#191919",
+}
 const DASHBOARD_FORM_TYPES:{value:DashboardFormType;label:string}[]=[
   {value:"alert",label:"사전 알림"},
   {value:"application",label:"신청"},
@@ -714,6 +736,7 @@ const DEFOPTS: Opt[] = [
 ]
 const DEF: Cfg = {
   header:{imageUrl:"",programId:"",overline:"프로그램 오픈 알림 신청",title:"폼 제목을 입력해주세요.",educationStart:"",educationEnd:"",tuitionFree:true,tuitionFreeText:"수강료 전액 무료",tuitionAmount:"",stipend:"",noticeEnabled:true,noticeIconEnabled:true,noticeIconText:"i",noticeText:"필요한 정보만 간단히 적고, 오픈 소식 가장 먼저 받아보세요."},
+  ad:dc(DEFAULT_FORM_AD),
   form:{
     showNum:true,
     dupText:"이미 신청 내역이 있어요. (이메일 또는 휴대폰 번호가 동일해요)",
@@ -936,6 +959,7 @@ function mergeCfg(raw:any):Cfg {
   const legacyKdtPages=legacyKdtFields?Math.max(3,...legacyKdtFields.map((f:any)=>f.page||1)):0
   return {
     header:{...d.header,...(raw.header||{}),...(isLegacyKdt&&!(raw.header||{}).applicationType?{applicationType:"formal"}:{})},
+    ad:{...DEFAULT_FORM_AD,...(raw.ad||{})},
     form:(()=>{
       const rf=raw.form||{}
       const df=d.form
@@ -1091,7 +1115,6 @@ const FTYPES_DATA:{type:string;label:string;divider?:boolean}[] = [
   {type:"time",label:"시간"},
   {type:"---4",label:"",divider:true},
   {type:"info",label:"안내 텍스트"},
-  {type:"ad",label:"광고"},
 ]
 
 // ─── FieldOptAdder component ────────────────────────────────────────────────
@@ -1515,7 +1538,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [editResponse,setEditResponse]=React.useState<null|{row:any;values:Record<string,string> }>(null)
   const [editResponseSaving,setEditResponseSaving]=React.useState(false)
   const [imageCropModal,setImageCropModal]=React.useState<null|{
-    target:"header"|"field"
+    target:"header"|"field"|"ad"
     fieldId?:string
     imageUrl:string
     imageFit:"contain"|"cover"
@@ -2169,6 +2192,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       dashboard:{...(p.dashboard||{}),operationStart:period.start||"",operationEnd:period.end||""},
     }))
   }
+  function uad<K extends keyof FormAdConfig>(k:K,v:FormAdConfig[K]){setCfg(p=>({...p,ad:{...DEFAULT_FORM_AD,...(p.ad||{}),[k]:v}}))}
   function updateField(idx:number,patch:Partial<FormField>){setCfg(p=>({...p,form:{...p.form,fields:p.form.fields.map((f,i)=>i===idx?{...f,...patch}:f)}}))}
   function addField(type:FieldType="text"){
     const fieldDefs:Record<string,{id:string;label:string;placeholder:string;helper?:string;required:boolean}> = {
@@ -2181,31 +2205,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       date:     {id:"",         label:"날짜를 선택해주세요.",                    placeholder:"",                         required:false},
       time:     {id:"",         label:"시간을 선택해주세요.",                    placeholder:"",                         required:false},
       file:     {id:"",         label:"파일을 첨부해주세요.",                    placeholder:"파일 업로드",              required:false},
-      ad:       {id:"",         label:"광고 구좌",                               placeholder:"",                         required:false},
     }
     const preset = fieldDefs[type]
     const id = preset?.id ? preset.id : "f_"+Date.now()
-    const defaultLabel = type==="info" ? "안내 텍스트" : type==="ad" ? "광고 구좌" : preset ? preset.label : "새 질문"
-    const defaultPh = type==="info"||type==="ad" ? "" : preset ? preset.placeholder : "입력해주세요."
+    const defaultLabel = type==="info" ? "안내 텍스트" : preset ? preset.label : "새 질문"
+    const defaultPh = type==="info" ? "" : preset ? preset.placeholder : "입력해주세요."
     const extra:any = preset ? {required:preset.required} : {}
     if(preset?.helper)extra.helper=preset.helper
     if(type==="referral"){extra.opts=DEFOPTS;extra.etcPh="기타 경로를 입력해주세요."}
-    if(type==="ad"){
-      extra.adMode="image"
-      extra.adMainText="지금 가장 많이 찾는 프로그램"
-      extra.adSubText="혜택과 모집 일정을 한눈에 확인해보세요."
-      extra.adElementText="자세히 보기"
-      extra.adBg="#FEE500"
-      extra.adTextColor="#191919"
-      extra.adHref=""
-      extra.imageFit="cover"
-      extra.imagePosX=50
-      extra.imagePosY=50
-      extra.imageCropX=0
-      extra.imageCropY=0
-      extra.imageCropW=100
-      extra.imageCropH=100
-    }
     if(type==="dropdown"||type==="button_select"||type==="checkbox"){
       extra.opts=[
         {label:"예시 답변 1",value:"예시 답변 1",isEtc:false},
@@ -3207,11 +3214,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   },[cfg,currentBrand])
 
   // ── Image upload ──────────────────────────────────────────────────────
-  function setImageNaturalSize(target:"header"|"field",url:string,fieldId?:string){
+  function setImageNaturalSize(target:"header"|"field"|"ad",url:string,fieldId?:string){
     const img=new Image()
     img.onload=()=>{
       const patch={imageNaturalW:img.naturalWidth||0,imageNaturalH:img.naturalHeight||0}
       if(target==="header")setCfg(p=>p.header.imageUrl===url?{...p,header:{...p.header,...patch}}:p)
+      else if(target==="ad")setCfg(p=>p.ad?.imageUrl===url?{...p,ad:{...DEFAULT_FORM_AD,...(p.ad||{}),...patch}}:p)
       else if(fieldId)patchImageFieldById(fieldId,patch)
     }
     img.src=url
@@ -3314,7 +3322,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       kdtFields:p.kdtFields?(p.kdtFields||[]).map((f:any)=>f.id===fieldId?{...f,...patch}:f):p.kdtFields,
     }))
   }
-  function openImageCropModal(target:"header"|"field",img:any,fieldId?:string){
+  function openImageCropModal(target:"header"|"field"|"ad",img:any,fieldId?:string){
     if(!img?.imageUrl)return
     setImageCropModal({
       target,
@@ -3346,6 +3354,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     }
     if(imageCropModal.target==="header"){
       setCfg(p=>({...p,header:{...p.header,...patch}}))
+    }else if(imageCropModal.target==="ad"){
+      setCfg(p=>({...p,ad:{...DEFAULT_FORM_AD,...(p.ad||{}),...patch}}))
     }else if(imageCropModal.fieldId){
       patchImageFieldById(imageCropModal.fieldId,patch)
     }
@@ -4150,6 +4160,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     {group:"콘텐츠",items:[
       {id:"header",label:"헤더"},
       {id:"notice",label:"안내 문구"},
+      {id:"ad",label:"광고",badge:cfg.ad?.enabled?"ON":"OFF"},
       {id:"form",label:"폼 질문"},
       {id:"consent",label:"동의",badge:cfg.consents.some(c=>c.enabled)?"ON":"OFF"},
       {id:"login",label:"로그인",badge:cfg.auth.enabled?"ON":"OFF"},
@@ -4298,6 +4309,103 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           {cfg.header.noticeIconEnabled&&<F label="아이콘 텍스트" A={A}><TIn value={cfg.header.noticeIconText} onChange={v=>uh("noticeIconText",v)} A={A}/></F>}
         </FG>
       </div>
+
+      case "ad": {
+        const ad={...DEFAULT_FORM_AD,...(cfg.ad||{})}
+        return <div style={pd}>
+          <FG title="광고 구좌" A={A}>
+            <TRow label="광고 구좌 표시" on={!!ad.enabled} toggle={()=>uad("enabled",!ad.enabled)} A={A}/>
+            <div style={{fontSize:12,color:A.t3,lineHeight:1.6,marginTop:8}}>폼 내부 상단, 헤더 아래에 카카오 비즈보드 형태의 광고 구좌가 표시됩니다.</div>
+          </FG>
+          <FG title="광고 소재" A={A}>
+            <F label="소재 방식" A={A}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                {[
+                  {key:"image" as AdMode,label:"통이미지"},
+                  {key:"split" as AdMode,label:"텍스트 + 요소"},
+                ].map(item=>{
+                  const selected=ad.adMode===item.key
+                  return <button key={item.key} onClick={()=>uad("adMode",item.key)}
+                    style={{height:38,borderRadius:A.r,border:`1.5px solid ${selected?A.blue:A.border}`,background:selected?A.blue2:A.card2,color:selected?A.blue:A.t2,fontFamily:FONT,fontSize:13,fontWeight:selected?700:500,cursor:"pointer"}}>
+                    {item.label}
+                  </button>
+                })}
+              </div>
+            </F>
+            {ad.adMode==="image"
+              ? <F label="통이미지" hint="한 장짜리 배너 이미지를 넣습니다." A={A}>
+                  {ad.imageUrl
+                    ? <div>
+                        <div style={{...imagePreviewBoxStyle(ad,130),border:`1px solid ${A.border}`,marginBottom:6}}>
+                          <img src={ad.imageUrl} alt="" style={imagePreviewImgStyle(ad)}/>
+                          <button onClick={()=>setCfg(p=>({...p,ad:{...DEFAULT_FORM_AD,...(p.ad||{}),imageUrl:"",imageCaption:""}}))}
+                            style={{position:"absolute",top:6,right:6,width:24,height:24,borderRadius:"50%",border:"none",background:"rgba(0,0,0,0.5)",color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,lineHeight:1}}>×</button>
+                        </div>
+                        {renderImageCropControls(ad,()=>openImageCropModal("ad",ad),()=>setCfg(p=>({...p,ad:{...DEFAULT_FORM_AD,...(p.ad||{}),imageFit:"contain"}})))}
+                      </div>
+                    : <div>
+                        <label htmlFor="form_ad_image_upload" style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,height:42,borderRadius:A.r,border:`1.5px dashed ${A.border}`,background:A.card2,cursor:"pointer",fontSize:12.5,color:A.t3,fontFamily:FONT,fontWeight:600}}>
+                          이미지 파일 업로드
+                        </label>
+                        <input id="form_ad_image_upload" type="file" accept="image/*" style={{display:"none"}}
+                          onChange={e=>{
+                            const file=e.target.files?.[0]
+                            if(!file)return
+                            const reader=new FileReader()
+                            reader.onload=ev=>{
+                              const result=ev.target?.result as string
+                              if(result){
+                                setCfg(p=>({...p,ad:{...DEFAULT_FORM_AD,...(p.ad||{}),imageUrl:result,imageFit:"cover",imagePosX:50,imagePosY:50,imageCropX:0,imageCropY:0,imageCropW:100,imageCropH:100}}))
+                                setImageNaturalSize("ad",result)
+                              }
+                            }
+                            reader.readAsDataURL(file)
+                            e.target.value=""
+                          }}/>
+                      </div>}
+                </F>
+              : <div>
+                  <F label="메인 텍스트" A={A}><TArea value={ad.adMainText||""} onChange={v=>uad("adMainText",v)} minH={44} A={A}/></F>
+                  <F label="서브 텍스트" A={A}><TArea value={ad.adSubText||""} onChange={v=>uad("adSubText",v)} minH={44} A={A}/></F>
+                  <F label="오른쪽 요소 텍스트" hint="이미지를 넣으면 텍스트 대신 이미지가 표시됩니다." A={A}><TIn value={ad.adElementText||""} onChange={v=>uad("adElementText",v)} A={A}/></F>
+                  <F label="오른쪽 요소 이미지" A={A}>
+                    {ad.adElementImageUrl
+                      ? <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <img src={ad.adElementImageUrl} alt="" style={{width:70,height:48,objectFit:"cover",borderRadius:A.r,border:`1px solid ${A.border}`}}/>
+                          <button onClick={()=>uad("adElementImageUrl","")} style={{height:32,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:12,cursor:"pointer"}}>삭제</button>
+                        </div>
+                      : <div>
+                          <label htmlFor="form_ad_element_upload" style={{display:"flex",alignItems:"center",justifyContent:"center",height:36,borderRadius:A.r,border:`1.5px dashed ${A.border}`,background:A.card2,cursor:"pointer",fontSize:12.5,color:A.t3,fontFamily:FONT,fontWeight:600}}>이미지 업로드</label>
+                          <input id="form_ad_element_upload" type="file" accept="image/*" style={{display:"none"}}
+                            onChange={e=>{
+                              const file=e.target.files?.[0]
+                              if(!file)return
+                              const reader=new FileReader()
+                              reader.onload=ev=>{
+                                const result=ev.target?.result as string
+                                if(result)uad("adElementImageUrl",result)
+                              }
+                              reader.readAsDataURL(file)
+                              e.target.value=""
+                            }}/>
+                        </div>}
+                  </F>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <F label="배경색" A={A}><CIn value={ad.adBg||"#FEE500"} onChange={v=>uad("adBg",v)} A={A}/></F>
+                    <F label="글자색" A={A}><CIn value={ad.adTextColor||"#191919"} onChange={v=>uad("adTextColor",v)} A={A}/></F>
+                  </div>
+                </div>}
+            <F label="클릭 URL" hint="입력하면 실제 폼에서 광고 전체가 링크로 동작합니다." A={A}>
+              <TIn value={ad.adHref||""} onChange={v=>uad("adHref",v)} placeholder="https://..." A={A}/>
+            </F>
+          </FG>
+          <FG title="미리보기" A={A} last>
+            <div style={{padding:12,borderRadius:A.r2,border:`1px solid ${A.border}`,background:cfg.styles.theme==="dark"?FD.bg:FL.bg}}>
+              {renderPreviewAdSlot(ad)}
+            </div>
+          </FG>
+        </div>
+      }
 
       case "form": {
         const FTYPES=FTYPES_DATA
@@ -5139,6 +5247,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {cfg.header.stipend&&<><span style={{opacity:.3}}>|</span><span>지급 수당 {cfg.header.stipend}</span></>}
           </div>
         </div>
+        {cfg.ad?.enabled&&<div onClick={()=>setSec("ad")} style={{marginBottom:24,cursor:"pointer",outline:sec==="ad"?`2px solid ${accentBg}`:"none",outlineOffset:4,borderRadius:14}}>
+          {renderPreviewAdSlot({...DEFAULT_FORM_AD,...cfg.ad})}
+        </div>}
         {pvPage===1&&cfg.header.noticeEnabled&&<div style={{display:"flex",justifyContent:"center",marginBottom:24}}>
           <div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"9px 16px",borderRadius:(cfg.header.noticeShape||"pill")==="pill"?999:10,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,fontSize:12.5,color:FC.t2}}>
             {cfg.header.noticeIconEnabled&&<span style={{width:17,height:17,borderRadius:"50%",border:`1px solid ${FC.fieldBorder}`,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,flexShrink:0}}>{cfg.header.noticeIconText}</span>}
@@ -5564,6 +5675,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         {cfg.header.title&&<div style={{marginBottom:24}}>
           {cfg.header.overline&&<div style={{fontSize:12,fontWeight:600,color:accentBg,marginBottom:6}}>{cfg.header.overline}</div>}
           <div style={{fontSize:22,fontWeight:600,color:FC.t1,letterSpacing:"-0.5px"}}>{cfg.header.title}</div>
+        </div>}
+        {cfg.ad?.enabled&&<div onClick={()=>setSec("ad")} style={{marginBottom:24,cursor:"pointer",outline:sec==="ad"?`2px solid ${accentBg}`:"none",outlineOffset:4,borderRadius:14}}>
+          {renderPreviewAdSlot({...DEFAULT_FORM_AD,...cfg.ad})}
         </div>}
         {/* 스텝 인디케이터 — elastic stepper */}
         <div style={{display:"flex",gap:6,marginBottom:28}}>

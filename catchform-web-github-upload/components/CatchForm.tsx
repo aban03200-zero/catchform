@@ -46,6 +46,12 @@ type FormField = {
     imageCropX?: number; imageCropY?: number; imageCropW?: number; imageCropH?: number; imageNaturalW?: number; imageNaturalH?: number
     adMode?: AdMode; adMainText?: string; adSubText?: string; adElementText?: string; adElementImageUrl?: string; adHref?: string; adBg?: string; adTextColor?: string
 }
+type FormAdConfig = {
+    enabled: boolean; adMode: AdMode
+    imageUrl?: string; imageCaption?: string; imageFit?: "contain"|"cover"; imagePosX?: number; imagePosY?: number
+    imageCropX?: number; imageCropY?: number; imageCropW?: number; imageCropH?: number; imageNaturalW?: number; imageNaturalH?: number
+    adMainText?: string; adSubText?: string; adElementText?: string; adElementImageUrl?: string; adHref?: string; adBg?: string; adTextColor?: string
+}
 type KdtField = {
     id: string; label: string; type: string; required?: boolean
     page?: number; options?: string[]; opts?: Opt[]
@@ -62,6 +68,7 @@ type Cfg = {
         imageFit?: "contain"|"cover"; imagePosX?: number; imagePosY?: number
         imageCropX?: number; imageCropY?: number; imageCropW?: number; imageCropH?: number; imageNaturalW?: number; imageNaturalH?: number
     }
+    ad?: FormAdConfig
     form: { fields: FormField[]; showNum: boolean; dupText: string; pages: number; pageLabels?: string[]; consentPosition?: ConsentPosition }
     consents: { enabled: boolean; required: boolean; title: string; consentType?: string; body: string; checkLabel: string; policyUrl: string }[]
     cta: { label: string; loadLabel: string; height: number; bg: string; color: string }
@@ -207,6 +214,26 @@ const FILE_MAX_SIZE = FILE_MAX_SIZE_MB * 1024 * 1024
 const FILE_LIMIT_TEXT = `최대 ${FILE_MAX_COUNT}개, 파일당 ${FILE_MAX_SIZE_MB}MB`
 const DISPLAY_ONLY_FIELD_TYPES = new Set(["info", "section_desc", "ad"])
 function isDisplayOnlyFieldType(type: any) { return DISPLAY_ONLY_FIELD_TYPES.has(String(type || "")) }
+const DEFAULT_FORM_AD: FormAdConfig = {
+    enabled: false,
+    adMode: "image",
+    imageUrl: "",
+    imageCaption: "",
+    imageFit: "cover",
+    imagePosX: 50,
+    imagePosY: 50,
+    imageCropX: 0,
+    imageCropY: 0,
+    imageCropW: 100,
+    imageCropH: 100,
+    adMainText: "지금 가장 많이 찾는 프로그램",
+    adSubText: "혜택과 모집 일정을 한눈에 확인해보세요.",
+    adElementText: "자세히 보기",
+    adElementImageUrl: "",
+    adHref: "",
+    adBg: "#FEE500",
+    adTextColor: "#191919",
+}
 const imageFit = (img: any) => img?.imageFit === "cover" ? "cover" : "contain"
 const imagePos = (img: any) => `${img?.imagePosX ?? 50}% ${img?.imagePosY ?? 50}%`
 const cropNumber = (v: any, d: number, min: number, max: number) => Math.max(min, Math.min(max, Number.isFinite(Number(v)) ? Number(v) : d))
@@ -2076,6 +2103,10 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     {cfg.header.tuitionFree ? cfg.header.tuitionFreeText || "수강료 전액 무료" : cfg.header.tuitionAmount ? `${cfg.header.tuitionAmount}원` : ""}
                     {cfg.header.stipend && <><span style={{ margin: "0 8px", color: FC.t3 }}>|</span>{cfg.header.stipend}</>}
                 </div>}
+            </div>}
+
+            {cfg.ad?.enabled && <div style={{ marginBottom: 24 }}>
+                {renderAdSlot({ ...DEFAULT_FORM_AD, ...cfg.ad }, FC, accentBg, fr)}
             </div>}
 
             {/* Notice */}
