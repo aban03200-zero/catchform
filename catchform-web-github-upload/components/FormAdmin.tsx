@@ -101,6 +101,7 @@ function mergeFormRows(existing:any[],incoming:any[]){
 const FILE_MAX_COUNT = 5
 const FILE_MAX_SIZE_MB = 10
 const FILE_LIMIT_TEXT = `최대 ${FILE_MAX_COUNT}개, 파일당 ${FILE_MAX_SIZE_MB}MB`
+const AD_IMAGE_SIZE_TEXT = "권장 1200 × 300px (4:1)"
 const DISPLAY_ONLY_FIELD_TYPES = new Set(["info","section_desc","ad"])
 function isDisplayOnlyFieldType(type:any){return DISPLAY_ONLY_FIELD_TYPES.has(String(type||""))}
 const CATCHFORM_DIRECT_FORM_BASE_URL = "https://catchform.vercel.app/form"
@@ -3296,7 +3297,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <img src={field.imageUrl} alt={field.imageCaption||"광고"} style={imagePreviewImgStyle(imageField)}/>
             </div>
           : <div style={{height:96,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 16px",fontSize:13,color:FC.t3,fontWeight:600,border:`1.5px dashed ${FC.fieldBorder}`,borderRadius:14,background:FC.fieldBg}}>
-              광고 이미지를 업로드해주세요.
+              이미지 배너를 업로드해주세요. {AD_IMAGE_SIZE_TEXT}
             </div>}
         {linkedBadge}
       </div>
@@ -4315,13 +4316,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         return <div style={pd}>
           <FG title="광고 구좌" A={A}>
             <TRow label="광고 구좌 표시" on={!!ad.enabled} toggle={()=>uad("enabled",!ad.enabled)} A={A}/>
-            <div style={{fontSize:12,color:A.t3,lineHeight:1.6,marginTop:8}}>폼 내부 상단, 헤더 아래에 카카오 비즈보드 형태의 광고 구좌가 표시됩니다.</div>
+            <div style={{fontSize:12,color:A.t3,lineHeight:1.6,marginTop:8}}>폼 내부 상단, 대표이미지 위에 카카오 비즈보드 형태의 광고 구좌가 표시됩니다.</div>
           </FG>
           <FG title="광고 소재" A={A}>
             <F label="소재 방식" A={A}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                 {[
-                  {key:"image" as AdMode,label:"통이미지"},
+                  {key:"image" as AdMode,label:"이미지 배너"},
                   {key:"split" as AdMode,label:"텍스트 + 요소"},
                 ].map(item=>{
                   const selected=ad.adMode===item.key
@@ -4333,7 +4334,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               </div>
             </F>
             {ad.adMode==="image"
-              ? <F label="통이미지" hint="한 장짜리 배너 이미지를 넣습니다." A={A}>
+              ? <F label="이미지 배너" hint="광고 구좌 전체를 채우는 배너 이미지를 넣습니다." A={A}>
                   {ad.imageUrl
                     ? <div>
                         <div style={{...imagePreviewBoxStyle(ad,130),border:`1px solid ${A.border}`,marginBottom:6}}>
@@ -4344,8 +4345,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                         {renderImageCropControls(ad,()=>openImageCropModal("ad",ad),()=>setCfg(p=>({...p,ad:{...DEFAULT_FORM_AD,...(p.ad||{}),imageFit:"contain"}})))}
                       </div>
                     : <div>
-                        <label htmlFor="form_ad_image_upload" style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,height:42,borderRadius:A.r,border:`1.5px dashed ${A.border}`,background:A.card2,cursor:"pointer",fontSize:12.5,color:A.t3,fontFamily:FONT,fontWeight:600}}>
-                          이미지 파일 업로드
+                        <label htmlFor="form_ad_image_upload" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,height:56,borderRadius:A.r,border:`1.5px dashed ${A.border}`,background:A.card2,cursor:"pointer",fontFamily:FONT,color:A.t3}}>
+                          <span style={{fontSize:12.5,fontWeight:700}}>이미지 파일 업로드</span>
+                          <span style={{fontSize:11,fontWeight:500}}>{AD_IMAGE_SIZE_TEXT}</span>
                         </label>
                         <input id="form_ad_image_upload" type="file" accept="image/*" style={{display:"none"}}
                           onChange={e=>{
@@ -4641,7 +4643,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     <F label="광고 소재 방식" A={A}>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                         {[
-                          {key:"image" as AdMode,label:"통이미지"},
+                          {key:"image" as AdMode,label:"이미지 배너"},
                           {key:"split" as AdMode,label:"텍스트 + 요소"},
                         ].map(item=>{
                           const selected=((field as any).adMode||"image")===item.key
@@ -4653,7 +4655,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       </div>
                     </F>
                     {((field as any).adMode||"image")==="image"
-                      ? <F label="통이미지" hint="카카오 비즈보드처럼 한 장짜리 배너 이미지를 넣습니다." A={A}>
+                      ? <F label="이미지 배너" hint="광고 구좌 전체를 채우는 배너 이미지를 넣습니다." A={A}>
                           {(field as any).imageUrl
                             ? <div>
                                 <div style={{...imagePreviewBoxStyle({...field,imageFit:(field as any).imageFit||"cover"},130),border:`1px solid ${A.border}`,marginBottom:6}}>
@@ -4664,8 +4666,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                                 {renderImageCropControls(field,()=>openImageCropModal("field",field,(field as any).id),()=>patchActiveField(idx,{imageFit:"contain"}))}
                               </div>
                             : <div>
-                                <label htmlFor={`ad_image_upload_${field.id}`} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,height:42,borderRadius:A.r,border:`1.5px dashed ${A.border}`,background:A.card2,cursor:"pointer",fontSize:12.5,color:A.t3,fontFamily:FONT,fontWeight:600}}>
-                                  이미지 파일 업로드
+                                <label htmlFor={`ad_image_upload_${field.id}`} style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,height:56,borderRadius:A.r,border:`1.5px dashed ${A.border}`,background:A.card2,cursor:"pointer",fontFamily:FONT,color:A.t3}}>
+                                  <span style={{fontSize:12.5,fontWeight:700}}>이미지 파일 업로드</span>
+                                  <span style={{fontSize:11,fontWeight:500}}>{AD_IMAGE_SIZE_TEXT}</span>
                                 </label>
                                 <input id={`ad_image_upload_${field.id}`} type="file" accept="image/*" style={{display:"none"}}
                                   onChange={e=>{
@@ -5235,6 +5238,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
     return <div style={{flex:1,overflowY:"auto" as const,display:"flex",justifyContent:"center",padding:"32px 20px 120px",background:FC.bg,"--link-color":accentBg} as React.CSSProperties}>
       <div style={{width:"100%",maxWidth:cfg.styles.maxW}}>
+        {cfg.ad?.enabled&&<div onClick={()=>setSec("ad")} style={{marginBottom:24,cursor:"pointer",outline:sec==="ad"?`2px solid ${accentBg}`:"none",outlineOffset:4,borderRadius:14}}>
+          {renderPreviewAdSlot({...DEFAULT_FORM_AD,...cfg.ad})}
+        </div>}
         {cfg.header.imageUrl&&<div style={{...imagePreviewBoxStyle(cfg.header,200),borderRadius:fr2,marginBottom:22,background:FC.fieldBg}}>
           <img src={cfg.header.imageUrl} alt="" style={imagePreviewImgStyle(cfg.header)}/>
         </div>}
@@ -5247,9 +5253,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {cfg.header.stipend&&<><span style={{opacity:.3}}>|</span><span>지급 수당 {cfg.header.stipend}</span></>}
           </div>
         </div>
-        {cfg.ad?.enabled&&<div onClick={()=>setSec("ad")} style={{marginBottom:24,cursor:"pointer",outline:sec==="ad"?`2px solid ${accentBg}`:"none",outlineOffset:4,borderRadius:14}}>
-          {renderPreviewAdSlot({...DEFAULT_FORM_AD,...cfg.ad})}
-        </div>}
         {pvPage===1&&cfg.header.noticeEnabled&&<div style={{display:"flex",justifyContent:"center",marginBottom:24}}>
           <div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"9px 16px",borderRadius:(cfg.header.noticeShape||"pill")==="pill"?999:10,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,fontSize:12.5,color:FC.t2}}>
             {cfg.header.noticeIconEnabled&&<span style={{width:17,height:17,borderRadius:"50%",border:`1px solid ${FC.fieldBorder}`,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,flexShrink:0}}>{cfg.header.noticeIconText}</span>}
@@ -5671,13 +5674,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const fr2 = cfg.styles.theme==="dark"?"6px":"8px"
     return <div style={{flex:1,overflowY:"auto" as const,display:"flex",justifyContent:"center",padding:"24px 20px 56px",background:FC.bg}}>
       <div style={{width:"100%",maxWidth:cfg.styles.maxW}}>
+        {cfg.ad?.enabled&&<div onClick={()=>setSec("ad")} style={{marginBottom:24,cursor:"pointer",outline:sec==="ad"?`2px solid ${accentBg}`:"none",outlineOffset:4,borderRadius:14}}>
+          {renderPreviewAdSlot({...DEFAULT_FORM_AD,...cfg.ad})}
+        </div>}
         {/* 헤더 */}
         {cfg.header.title&&<div style={{marginBottom:24}}>
           {cfg.header.overline&&<div style={{fontSize:12,fontWeight:600,color:accentBg,marginBottom:6}}>{cfg.header.overline}</div>}
           <div style={{fontSize:22,fontWeight:600,color:FC.t1,letterSpacing:"-0.5px"}}>{cfg.header.title}</div>
-        </div>}
-        {cfg.ad?.enabled&&<div onClick={()=>setSec("ad")} style={{marginBottom:24,cursor:"pointer",outline:sec==="ad"?`2px solid ${accentBg}`:"none",outlineOffset:4,borderRadius:14}}>
-          {renderPreviewAdSlot({...DEFAULT_FORM_AD,...cfg.ad})}
         </div>}
         {/* 스텝 인디케이터 — elastic stepper */}
         <div style={{display:"flex",gap:6,marginBottom:28}}>

@@ -341,7 +341,7 @@ function renderAdSlot(field: any, FC: typeof DARK, accentBg: string, radius: str
             <img src={field.imageUrl} alt={field.imageCaption || "광고"} style={imageImgStyle(imageField)} />
           </div>
         : <div style={{ height: 92, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 16px", borderRadius: 14, border: `1px solid ${FC.fieldBorder}`, background: FC.fieldBg, color: FC.t3, fontSize: 13, fontWeight: 600 }}>
-            광고
+            이미지 배너
           </div>
     const splitContent = <div style={{ minHeight: 92, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "15px 16px 15px 18px", borderRadius: 14, border: `1px solid ${FC.fieldBorder}`, background: bg, color: textColor, overflow: "hidden" }}>
         <div style={{ minWidth: 0, flex: 1 }}>
@@ -2088,6 +2088,10 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 <div style={{ fontSize: 12.5, lineHeight: 1.55, color: FC.red }}>{operationGate.body}</div>
             </div>}
 
+            {cfg.ad?.enabled && <div style={{ marginBottom: 24 }}>
+                {renderAdSlot({ ...DEFAULT_FORM_AD, ...cfg.ad }, FC, accentBg, fr)}
+            </div>}
+
             {/* Header image */}
             {cfg.header.imageUrl && <div style={{ ...imageBoxStyle(cfg.header, 200, fr, FC.fieldBg), marginBottom: 22 }}>
                 <img src={cfg.header.imageUrl} alt="" style={imageImgStyle(cfg.header)} />
@@ -2103,10 +2107,6 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     {cfg.header.tuitionFree ? cfg.header.tuitionFreeText || "수강료 전액 무료" : cfg.header.tuitionAmount ? `${cfg.header.tuitionAmount}원` : ""}
                     {cfg.header.stipend && <><span style={{ margin: "0 8px", color: FC.t3 }}>|</span>{cfg.header.stipend}</>}
                 </div>}
-            </div>}
-
-            {cfg.ad?.enabled && <div style={{ marginBottom: 24 }}>
-                {renderAdSlot({ ...DEFAULT_FORM_AD, ...cfg.ad }, FC, accentBg, fr)}
             </div>}
 
             {/* Notice */}
