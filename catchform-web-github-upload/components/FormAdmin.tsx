@@ -3288,6 +3288,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const bg=field.adBg||accentBg+"14"
     const textColor=field.adTextColor||FC.t1
     const href=normalizeAdHref(field.adHref)
+    const hasElementImage=!!field.adElementImageUrl
     const imageField={...field,imageFit:field.imageFit||"cover"}
     const linkedBadge=href?<div style={{position:"absolute" as const,top:8,right:8,padding:"3px 7px",borderRadius:999,background:"rgba(0,0,0,0.45)",color:"#fff",fontSize:10.5,fontWeight:700,backdropFilter:"blur(6px)"}}>링크</div>:null
     if(mode==="image"){
@@ -3302,15 +3303,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         {linkedBadge}
       </div>
     }
-    return <div style={{position:"relative" as const,minHeight:92,display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,padding:"15px 16px 15px 18px",borderRadius:14,border:`1px solid ${FC.fieldBorder}`,background:bg,color:textColor,overflow:"hidden"}}>
+    return <div style={{position:"relative" as const,minHeight:112,display:"flex",alignItems:"center",justifyContent:"space-between",gap:18,padding:"18px 20px",borderRadius:14,border:`1px solid ${FC.fieldBorder}`,background:bg,color:textColor,overflow:"hidden"}}>
       <div style={{minWidth:0,flex:1}}>
         <div style={{fontSize:10.5,fontWeight:800,letterSpacing:"0.5px",opacity:0.58,marginBottom:5}}>AD</div>
-        <div style={{fontSize:17,fontWeight:800,lineHeight:1.25,letterSpacing:"-0.3px",whiteSpace:"pre-line" as const,wordBreak:"keep-all" as const}}>{field.adMainText||"광고 메인 문구"}</div>
-        <div style={{fontSize:12.5,fontWeight:500,lineHeight:1.45,opacity:0.72,marginTop:5,whiteSpace:"pre-line" as const,wordBreak:"keep-all" as const}}>{field.adSubText||"광고 서브 문구"}</div>
+        <div style={{fontSize:18.5,fontWeight:800,lineHeight:1.25,letterSpacing:"-0.3px",whiteSpace:"pre-line" as const,wordBreak:"keep-all" as const}}>{field.adMainText||"광고 메인 문구"}</div>
+        <div style={{fontSize:14,fontWeight:500,lineHeight:1.45,opacity:0.72,marginTop:5,whiteSpace:"pre-line" as const,wordBreak:"keep-all" as const}}>{field.adSubText||"광고 서브 문구"}</div>
       </div>
-      <div style={{width:92,height:62,borderRadius:12,background:"rgba(255,255,255,0.42)",border:"1px solid rgba(255,255,255,0.45)",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0,color:textColor,fontSize:13,fontWeight:800,textAlign:"center" as const,padding:8,boxSizing:"border-box" as const}}>
+      <div style={{width:hasElementImage?"42%":112,minWidth:hasElementImage?132:undefined,maxWidth:hasElementImage?190:undefined,height:hasElementImage?92:68,borderRadius:hasElementImage?0:12,background:hasElementImage?"transparent":"rgba(255,255,255,0.42)",border:hasElementImage?"none":"1px solid rgba(255,255,255,0.45)",display:"flex",alignItems:"center",justifyContent:"center",overflow:hasElementImage?"visible":"hidden",flexShrink:0,color:textColor,fontSize:13,fontWeight:800,textAlign:"center" as const,padding:hasElementImage?0:8,boxSizing:"border-box" as const}}>
         {field.adElementImageUrl
-          ? <img src={field.adElementImageUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+          ? <img src={field.adElementImageUrl} alt="" style={{width:"100%",height:"100%",objectFit:"contain",display:"block"}}/>
           : <span style={{lineHeight:1.25,whiteSpace:"pre-line" as const}}>{field.adElementText||"요소"}</span>}
       </div>
       {linkedBadge}
@@ -4370,10 +4371,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   <F label="메인 텍스트" A={A}><TArea value={ad.adMainText||""} onChange={v=>uad("adMainText",v)} minH={44} A={A}/></F>
                   <F label="서브 텍스트" A={A}><TArea value={ad.adSubText||""} onChange={v=>uad("adSubText",v)} minH={44} A={A}/></F>
                   <F label="오른쪽 요소 텍스트" hint="이미지를 넣으면 텍스트 대신 이미지가 표시됩니다." A={A}><TIn value={ad.adElementText||""} onChange={v=>uad("adElementText",v)} A={A}/></F>
-                  <F label="오른쪽 요소 이미지" A={A}>
+                  <F label="오른쪽 요소 이미지" hint="투명 PNG나 배경 없는 상품 이미지를 넣으면 더 자연스럽게 보입니다." A={A}>
                     {ad.adElementImageUrl
                       ? <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <img src={ad.adElementImageUrl} alt="" style={{width:70,height:48,objectFit:"cover",borderRadius:A.r,border:`1px solid ${A.border}`}}/>
+                          <img src={ad.adElementImageUrl} alt="" style={{width:120,height:56,objectFit:"contain",borderRadius:A.r,background:A.card2}}/>
                           <button onClick={()=>uad("adElementImageUrl","")} style={{height:32,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:12,cursor:"pointer"}}>삭제</button>
                         </div>
                       : <div>
@@ -4691,10 +4692,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                           <F label="메인 텍스트" A={A}><TArea value={(field as any).adMainText||""} onChange={v=>patchActiveField(idx,{adMainText:v})} minH={44} A={A}/></F>
                           <F label="서브 텍스트" A={A}><TArea value={(field as any).adSubText||""} onChange={v=>patchActiveField(idx,{adSubText:v})} minH={44} A={A}/></F>
                           <F label="오른쪽 요소 텍스트" hint="이미지를 넣으면 텍스트 대신 이미지가 표시됩니다." A={A}><TIn value={(field as any).adElementText||""} onChange={v=>patchActiveField(idx,{adElementText:v})} A={A}/></F>
-                          <F label="오른쪽 요소 이미지" A={A}>
+                          <F label="오른쪽 요소 이미지" hint="투명 PNG나 배경 없는 상품 이미지를 넣으면 더 자연스럽게 보입니다." A={A}>
                             {(field as any).adElementImageUrl
                               ? <div style={{display:"flex",alignItems:"center",gap:8}}>
-                                  <img src={(field as any).adElementImageUrl} alt="" style={{width:70,height:48,objectFit:"cover",borderRadius:A.r,border:`1px solid ${A.border}`}}/>
+                                  <img src={(field as any).adElementImageUrl} alt="" style={{width:120,height:56,objectFit:"contain",borderRadius:A.r,background:A.card2}}/>
                                   <button onClick={()=>patchActiveField(idx,{adElementImageUrl:""})} style={{height:32,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:12,cursor:"pointer"}}>삭제</button>
                                 </div>
                               : <div>
