@@ -1565,6 +1565,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [analyticsTrashEvents,setAnalyticsTrashEvents]=React.useState<any[]>([])
   const [showAnalyticsTrash,setShowAnalyticsTrash]=React.useState(false)
   const [analyticsTrashBusy,setAnalyticsTrashBusy]=React.useState(false)
+  const [analyticsSelectedDeleteBusy,setAnalyticsSelectedDeleteBusy]=React.useState(false)
   const [analyticsLoading,setAnalyticsLoading]=React.useState(false)
   const [analyticsErr,setAnalyticsErr]=React.useState("")
   const [analyticsQuestionId,setAnalyticsQuestionId]=React.useState("")
@@ -3061,29 +3062,53 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   function analyticsTableName(){
     return isCompanyApplicationConfig(cfg)?"company_applications":"applications"
   }
-  async function deleteAnalyticsRow(row:any){
-    if(!supa||!row?.id)return
-    if(row.__draft){
-      if(!confirm("이 작성 중 기록을 휴지통으로 이동할까요?"))return
-      try{
-        await insertAnalyticsAdminEvent("response_trashed",{trash_kind:"draft",session_id:row.__sessionId,original_row:row,deleted_at:new Date().toISOString()})
-        await loadAnalytics()
-        showToast("작성 중 기록을 휴지통으로 이동했어요.")
-      }catch(error){showToast("작성 중 기록 삭제 실패: "+((error as any)?.message||""),false)}
+  async function deleteSelectedAnalyticsRows(targetRows:any[]){
+    if(!supa||!loadedId)return
+    const rowsToDelete=targetRows.filter(Boolean)
+    if(!rowsToDelete.length){
+      showToast("삭제할 응답을 선택해주세요.",false)
       return
     }
-    if(!confirm("이 응답을 휴지통으로 이동할까요?"))return
-    const tableName=analyticsRowTable(row)
+    if(!confirm(`선택한 ${rowsToDelete.length}개 응답을 휴지통으로 이동할까요?`))return
+    setAnalyticsSelectedDeleteBusy(true)
+    const deletedAt=new Date().toISOString()
+    const batchId=analyticsTrashSessionId("selected_trash")
+    const insertedTrashIds:string[]=[]
+    const deletedGroups:{tableName:string;rows:any[]}[]=[]
     try{
-      const trashEvent=await insertAnalyticsAdminEvent("response_trashed",{trash_kind:"submitted",table_name:tableName,original_row:stripAnalyticsInternalRow(row),deleted_at:new Date().toISOString()})
-      const {error}=await supa.from(tableName).delete().eq("id",row.id)
-      if(error){
-        if(trashEvent?.id)await supa.from("form_response_events").delete().eq("id",trashEvent.id)
-        throw error
+      const drafts=rowsToDelete.filter(row=>row.__draft)
+      const submitted=rowsToDelete.filter(row=>!row.__draft&&row.id)
+      const submittedByTable=new Map<string,any[]>()
+      submitted.forEach(row=>{
+        const tableName=analyticsRowTable(row)
+        submittedByTable.set(tableName,[...(submittedByTable.get(tableName)||[]),row])
+      })
+      const trashEvents=await insertAnalyticsAdminEvents([
+        ...drafts.map(row=>({event_type:"response_trashed",session_id:row.__sessionId,metadata:{trash_kind:"draft",session_id:row.__sessionId,original_row:row,batch_id:batchId,deleted_at:deletedAt}})),
+        ...submitted.map(row=>({event_type:"response_trashed",metadata:{trash_kind:"submitted",table_name:analyticsRowTable(row),original_row:stripAnalyticsInternalRow(row),batch_id:batchId,deleted_at:deletedAt}})),
+      ])
+      trashEvents.forEach(event=>{if(event?.id)insertedTrashIds.push(event.id)})
+      for(const [tableName,tableRows] of submittedByTable.entries()){
+        const ids=tableRows.map(row=>row.id).filter(Boolean)
+        if(!ids.length)continue
+        const {error}=await supa.from(tableName).delete().in("id",ids)
+        if(error)throw error
+        deletedGroups.push({tableName,rows:tableRows.map(stripAnalyticsInternalRow)})
       }
+      setSelectedAnalyticsRowIds([])
       await loadAnalytics()
-      showToast("응답을 휴지통으로 이동했어요.")
-    }catch(error){showToast("응답 삭제 실패: "+((error as any)?.message||""),false)}
+      showToast(`${rowsToDelete.length}개 응답을 휴지통으로 이동했어요.`)
+    }catch(error){
+      for(const group of deletedGroups){
+        try{await supa.from(group.tableName).upsert(group.rows,{onConflict:"id",ignoreDuplicates:true})}catch{}
+      }
+      if(insertedTrashIds.length){
+        try{await supa.from("form_response_events").delete().in("id",insertedTrashIds)}catch{}
+      }
+      showToast("선택 응답 삭제 실패: "+((error as any)?.message||"오류"),false)
+    }finally{
+      setAnalyticsSelectedDeleteBusy(false)
+    }
   }
   async function deleteAllAnalyticsData(){
     if(!supa||!loadedId)return
@@ -5936,6 +5961,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const responseRows=analyticsResponseScope==="draft"?draftResponseRows:rows
     const responseRowIds=responseRows.map((row:any)=>analyticsRowKey(row))
     const selectedResponseRows=responseRows.filter((row:any)=>selectedAnalyticsRowIds.includes(analyticsRowKey(row)))
+    const canDeleteSelectedResponses=selectedResponseRows.length>0&&!analyticsSelectedDeleteBusy
     const allResponseRowsSelected=responseRowIds.length>0&&responseRowIds.every((id:string)=>selectedAnalyticsRowIds.includes(id))
     const toggleAllResponseRows=()=>setSelectedAnalyticsRowIds(prev=>{
       if(allResponseRowsSelected)return prev.filter(id=>!responseRowIds.includes(id))
@@ -6337,6 +6363,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v7M5 6l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   선택 다운로드 {selectedResponseRows.length>0&&`${selectedResponseRows.length}개`}
                 </button>
+                <button onClick={()=>deleteSelectedAnalyticsRows(selectedResponseRows)} disabled={!canDeleteSelectedResponses}
+                  style={{height:38,padding:"0 12px",borderRadius:A.r,border:`1px solid ${canDeleteSelectedResponses?A.red+"55":A.border}`,background:canDeleteSelectedResponses?`${A.red}14`:A.card2,color:canDeleteSelectedResponses?A.red:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:canDeleteSelectedResponses?"pointer":"not-allowed",display:"inline-flex",alignItems:"center",gap:6}}>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v6M8 6v6M11 6v6M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  {analyticsSelectedDeleteBusy?"삭제 중...":`선택 삭제 ${selectedResponseRows.length>0?`${selectedResponseRows.length}개`:""}`}
+                </button>
                 <div style={{display:"flex",gap:4,padding:4,borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`}}>
                 {([{id:"submitted",label:`제출 완료 ${rows.length}`},{id:"draft",label:`작성 중 ${draftResponseRows.length}`} ] as const).map(item=>{const active=analyticsResponseScope===item.id;return <button key={item.id} onClick={()=>setAnalyticsResponseScope(item.id)}
                   style={{height:30,padding:"0 12px",borderRadius:A.r,border:"none",background:active?A.card:"transparent",color:active?A.blue:A.t2,boxShadow:active?A.shadow:"none",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
@@ -6364,7 +6395,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 <tbody>{responseRows.map(row=>{const dt=fmtAnalyticsDate(row.created_at);const rowKey=analyticsRowKey(row);const selected=selectedAnalyticsRowIds.includes(rowKey);return <tr key={rowKey} style={{background:selected?A.blue2:"transparent",verticalAlign:"top" as const}}><td style={{width:118,minWidth:118,padding:"13px 10px",borderBottom:`1px solid ${A.border}`,textAlign:"center" as const}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                   <input type="checkbox" checked={selected} onChange={()=>toggleResponseRow(rowKey)} aria-label="응답 선택" style={{width:15,height:15,accentColor:A.blue,cursor:"pointer",flexShrink:0}}/>
                   {!row.__draft&&<button onClick={()=>openEditAnalyticsRow(row)} title="응답 수정" style={{width:28,height:28,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 11.5V13h1.5L12 5.5 10.5 4 3 11.5zM9.8 4.7l1.5 1.5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
-                  <button onClick={()=>deleteAnalyticsRow(row)} title="응답 삭제" style={{width:28,height:28,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t3,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v6M8 6v6M11 6v6M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                 </div></td><td style={{width:190,minWidth:190,padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}><div style={{whiteSpace:"nowrap" as const,fontWeight:400}}>{dt[0]}</div><div style={{fontSize:12,color:A.t3,marginTop:4,whiteSpace:"nowrap" as const}}>{dt[1]}</div>{row.__draft&&<div style={{display:"inline-flex",alignItems:"center",height:20,padding:"0 7px",borderRadius:999,background:chartOrange+"16",color:chartOrange,fontSize:11,fontWeight:600,marginTop:7}}>작성 중 · 섹션 {row.__page}</div>}</td>{analyticsColumnMeta.map(({field:f,width:colWidth,resizable}:any)=>{
                   const isLongText=f.type==="textarea"
                   return <td key={f.id} style={{padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,verticalAlign:"top" as const,width:colWidth,minWidth:colWidth,maxWidth:colWidth}}><div style={{padding:"8px 10px",border:`1px solid ${A.border}`,borderRadius:A.r,background:A.card2,color:A.t1,fontWeight:400,width:"100%",maxWidth:resizable?Math.max(260,colWidth-32):360,minWidth:0,maxHeight:isLongText?180:undefined,overflowY:isLongText?"auto" as const:"visible" as const,boxSizing:"border-box" as const,whiteSpace:"normal" as const,wordBreak:"break-word" as const,overflowWrap:"anywhere" as const}}>{renderAnalyticsAnswer(row,f)}</div></td>
