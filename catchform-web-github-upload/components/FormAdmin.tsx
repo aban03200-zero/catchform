@@ -3292,7 +3292,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </div>}
       </div>
     }
-    return <div style={{position:"relative" as const,height:compactHeight,display:"flex",alignItems:"stretch",justifyContent:"space-between",gap:hasElementImage?10:8,padding:hasElementImage?"0 0 0 12px":"6px 12px",borderRadius:14,border:`1px solid ${FC.fieldBorder}`,background:bg,color:textColor,overflow:"hidden"}}>
+    return <div style={{position:"relative" as const,height:compactHeight,display:"flex",alignItems:"stretch",justifyContent:"space-between",gap:hasElementImage?10:8,padding:hasElementImage?"0 8px 0 12px":"6px 12px",borderRadius:14,border:"none",background:bg,color:textColor,overflow:"hidden"}}>
       <div style={{minWidth:0,flex:1,display:"flex",flexDirection:"column" as const,justifyContent:"center",padding:0,overflow:"hidden"}}>
         <div style={{fontSize:13,fontWeight:600,lineHeight:1.1,letterSpacing:"-0.2px",whiteSpace:"nowrap" as const,overflow:"hidden",textOverflow:"ellipsis"}}>{field.adMainText||"광고 메인 문구"}</div>
         <div style={{fontSize:10.5,fontWeight:400,lineHeight:1.1,opacity:0.72,marginTop:5,whiteSpace:"nowrap" as const,overflow:"hidden",textOverflow:"ellipsis"}}>{field.adSubText||"광고 서브 문구"}</div>

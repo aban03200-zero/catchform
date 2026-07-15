@@ -345,7 +345,7 @@ function renderAdSlot(field: any, FC: typeof DARK, accentBg: string, radius: str
         : <div style={{ height: 92, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 16px", borderRadius: 14, border: `1px solid ${FC.fieldBorder}`, background: FC.fieldBg, color: FC.t3, fontSize: 13, fontWeight: 600 }}>
             이미지 배너
           </div>
-    const splitContent = <div style={{ height: compactHeight, display: "flex", alignItems: "stretch", justifyContent: "space-between", gap: hasElementImage ? 10 : 8, padding: hasElementImage ? "0 0 0 12px" : "6px 12px", borderRadius: 14, border: `1px solid ${FC.fieldBorder}`, background: bg, color: textColor, overflow: "hidden" }}>
+    const splitContent = <div style={{ height: compactHeight, display: "flex", alignItems: "stretch", justifyContent: "space-between", gap: hasElementImage ? 10 : 8, padding: hasElementImage ? "0 8px 0 12px" : "6px 12px", borderRadius: 14, border: "none", background: bg, color: textColor, overflow: "hidden" }}>
         <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: 0, overflow: "hidden" }}>
             <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.1, letterSpacing: "-0.2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{field.adMainText || "광고 메인 문구"}</div>
             <div style={{ fontSize: 10.5, fontWeight: 400, lineHeight: 1.1, opacity: 0.72, marginTop: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{field.adSubText || "광고 서브 문구"}</div>
