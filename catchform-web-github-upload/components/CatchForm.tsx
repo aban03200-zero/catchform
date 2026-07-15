@@ -347,9 +347,8 @@ function renderAdSlot(field: any, FC: typeof DARK, accentBg: string, radius: str
           </div>
     const splitContent = <div style={{ height: compactHeight, display: "flex", alignItems: "stretch", justifyContent: "space-between", gap: hasElementImage ? 10 : 8, padding: hasElementImage ? "0 0 0 12px" : "6px 12px", borderRadius: 14, border: `1px solid ${FC.fieldBorder}`, background: bg, color: textColor, overflow: "hidden" }}>
         <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: 0, overflow: "hidden" }}>
-            <div style={{ fontSize: 7.5, fontWeight: 800, lineHeight: 1, letterSpacing: "0.5px", opacity: 0.5, marginBottom: 1 }}>AD</div>
             <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.1, letterSpacing: "-0.2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{field.adMainText || "광고 메인 문구"}</div>
-            <div style={{ fontSize: 10.5, fontWeight: 400, lineHeight: 1.1, opacity: 0.72, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{field.adSubText || "광고 서브 문구"}</div>
+            <div style={{ fontSize: 10.5, fontWeight: 400, lineHeight: 1.1, opacity: 0.72, marginTop: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{field.adSubText || "광고 서브 문구"}</div>
         </div>
         <div style={{ width: hasElementImage ? "42%" : 64, minWidth: hasElementImage ? 96 : undefined, maxWidth: hasElementImage ? 150 : undefined, alignSelf: hasElementImage ? "stretch" : "center", height: hasElementImage ? "auto" : 28, borderRadius: hasElementImage ? 0 : 9, background: hasElementImage ? "transparent" : "rgba(255,255,255,0.42)", border: hasElementImage ? "none" : "1px solid rgba(255,255,255,0.45)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, color: textColor, fontSize: 11, fontWeight: 800, textAlign: "center", padding: hasElementImage ? 0 : 4, boxSizing: "border-box" }}>
             {field.adElementImageUrl

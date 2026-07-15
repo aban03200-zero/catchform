@@ -3274,24 +3274,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       ? croppedImageStyle(img)
       : {width:"100%",height:imageFit(img)==="cover"?"100%":"auto",display:"block",objectFit:imageFit(img),objectPosition:imagePos(img)}
   }
-  function normalizeAdHref(raw:any){
-    const href=String(raw||"").trim()
-    if(!href)return""
-    try{
-      const base=typeof window!=="undefined"?window.location.origin:"https://catchform.local"
-      const url=new URL(href,base)
-      return ["http:","https:","mailto:","tel:"].includes(url.protocol)?url.href:""
-    }catch{return""}
-  }
   function renderPreviewAdSlot(field:any){
     const mode=field.adMode==="split"?"split":"image"
     const bg=field.adBg||accentBg+"14"
     const textColor=field.adTextColor||FC.t1
-    const href=normalizeAdHref(field.adHref)
     const hasElementImage=!!field.adElementImageUrl
     const compactHeight=60
     const imageField={...field,imageFit:field.imageFit||"cover"}
-    const linkedBadge=href?<div style={{position:"absolute" as const,top:mode==="split"?4:8,right:mode==="split"?5:8,padding:mode==="split"?"2px 5px":"3px 7px",borderRadius:999,background:"rgba(0,0,0,0.45)",color:"#fff",fontSize:mode==="split"?8.5:10.5,fontWeight:700,backdropFilter:"blur(6px)"}}>링크</div>:null
     if(mode==="image"){
       return <div style={{position:"relative" as const,borderRadius:14,overflow:"hidden",border:`1px solid ${FC.fieldBorder}`,background:FC.fieldBg}}>
         {field.imageUrl
@@ -3301,21 +3290,18 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           : <div style={{height:96,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 16px",fontSize:13,color:FC.t3,fontWeight:600,border:`1.5px dashed ${FC.fieldBorder}`,borderRadius:14,background:FC.fieldBg}}>
               이미지 배너를 업로드해주세요. {AD_IMAGE_SIZE_TEXT}
             </div>}
-        {linkedBadge}
       </div>
     }
     return <div style={{position:"relative" as const,height:compactHeight,display:"flex",alignItems:"stretch",justifyContent:"space-between",gap:hasElementImage?10:8,padding:hasElementImage?"0 0 0 12px":"6px 12px",borderRadius:14,border:`1px solid ${FC.fieldBorder}`,background:bg,color:textColor,overflow:"hidden"}}>
       <div style={{minWidth:0,flex:1,display:"flex",flexDirection:"column" as const,justifyContent:"center",padding:0,overflow:"hidden"}}>
-        <div style={{fontSize:7.5,fontWeight:800,lineHeight:1,letterSpacing:"0.5px",opacity:0.5,marginBottom:1}}>AD</div>
         <div style={{fontSize:13,fontWeight:600,lineHeight:1.1,letterSpacing:"-0.2px",whiteSpace:"nowrap" as const,overflow:"hidden",textOverflow:"ellipsis"}}>{field.adMainText||"광고 메인 문구"}</div>
-        <div style={{fontSize:10.5,fontWeight:400,lineHeight:1.1,opacity:0.72,marginTop:1,whiteSpace:"nowrap" as const,overflow:"hidden",textOverflow:"ellipsis"}}>{field.adSubText||"광고 서브 문구"}</div>
+        <div style={{fontSize:10.5,fontWeight:400,lineHeight:1.1,opacity:0.72,marginTop:5,whiteSpace:"nowrap" as const,overflow:"hidden",textOverflow:"ellipsis"}}>{field.adSubText||"광고 서브 문구"}</div>
       </div>
       <div style={{width:hasElementImage?"42%":64,minWidth:hasElementImage?96:undefined,maxWidth:hasElementImage?150:undefined,alignSelf:hasElementImage?"stretch":"center",height:hasElementImage?"auto":28,borderRadius:hasElementImage?0:9,background:hasElementImage?"transparent":"rgba(255,255,255,0.42)",border:hasElementImage?"none":"1px solid rgba(255,255,255,0.45)",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0,color:textColor,fontSize:11,fontWeight:800,textAlign:"center" as const,padding:hasElementImage?0:4,boxSizing:"border-box" as const}}>
         {field.adElementImageUrl
           ? <img src={field.adElementImageUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
           : <span style={{lineHeight:1.25,whiteSpace:"pre-line" as const}}>{field.adElementText||"요소"}</span>}
       </div>
-      {linkedBadge}
     </div>
   }
   function patchImageFieldById(fieldId:string,patch:any){
