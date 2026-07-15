@@ -3289,7 +3289,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const textColor=field.adTextColor||FC.t1
     const href=normalizeAdHref(field.adHref)
     const hasElementImage=!!field.adElementImageUrl
-    const compactHeight=40
+    const compactHeight=60
     const imageField={...field,imageFit:field.imageFit||"cover"}
     const linkedBadge=href?<div style={{position:"absolute" as const,top:mode==="split"?4:8,right:mode==="split"?5:8,padding:mode==="split"?"2px 5px":"3px 7px",borderRadius:999,background:"rgba(0,0,0,0.45)",color:"#fff",fontSize:mode==="split"?8.5:10.5,fontWeight:700,backdropFilter:"blur(6px)"}}>링크</div>:null
     if(mode==="image"){

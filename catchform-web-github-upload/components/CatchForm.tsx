@@ -336,7 +336,7 @@ function renderAdSlot(field: any, FC: typeof DARK, accentBg: string, radius: str
     const bg = field.adBg || accentBg + "14"
     const textColor = field.adTextColor || FC.t1
     const hasElementImage = !!field.adElementImageUrl
-    const compactHeight = 40
+    const compactHeight = 60
     const imageField = { ...field, imageFit: field.imageFit || "cover" }
     const imageContent = field.imageUrl
         ? <div style={imageBoxStyle(imageField, 112, 14, FC.fieldBg)}>
