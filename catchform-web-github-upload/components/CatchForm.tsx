@@ -344,15 +344,15 @@ function renderAdSlot(field: any, FC: typeof DARK, accentBg: string, radius: str
         : <div style={{ height: 92, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 16px", borderRadius: 14, border: `1px solid ${FC.fieldBorder}`, background: FC.fieldBg, color: FC.t3, fontSize: 13, fontWeight: 600 }}>
             이미지 배너
           </div>
-    const splitContent = <div style={{ minHeight: 112, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, padding: "18px 20px", borderRadius: 14, border: `1px solid ${FC.fieldBorder}`, background: bg, color: textColor, overflow: "hidden" }}>
-        <div style={{ minWidth: 0, flex: 1 }}>
+    const splitContent = <div style={{ minHeight: 112, display: "flex", alignItems: "stretch", justifyContent: "space-between", gap: hasElementImage ? 18 : 16, padding: hasElementImage ? "0 0 0 20px" : "18px 20px", borderRadius: 14, border: `1px solid ${FC.fieldBorder}`, background: bg, color: textColor, overflow: "hidden" }}>
+        <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: hasElementImage ? "18px 0" : 0 }}>
             <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: "0.5px", opacity: 0.58, marginBottom: 5 }}>AD</div>
-            <div style={{ fontSize: 18.5, fontWeight: 800, lineHeight: 1.25, letterSpacing: "-0.3px", whiteSpace: "pre-line", wordBreak: "keep-all" }}>{field.adMainText || "광고 메인 문구"}</div>
-            <div style={{ fontSize: 14, fontWeight: 500, lineHeight: 1.45, opacity: 0.72, marginTop: 5, whiteSpace: "pre-line", wordBreak: "keep-all" }}>{field.adSubText || "광고 서브 문구"}</div>
+            <div style={{ fontSize: 18.5, fontWeight: 600, lineHeight: 1.25, letterSpacing: "-0.3px", whiteSpace: "pre-line", wordBreak: "keep-all" }}>{field.adMainText || "광고 메인 문구"}</div>
+            <div style={{ fontSize: 14, fontWeight: 400, lineHeight: 1.45, opacity: 0.72, marginTop: 5, whiteSpace: "pre-line", wordBreak: "keep-all" }}>{field.adSubText || "광고 서브 문구"}</div>
         </div>
-        <div style={{ width: hasElementImage ? "42%" : 112, minWidth: hasElementImage ? 132 : undefined, maxWidth: hasElementImage ? 190 : undefined, height: hasElementImage ? 92 : 68, borderRadius: hasElementImage ? 0 : 12, background: hasElementImage ? "transparent" : "rgba(255,255,255,0.42)", border: hasElementImage ? "none" : "1px solid rgba(255,255,255,0.45)", display: "flex", alignItems: "center", justifyContent: "center", overflow: hasElementImage ? "visible" : "hidden", flexShrink: 0, color: textColor, fontSize: 13, fontWeight: 800, textAlign: "center", padding: hasElementImage ? 0 : 8, boxSizing: "border-box" }}>
+        <div style={{ width: hasElementImage ? "46%" : 112, minWidth: hasElementImage ? 150 : undefined, maxWidth: hasElementImage ? 230 : undefined, alignSelf: hasElementImage ? "stretch" : "center", height: hasElementImage ? "auto" : 68, borderRadius: hasElementImage ? 0 : 12, background: hasElementImage ? "transparent" : "rgba(255,255,255,0.42)", border: hasElementImage ? "none" : "1px solid rgba(255,255,255,0.45)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, color: textColor, fontSize: 13, fontWeight: 800, textAlign: "center", padding: hasElementImage ? 0 : 8, boxSizing: "border-box" }}>
             {field.adElementImageUrl
-                ? <img src={field.adElementImageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
+                ? <img src={field.adElementImageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                 : <span style={{ lineHeight: 1.25, whiteSpace: "pre-line" }}>{field.adElementText || "요소"}</span>}
         </div>
     </div>

@@ -1042,11 +1042,11 @@ function Slider({value,min,max,step=1,unit="px",onChange,A}:{value:number;min:nu
 function CIn({value,onChange,A}:{value:string;onChange:(v:string)=>void;A:AT}) {
   const [hex,sh]=React.useState(value)
   React.useEffect(()=>sh(value),[value])
-  return <div style={{display:"flex",alignItems:"center",gap:8}}>
+  return <div style={{display:"flex",alignItems:"center",gap:8,width:"100%",minWidth:0}}>
     <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(value)?value:"#000000"} onChange={e=>{sh(e.target.value);onChange(e.target.value)}}
       style={{width:32,height:32,border:`1.5px solid ${A.border}`,borderRadius:A.r,background:"none",cursor:"pointer",padding:2,flexShrink:0,boxSizing:"border-box" as const}}/>
     <input type="text" value={hex} onChange={e=>{sh(e.target.value);if(/^#[0-9a-fA-F]{6}$/.test(e.target.value))onChange(e.target.value)}}
-      style={{flex:1,background:A.card2,border:`1.5px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:"Courier New,monospace",fontSize:12,padding:"7px 9px",outline:"none",boxSizing:"border-box" as const}}/>
+      style={{flex:1,minWidth:0,background:A.card2,border:`1.5px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:"Courier New,monospace",fontSize:12,padding:"7px 9px",outline:"none",boxSizing:"border-box" as const}}/>
   </div>
 }
 function FG({children,title,A,last=false}:{children:React.ReactNode;title?:string;A:AT;last?:boolean}) {
@@ -3303,15 +3303,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         {linkedBadge}
       </div>
     }
-    return <div style={{position:"relative" as const,minHeight:112,display:"flex",alignItems:"center",justifyContent:"space-between",gap:18,padding:"18px 20px",borderRadius:14,border:`1px solid ${FC.fieldBorder}`,background:bg,color:textColor,overflow:"hidden"}}>
-      <div style={{minWidth:0,flex:1}}>
+    return <div style={{position:"relative" as const,minHeight:112,display:"flex",alignItems:"stretch",justifyContent:"space-between",gap:hasElementImage?18:16,padding:hasElementImage?"0 0 0 20px":"18px 20px",borderRadius:14,border:`1px solid ${FC.fieldBorder}`,background:bg,color:textColor,overflow:"hidden"}}>
+      <div style={{minWidth:0,flex:1,display:"flex",flexDirection:"column" as const,justifyContent:"center",padding:hasElementImage?"18px 0":0}}>
         <div style={{fontSize:10.5,fontWeight:800,letterSpacing:"0.5px",opacity:0.58,marginBottom:5}}>AD</div>
-        <div style={{fontSize:18.5,fontWeight:800,lineHeight:1.25,letterSpacing:"-0.3px",whiteSpace:"pre-line" as const,wordBreak:"keep-all" as const}}>{field.adMainText||"광고 메인 문구"}</div>
-        <div style={{fontSize:14,fontWeight:500,lineHeight:1.45,opacity:0.72,marginTop:5,whiteSpace:"pre-line" as const,wordBreak:"keep-all" as const}}>{field.adSubText||"광고 서브 문구"}</div>
+        <div style={{fontSize:18.5,fontWeight:600,lineHeight:1.25,letterSpacing:"-0.3px",whiteSpace:"pre-line" as const,wordBreak:"keep-all" as const}}>{field.adMainText||"광고 메인 문구"}</div>
+        <div style={{fontSize:14,fontWeight:400,lineHeight:1.45,opacity:0.72,marginTop:5,whiteSpace:"pre-line" as const,wordBreak:"keep-all" as const}}>{field.adSubText||"광고 서브 문구"}</div>
       </div>
-      <div style={{width:hasElementImage?"42%":112,minWidth:hasElementImage?132:undefined,maxWidth:hasElementImage?190:undefined,height:hasElementImage?92:68,borderRadius:hasElementImage?0:12,background:hasElementImage?"transparent":"rgba(255,255,255,0.42)",border:hasElementImage?"none":"1px solid rgba(255,255,255,0.45)",display:"flex",alignItems:"center",justifyContent:"center",overflow:hasElementImage?"visible":"hidden",flexShrink:0,color:textColor,fontSize:13,fontWeight:800,textAlign:"center" as const,padding:hasElementImage?0:8,boxSizing:"border-box" as const}}>
+      <div style={{width:hasElementImage?"46%":112,minWidth:hasElementImage?150:undefined,maxWidth:hasElementImage?230:undefined,alignSelf:hasElementImage?"stretch":"center",height:hasElementImage?"auto":68,borderRadius:hasElementImage?0:12,background:hasElementImage?"transparent":"rgba(255,255,255,0.42)",border:hasElementImage?"none":"1px solid rgba(255,255,255,0.45)",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0,color:textColor,fontSize:13,fontWeight:800,textAlign:"center" as const,padding:hasElementImage?0:8,boxSizing:"border-box" as const}}>
         {field.adElementImageUrl
-          ? <img src={field.adElementImageUrl} alt="" style={{width:"100%",height:"100%",objectFit:"contain",display:"block"}}/>
+          ? <img src={field.adElementImageUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
           : <span style={{lineHeight:1.25,whiteSpace:"pre-line" as const}}>{field.adElementText||"요소"}</span>}
       </div>
       {linkedBadge}
@@ -4319,7 +4319,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <TRow label="광고 구좌 표시" on={!!ad.enabled} toggle={()=>uad("enabled",!ad.enabled)} A={A}/>
             <div style={{fontSize:12,color:A.t3,lineHeight:1.6,marginTop:8}}>대표이미지와 폼 제목 아래, 공지와 질문 시작 전에 광고 구좌가 표시됩니다.</div>
           </FG>
-          <FG title="광고 소재" A={A}>
+          <FG title="광고 소재" A={A} last>
             <F label="소재 방식" A={A}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                 {[
@@ -4393,19 +4393,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                             }}/>
                         </div>}
                   </F>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                    <F label="배경색" A={A}><CIn value={ad.adBg||"#FEE500"} onChange={v=>uad("adBg",v)} A={A}/></F>
-                    <F label="글자색" A={A}><CIn value={ad.adTextColor||"#191919"} onChange={v=>uad("adTextColor",v)} A={A}/></F>
+                  <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:8,width:"100%"}}>
+                    <div style={{minWidth:0}}><F label="배경색" A={A}><CIn value={ad.adBg||"#FEE500"} onChange={v=>uad("adBg",v)} A={A}/></F></div>
+                    <div style={{minWidth:0}}><F label="글자색" A={A}><CIn value={ad.adTextColor||"#191919"} onChange={v=>uad("adTextColor",v)} A={A}/></F></div>
                   </div>
                 </div>}
             <F label="클릭 URL" hint="입력하면 실제 폼에서 광고 전체가 링크로 동작합니다." A={A}>
               <TIn value={ad.adHref||""} onChange={v=>uad("adHref",v)} placeholder="https://..." A={A}/>
             </F>
-          </FG>
-          <FG title="미리보기" A={A} last>
-            <div style={{padding:12,borderRadius:A.r2,border:`1px solid ${A.border}`,background:cfg.styles.theme==="dark"?FD.bg:FL.bg}}>
-              {renderPreviewAdSlot(ad)}
-            </div>
           </FG>
         </div>
       }
@@ -4714,9 +4709,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                                     }}/>
                                 </div>}
                           </F>
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                            <F label="배경색" A={A}><CIn value={(field as any).adBg||"#FEE500"} onChange={v=>patchActiveField(idx,{adBg:v})} A={A}/></F>
-                            <F label="글자색" A={A}><CIn value={(field as any).adTextColor||"#191919"} onChange={v=>patchActiveField(idx,{adTextColor:v})} A={A}/></F>
+                          <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:8,width:"100%"}}>
+                            <div style={{minWidth:0}}><F label="배경색" A={A}><CIn value={(field as any).adBg||"#FEE500"} onChange={v=>patchActiveField(idx,{adBg:v})} A={A}/></F></div>
+                            <div style={{minWidth:0}}><F label="글자색" A={A}><CIn value={(field as any).adTextColor||"#191919"} onChange={v=>patchActiveField(idx,{adTextColor:v})} A={A}/></F></div>
                           </div>
                         </div>}
                     <F label="클릭 URL" hint="입력하면 실제 폼에서 광고 전체를 누를 수 있습니다." A={A}>
