@@ -1364,7 +1364,9 @@ function ConsentBodyPreview({body,accentColor,FC,noBorder,noAccordion}:{body:str
 
 // ─── ProgramPicker — category grid → program list ────────────────────────
 const IO_CAT_NAMES = ["인턴형", "프로젝트형"]
-const SF_CAT_NAMES = ["새싹(SeSAC)", "새싹", "KDT", "중소기업 인재키움", "인턴형"]
+const SF_ETC_CAT_ID = "dc117b4b-1646-4721-9177-6e6e305f6fd0"
+const SF_CAT_NAMES = ["새싹(SeSAC)", "새싹", "KDT", "중소기업 인재키움", "인턴형", "ETC"]
+const SF_CAT_IDS = [SF_ETC_CAT_ID]
 
 function ProgramPicker({progs,cats,brand,value,onChange,A}:{progs:Prog[];cats:Cat[];brand:string;value:string;onChange:(p:Prog)=>void;A:AT}) {
   const [selCat,setSelCat]=React.useState<string|null>(null)
@@ -1372,14 +1374,19 @@ function ProgramPicker({progs,cats,brand,value,onChange,A}:{progs:Prog[];cats:Ca
   const [query,setQuery]=React.useState("")
 
   const allowedNames = brand==="INSIDEOUT" ? IO_CAT_NAMES : SF_CAT_NAMES
+  const allowedCatIds = brand==="INSIDEOUT" ? [] : SF_CAT_IDS
   // category UUID → name 매핑
-  const catNameOf = (catId:string|undefined) => cats.find(c=>c.id===catId)?.name||""
+  const catNameOf = (catId:string|undefined) => cats.find(c=>c.id===catId)?.name||(catId&&allowedCatIds.includes(catId)?"ETC":"")
+  const isAllowedCat = (catId:string|undefined) => allowedNames.includes(catNameOf(catId))||!!(catId&&allowedCatIds.includes(catId))
   // 허용된 이름의 카테고리에 속하는 프로그램만
-  const filtered = progs.filter(p=>allowedNames.includes(catNameOf(p.category)))
+  const filtered = progs.filter(p=>isAllowedCat(p.category))
   // unique categories from actual data
-  const catName=(catId:string|undefined)=>cats.find(c=>c.id===catId)?.name||""
+  const catName=catNameOf
   // allowedNames 순서대로 카테고리 표시 (과정 없어도 보임)
-  const catIds = cats.filter(c=>allowedNames.includes(c.name)).map(c=>c.id)
+  const catIds = [
+    ...cats.filter(c=>isAllowedCat(c.id)).map(c=>c.id),
+    ...allowedCatIds.filter(id=>progs.some(p=>p.category===id)&&!cats.some(c=>c.id===id)),
+  ]
   const inCat = selCat ? filtered.filter(p=>p.category===selCat) : []
   const inCatFiltered = query.trim() ? inCat.filter(p=>p.title.toLowerCase().includes(query.trim().toLowerCase())) : inCat
   const selected = progs.find(p=>p.id===value)
@@ -3579,6 +3586,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           const brandOf=(item:any)=>canonicalBrand(item.config?.brand||item.brand||"")
           const brandLabel=(brand:string)=>brandDisplayName(brand)
           const categoryNameOf=(prog?:Prog)=>{
+            if(prog?.category===SF_ETC_CAT_ID)return"ETC"
             const name=cats.find(c=>c.id===prog?.category)?.name||"기타"
             if(name==="새싹(SeSAC)")return"새싹"
             if(name==="중소기업 인재키움")return"인재키움"
@@ -3587,7 +3595,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           const sidebarItems=saved.filter((item:any)=>!dashBrandFilter||brandOf(item)===dashBrandFilter)
           const sidebarProgramIds=new Set(sidebarItems.map((item:any)=>item.config?.header?.programId).filter(Boolean))
           const sidebarPrograms=progs.filter(program=>sidebarProgramIds.has(program.id))
-          const sfProgramGroups=["새싹","KDT","인재키움","인턴형"]
+          const sfProgramGroups=["새싹","KDT","인재키움","인턴형","ETC"]
           const ioProgramGroups=["인턴형","프로젝트형"]
           const defaultProgramGroups=dashBrandFilter==="SNIPERFACTORY"
             ?sfProgramGroups
