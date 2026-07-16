@@ -1409,6 +1409,7 @@ function ProgramPicker({progs,cats,brand,value,onChange,A}:{progs:Prog[];cats:Ca
       {!selCat&&<div style={{padding:12}}>
         <div style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,marginBottom:10}}>유형 선택</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          {catIds.length===0&&<div style={{gridColumn:"1 / -1",padding:"14px 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t3,fontSize:12.5,textAlign:"center" as const}}>선택 가능한 과정 유형을 불러오고 있어요.</div>}
           {catIds.map(cat=><button key={cat} onClick={()=>setSelCat(cat)}
             style={{padding:"12px 10px",borderRadius:A.r,border:`1.5px solid ${A.border}`,background:A.card2,cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,transition:"all .12s"}}
             onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=catColor;(e.currentTarget as HTMLElement).style.background=catColor+"12"}}
@@ -1509,7 +1510,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [savedSlug,setSavedSlug]=React.useState("")
   const [progs,setProgs]=React.useState<Prog[]>([])
   const [cats,setCats]=React.useState<Cat[]>([])
+  const [programCatalogLoading,setProgramCatalogLoading]=React.useState(false)
+  const [programCatalogErr,setProgramCatalogErr]=React.useState("")
   const [sbSt,setSbSt]=React.useState<"idle"|"ok"|"err">("idle")
+  const programCatalogRequestRef=React.useRef(0)
 
   // ── Builder UI state ───────────────────────────────────────────────────
   const [sec,setSec]=React.useState("header")
@@ -1741,6 +1745,29 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     supa.from("form_configs").select("config,slug,name,brand").eq("id",item.id).single()
       .then(({data,error})=>{if(!error&&data)fullFormCache.current[item.id]={updatedAt:item.updated_at,data}})
   }
+  async function loadProgramCatalog(sb:any=supa,opts:{silent?:boolean}={}){
+    if(!sb)return
+    const requestId=++programCatalogRequestRef.current
+    if(!opts.silent)setProgramCatalogLoading(true)
+    setProgramCatalogErr("")
+    try{
+      const [programRes,categoryRes]:any[]=await Promise.all([
+        withTimeout(sb.from("programs").select("*").eq("is_archived",false).order("title"),10000,"프로그램 목록 확인 시간이 초과됐어요."),
+        withTimeout(sb.from("categories").select("id,name"),10000,"카테고리 목록 확인 시간이 초과됐어요."),
+      ])
+      if(requestId!==programCatalogRequestRef.current)return
+      if(programRes.error)throw programRes.error
+      if(categoryRes.error)throw categoryRes.error
+      setProgs(programRes.data||[])
+      setCats(categoryRes.data||[])
+    }catch(error){
+      if(requestId!==programCatalogRequestRef.current)return
+      const message=(error as any)?.message||"교육과정 목록을 불러오지 못했어요."
+      setProgramCatalogErr(message)
+    }finally{
+      if(requestId===programCatalogRequestRef.current)setProgramCatalogLoading(false)
+    }
+  }
 
   async function resolveAdminRole(sb:any,userId:string):Promise<AdminRole>{
     const roleRes:any=await withTimeout<any>(
@@ -1780,8 +1807,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         setAuthUser(null);setAuthRole("");setView("login");setSbSt("idle")
       }
     }).catch(()=>{})
-    withTimeout(sb.from("programs").select("*").eq("is_archived",false).order("title"),8000,"프로그램 목록 확인 시간이 초과됐어요.").then(({data})=>{if(data)setProgs(data)}).catch(()=>{})
-    withTimeout(sb.from("categories").select("id,name"),8000,"카테고리 목록 확인 시간이 초과됐어요.").then(({data})=>{if(data)setCats(data)}).catch(()=>{})
+    loadProgramCatalog(sb,{silent:true})
   },[supabaseUrl,supabaseAnonKey])
 
   React.useEffect(()=>{
@@ -1849,8 +1875,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       setAuthUser(data.user);setAuthRole(role);setSbSt("ok")
       setView("dashboard")
       loadDashboard(supa)
-      withTimeout(supa.from("programs").select("*").eq("is_archived",false).order("title"),8000,"프로그램 목록 확인 시간이 초과됐어요.").then(({data:pd})=>{if(pd)setProgs(pd)}).catch(()=>{})
-      withTimeout(supa.from("categories").select("id,name"),8000,"카테고리 목록 확인 시간이 초과됐어요.").then(({data:cd})=>{if(cd)setCats(cd)}).catch(()=>{})
+      loadProgramCatalog(supa,{silent:true})
     } catch(e){
       await withTimeout(supa.auth.signOut(),6000,"로그아웃 처리 시간이 초과됐어요.").catch(()=>{})
       setAuthUser(null);setAuthRole("")
@@ -1859,6 +1884,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     finally {setLoginLoading(false)}
   }
   async function doLogout(){if(supa)await supa.auth.signOut();setAuthUser(null);setAuthRole("");setView("login");setSbSt("idle");setLoginEmail("");setLoginPw("")}
+  React.useEffect(()=>{
+    if(!supa||view!=="builder"||cfg.header.programUnlinked)return
+    if(progs.length===0&&!programCatalogLoading&&!programCatalogErr)loadProgramCatalog(supa)
+  },[view,cfg.header.programUnlinked,progs.length,programCatalogLoading,programCatalogErr])
 
   async function loadDashboard(sb:any,opts:{silent?:boolean}={}){
     const silent=!!opts.silent
@@ -4226,9 +4255,27 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               연동 안함
             </label>
           </div>
-          {!cfg.header.programUnlinked&&progs.length>0&&<F label="과정 선택" A={A}>
-            <ProgramPicker progs={progs} cats={cats} brand={currentBrand} value={cfg.header.programId}
-              onChange={applyLinkedProgram} A={A}/>
+          {!cfg.header.programUnlinked&&<F label="과정 선택" A={A}>
+            {programCatalogLoading&&progs.length===0
+              ? <div style={{padding:"10px 11px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,fontSize:12.5,lineHeight:1.55}}>교육과정 목록을 불러오는 중이에요.</div>
+              : programCatalogErr&&progs.length===0
+              ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 10px",borderRadius:A.r,border:`1px solid ${A.red}44`,background:`${A.red}10`,color:A.red,fontSize:12.5,lineHeight:1.45}}>
+                  <span style={{flex:1}}>교육과정 목록을 불러오지 못했어요. {programCatalogErr}</span>
+                  <button onClick={()=>loadProgramCatalog(supa)} disabled={programCatalogLoading} style={{height:28,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.red}55`,background:A.card,color:A.red,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap" as const}}>다시 불러오기</button>
+                </div>
+              : progs.length===0
+              ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,fontSize:12.5,lineHeight:1.45}}>
+                  <span style={{flex:1}}>표시할 교육과정이 없어요. 목록이 늦게 반영된 경우 다시 불러와 주세요.</span>
+                  <button onClick={()=>loadProgramCatalog(supa)} disabled={programCatalogLoading} style={{height:28,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap" as const}}>새로고침</button>
+                </div>
+              : <>
+                  <ProgramPicker progs={progs} cats={cats} brand={currentBrand} value={cfg.header.programId}
+                    onChange={applyLinkedProgram} A={A}/>
+                  {(programCatalogLoading||programCatalogErr||cats.length===0)&&<div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,padding:"8px 10px",borderRadius:A.r,border:`1px solid ${programCatalogErr?A.red+"44":A.border}`,background:programCatalogErr?`${A.red}10`:A.card2,color:programCatalogErr?A.red:A.t3,fontSize:12,lineHeight:1.45}}>
+                    <span style={{flex:1}}>{programCatalogLoading?"교육과정 목록을 새로고침하는 중이에요.":programCatalogErr?`최신 목록을 불러오지 못했어요. 기존 목록으로 선택할 수 있습니다. ${programCatalogErr}`:"카테고리 정보를 확인하지 못해 일부 과정이 보이지 않을 수 있어요."}</span>
+                    {!programCatalogLoading&&<button onClick={()=>loadProgramCatalog(supa)} style={{height:26,padding:"0 9px",borderRadius:A.r,border:`1px solid ${programCatalogErr?A.red+"55":A.border}`,background:A.card,color:programCatalogErr?A.red:A.t2,fontFamily:FONT,fontSize:11.5,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap" as const}}>다시 불러오기</button>}
+                  </div>}
+                </>}
           </F>}
           {!cfg.header.programUnlinked&&cfg.header.programId&&(()=>{
             const linkedProgram=progs.find(p=>p.id===cfg.header.programId)
