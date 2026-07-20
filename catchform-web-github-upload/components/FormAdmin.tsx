@@ -135,6 +135,8 @@ const DASHBOARD_FORM_TYPES:{value:DashboardFormType;label:string}[]=[
   {value:"evaluation",label:"평가"},
   {value:"other",label:"기타"},
 ]
+const ANALYTICS_EVENT_LIMIT = 5000
+const ANALYTICS_EVENT_SELECT = "id,form_id,form_slug,session_id,event_type,page,field_id,field_label,metadata,created_at"
 function legacyDashboardFormType(formType?:Cfg["formType"]):DashboardFormType{
   if(formType==="alert")return"alert"
   if(formType==="recruit")return"recruit"
@@ -2947,10 +2949,35 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     return [d.toLocaleDateString("sv-SE"),d.toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",hour12:false})]
   }
   function analyticsEventMeta(event:any){
+    if(event?.__meta)return event.__meta
     try{return typeof event?.metadata==="string"?JSON.parse(event.metadata||"{}"):(event?.metadata||{})}catch{return{}}
   }
   function analyticsTrashSessionId(prefix="admin_trash"){
     return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2,8)}`
+  }
+  function normalizeAnalyticsEventRows(rows:any[]){
+    return Array.from(new Map((rows||[]).filter(Boolean).map((event:any)=>{
+      const normalized={...event,__meta:analyticsEventMeta(event)}
+      return [event.id||`${event.session_id||""}:${event.event_type||""}:${event.created_at||""}`,normalized]
+    })).values()).sort((a:any,b:any)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())
+  }
+  function splitVisibleAnalyticsEvents(rawEvents:any[]){
+    const metaOf=(event:any)=>analyticsEventMeta(event)
+    const closedIds=new Set(rawEvents.filter(event=>["response_restored","analytics_scope_restored","response_purged","analytics_scope_purged"].includes(event.event_type)).map(event=>metaOf(event).trash_event_id).filter(Boolean))
+    const purgedDraftSessions=new Set(rawEvents.filter(event=>event.event_type==="response_purged").map(event=>metaOf(event).session_id).filter(Boolean))
+    const openTrashedBatchIds=new Set(rawEvents.filter(event=>event.event_type==="response_trashed"&&!closedIds.has(event.id)).map(event=>metaOf(event).batch_id).filter(Boolean))
+    const activeScope=[...rawEvents]
+      .filter(event=>event.event_type==="analytics_scope_trashed"&&!closedIds.has(event.id)&&openTrashedBatchIds.has(metaOf(event).batch_id))
+      .sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
+    const trashedDraftSessions=new Set(rawEvents.filter(event=>event.event_type==="response_trashed"&&!closedIds.has(event.id)&&metaOf(event).trash_kind==="draft"&&!purgedDraftSessions.has(metaOf(event).session_id)).map(event=>metaOf(event).session_id).filter(Boolean))
+    return rawEvents.filter(event=>!analyticsTrashTypes.includes(event.event_type))
+      .filter(event=>!activeScope||new Date(event.created_at).getTime()>new Date(activeScope.created_at).getTime())
+      .filter(event=>!trashedDraftSessions.has(event.session_id))
+  }
+  function setAnalyticsEventRows(rawEventRows:any[]){
+    const rawEvents=normalizeAnalyticsEventRows(rawEventRows)
+    setAnalyticsTrashEvents(rawEvents)
+    setAnalyticsEvents([...splitVisibleAnalyticsEvents(rawEvents)].reverse())
   }
   const analyticsTrashTypes=["response_trashed","response_restored","response_purged","analytics_scope_trashed","analytics_scope_restored","analytics_scope_purged"]
   function activeAnalyticsTrashRecords(source:any[]=analyticsTrashEvents){
@@ -2987,7 +3014,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   async function restoreActiveAnalyticsTrashForForm(formId:string,formSlug:string){
     if(!supa||!formId)return 0
-    const {data,error}=await supa.from("form_response_events").select("*").eq("form_id",formId).order("created_at",{ascending:false}).limit(5000)
+    const {data,error}=await supa.from("form_response_events").select(ANALYTICS_EVENT_SELECT).eq("form_id",formId).order("created_at",{ascending:false}).limit(ANALYTICS_EVENT_LIMIT)
     if(error)throw error
     const rawEvents=data||[]
     const closedIds=new Set(rawEvents.filter(event=>["response_restored","analytics_scope_restored","response_purged","analytics_scope_purged"].includes(event.event_type)).map(event=>analyticsEventMeta(event).trash_event_id).filter(Boolean))
@@ -3034,20 +3061,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setAnalyticsLoading(true);setAnalyticsErr("")
     try{
       const tableNames=analyticsCandidateTableNames()
-      const rowResults=await Promise.all(tableNames.map(async tableName=>{
-        const res=await supa.from(tableName).select("*").eq("form_id",loadedId).order("created_at",{ascending:false}).limit(1000)
-        if(res.error)throw res.error
-        return (res.data||[]).map((row:any)=>({...row,__tableName:tableName}))
-      }))
-      const rows=rowResults.flat().sort((a:any,b:any)=>new Date(b.created_at||0).getTime()-new Date(a.created_at||0).getTime())
-      const eventResults=await Promise.all([
-        supa.from("form_response_events").select("*").eq("form_id",loadedId).order("created_at",{ascending:false}).limit(5000),
-        savedSlug
-          ? supa.from("form_response_events").select("*").eq("form_slug",savedSlug).order("created_at",{ascending:false}).limit(5000)
-          : Promise.resolve({data:[],error:null} as any),
+      const [rowResults,eventResult]=await Promise.all([
+        Promise.all(tableNames.map(async tableName=>{
+          const res=await supa.from(tableName).select("*").eq("form_id",loadedId).order("created_at",{ascending:false}).limit(1000)
+          if(res.error)throw res.error
+          return (res.data||[]).map((row:any)=>({...row,__tableName:tableName}))
+        })),
+        supa.from("form_response_events").select(ANALYTICS_EVENT_SELECT).eq("form_id",loadedId).order("created_at",{ascending:false}).limit(ANALYTICS_EVENT_LIMIT),
       ])
-      let eventError=eventResults.find(result=>result.error)?.error
-      let rawEventRows=eventError?[]:eventResults.flatMap(result=>result.data||[])
+      const rows=rowResults.flat().sort((a:any,b:any)=>new Date(b.created_at||0).getTime()-new Date(a.created_at||0).getTime())
+      let eventError=eventResult.error
+      let rawEventRows=eventError?[]:(eventResult.data||[])
       if((eventError||rawEventRows.length===0)&&typeof window!=="undefined"){
         try{
           const {data:sessionData}=await supa.auth.getSession()
@@ -3067,24 +3091,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         }catch{}
       }
       if(eventError&&rawEventRows.length===0)throw eventError
-      const rawEvents=Array.from(new Map(rawEventRows.map((event:any)=>[event.id,event])).values())
-        .sort((a:any,b:any)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())
-      const closedIds=new Set(rawEvents.filter(event=>["response_restored","analytics_scope_restored","response_purged","analytics_scope_purged"].includes(event.event_type)).map(event=>analyticsEventMeta(event).trash_event_id).filter(Boolean))
-      const purgedDraftSessions=new Set(rawEvents.filter(event=>event.event_type==="response_purged").map(event=>analyticsEventMeta(event).session_id).filter(Boolean))
-      const activeScope=[...rawEvents]
-        .filter(event=>event.event_type==="analytics_scope_trashed"&&!closedIds.has(event.id))
-        .filter(event=>{
-          const batchId=analyticsEventMeta(event).batch_id
-          return batchId&&rawEvents.some(item=>item.event_type==="response_trashed"&&!closedIds.has(item.id)&&analyticsEventMeta(item).batch_id===batchId)
-        })
-        .sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
-      const trashedDraftSessions=new Set(rawEvents.filter(event=>event.event_type==="response_trashed"&&!closedIds.has(event.id)&&analyticsEventMeta(event).trash_kind==="draft"&&!purgedDraftSessions.has(analyticsEventMeta(event).session_id)).map(event=>analyticsEventMeta(event).session_id).filter(Boolean))
-      const visibleEvents=rawEvents.filter(event=>!analyticsTrashTypes.includes(event.event_type))
-        .filter(event=>!activeScope||new Date(event.created_at).getTime()>new Date(activeScope.created_at).getTime())
-        .filter(event=>!trashedDraftSessions.has(event.session_id))
       setAnalyticsRows(rows)
-      setAnalyticsTrashEvents(rawEvents)
-      setAnalyticsEvents([...visibleEvents].reverse())
+      setAnalyticsEventRows(rawEventRows)
       const fields=getAnalyticsFields()
       if(!analyticsQuestionId&&fields[0]){
         setAnalyticsQuestionId(fields[0].id)
@@ -5966,7 +5974,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	    const events=Array.isArray(analyticsEvents)?analyticsEvents:[]
 	    const rawEvents=Array.isArray(analyticsTrashEvents)?analyticsTrashEvents:[]
 	    const trashRecords=activeAnalyticsTrashRecords()
-	    const eventMeta=(e:any)=>{try{return typeof e?.metadata==="string"?JSON.parse(e.metadata||"{}"):(e?.metadata||{})}catch{return{}}}
+	    const eventMeta=(e:any)=>analyticsEventMeta(e)
 	    const fields=getAnalyticsFields()
 	    const colors=[chartBlue,chartGreen,chartYellow,chartSlate,chartPurple,chartOrange,chartCyan,chartPink]
     const pageName=(p:any)=>{

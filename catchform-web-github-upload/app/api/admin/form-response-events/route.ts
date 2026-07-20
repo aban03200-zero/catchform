@@ -10,6 +10,9 @@ function normalizeRole(role: unknown) {
   return value === "admin" || value === "master" ? value : ""
 }
 
+const EVENT_SELECT = "id,form_id,form_slug,session_id,event_type,page,field_id,field_label,metadata,created_at"
+const EVENT_LIMIT = 5000
+
 export async function GET(req: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
@@ -49,35 +52,31 @@ export async function GET(req: NextRequest) {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 
-  const queries = []
+  let events: any[] = []
   if (formId) {
-    queries.push(
-      adminClient
-        .from("form_response_events")
-        .select("*")
-        .eq("form_id", formId)
-        .order("created_at", { ascending: false })
-        .limit(5000),
-    )
+    const { data, error } = await adminClient
+      .from("form_response_events")
+      .select(EVENT_SELECT)
+      .eq("form_id", formId)
+      .order("created_at", { ascending: false })
+      .limit(EVENT_LIMIT)
+    if (error) return json(500, { error: error.message })
+    events = data || []
   }
-  if (formSlug) {
-    queries.push(
-      adminClient
-        .from("form_response_events")
-        .select("*")
-        .eq("form_slug", formSlug)
-        .order("created_at", { ascending: false })
-        .limit(5000),
-    )
+  if (formSlug && events.length === 0) {
+    const { data, error } = await adminClient
+      .from("form_response_events")
+      .select(EVENT_SELECT)
+      .eq("form_slug", formSlug)
+      .order("created_at", { ascending: false })
+      .limit(EVENT_LIMIT)
+    if (error) return json(500, { error: error.message })
+    events = data || []
   }
 
-  const results = await Promise.all(queries)
-  const firstError = results.find((result) => result.error)?.error
-  if (firstError) return json(500, { error: firstError.message })
-
-  const events = Array.from(
-    new Map(results.flatMap((result) => result.data || []).map((event: any) => [event.id, event])).values(),
+  const normalizedEvents = Array.from(
+    new Map(events.map((event: any) => [event.id, event])).values(),
   ).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
-  return json(200, { events })
+  return json(200, { events: normalizedEvents })
 }
