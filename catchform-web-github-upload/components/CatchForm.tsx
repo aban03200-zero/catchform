@@ -6,6 +6,7 @@
 
 import * as React from "react"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
+import { initMetaPixel, trackLead } from "@/lib/metaPixel"
 
 const runtimeEnv = (key: string) => {
     try {
@@ -683,6 +684,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const operationGate = React.useMemo(() => getOperationGate(cfg), [cfg.dashboard?.operationStart, cfg.dashboard?.operationEnd, cfg.dashboard?.alwaysOpen])
     const formDisabled = !!operationGate
     const [showOperationModal, setShowOperationModal] = React.useState(!!operationGate)
+    const isFormalApplication = String(cfg.header?.applicationType || "").trim().toLowerCase() === "formal"
 
     const draftKey = React.useMemo(() => {
         const raw = formId || formSlug || cfg.header?.programId || cfg.header?.title || "form"
@@ -693,6 +695,9 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     React.useEffect(() => {
         if (operationGate) setShowOperationModal(true)
     }, [operationGate?.kind])
+    React.useEffect(() => {
+        initMetaPixel(cfg.brand, isFormalApplication)
+    }, [cfg.brand, isFormalApplication])
 
     const setVal = (id: string, v: string) => setVals(p => ({ ...p, [id]: v }))
     const setErr = (id: string, msg: string) => setErrors(p => ({ ...p, [id]: msg }))
@@ -1617,6 +1622,13 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             }
 
             trackEvent("completed", { page: formPages })
+            trackLead(cfg.brand, isFormalApplication, {
+                content_name: cfg.header?.title || "CatchForm Lead",
+                content_category: cfg.formType || "",
+                form_id: formConfigId || formId || "",
+                form_slug: formSlug || "",
+                program_id: cfg.header?.programId || "",
+            })
             clearDraft()
             setShareCopied(false)
             setShowModal(true)
