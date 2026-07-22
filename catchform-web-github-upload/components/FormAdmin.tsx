@@ -20,6 +20,7 @@ type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; o
 type AdminRole = ""|"admin"|"master"
 type DashboardSettingsState = {item:any;formName:string;brand:BrandId;formTypeTag:DashboardFormType;operationStart:string;operationEnd:string;alwaysOpen:boolean;manualStatus:DashboardManualStatus;currentEditPasswordDraft:string;editPasswordDraft:string;clearEditPassword:boolean}
 type KdtFieldType = FieldType|"section_desc"
+type ConsentDocMode = "brand"|"custom"
 type KdtField = { id:string; label:string; type:KdtFieldType; required?:boolean; page?:number; options?:string[]; placeholder?:string; desc?:string; [key:string]:any }
 type AdMode = "image"|"split"
 type FieldType = "text"|"name"|"phone"|"email"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"|"ad"
@@ -31,7 +32,7 @@ type Cfg = {
   header: { imageUrl:string; programId:string; programUnlinked?:boolean; recruitmentPeriodMode?:RecruitmentPeriodMode; overline:string; title:string; educationStart:string; educationEnd:string; tuitionFree:boolean; tuitionFreeText:string; tuitionAmount:string; stipend:string; noticeEnabled:boolean; noticeIconEnabled:boolean; noticeIconText:string; noticeText:string; noticeShape?:"pill"|"rect"; applicationType?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
   ad?: FormAdConfig
   form: { fields:FormField[]; showNum:boolean; dupText:string; pages:number; pageLabels?:string[]; consentPosition?:ConsentPosition }
-  consents: { enabled:boolean; required:boolean; title:string; consentType?:string; body:string; checkLabel:string; policyUrl:string }[]
+  consents: { enabled:boolean; required:boolean; title:string; consentType?:string; body:string; checkLabel:string; policyUrl:string; policyMode?:ConsentDocMode; customPolicyTitle?:string; customPolicyBody?:string }[]
   cta: { label:string; loadLabel:string; height:number; bg:string; color:string }
   modal: { title:string; body:string; btnLabel:string; btnUrl:string; btnReplace:boolean }
   styles: { theme:Theme; fieldH:number; qGap:number; maxW:number; labelGap?:number; seniorMode?:boolean }
@@ -1009,8 +1010,9 @@ function applyBrandDefaults(config:Cfg,brand:string):Cfg{
   next.form={...next.form,consentPosition:next.form.consentPosition==="start"?"start":"end"}
   next.consents=(next.consents||[]).map(cs=>{
     const consentType=cs.consentType||consentTypeFromTitle(cs.title)
-    const policyUrl=consentType?policyUrlForConsent(consentType,normalizedBrand):cs.policyUrl
-    return {...cs,...(consentType?{consentType}:{}),...(policyUrl?{policyUrl}:{}),...(!cs.title&&consentType?{title:consentLabelForType(consentType)}:{})}
+    const policyMode=cs.policyMode==="custom"?"custom":"brand"
+    const policyUrl=policyMode==="brand"&&consentType?policyUrlForConsent(consentType,normalizedBrand):cs.policyUrl
+    return {...cs,policyMode,...(consentType?{consentType}:{}),...(policyUrl?{policyUrl}:{}),...(!cs.title&&consentType?{title:consentLabelForType(consentType)}:{})}
   })
   if(normalizedBrand==="SNIPERFACTORY"&&(!next.modal.btnUrl||next.modal.btnUrl==="https://insideout.or.kr/program")){
     next.modal.btnUrl="https://sniperfactory.com/program"
@@ -1211,6 +1213,20 @@ function htmlToMd(html:string):string{
     .replace(/&quot;|&#34;/g,'"').replace(/&apos;|&#39;/g,"'")
     .replace(/\n{3,}/g,"\n\n")
     .trimEnd()
+}
+function customPolicyTitle(cs:any){
+  return String(cs?.customPolicyTitle||cs?.title||"법적 문서").trim()||"법적 문서"
+}
+function openCustomPolicyPreview(cs:any){
+  if(typeof window==="undefined")return
+  const title=customPolicyTitle(cs)
+  const body=String(cs?.customPolicyBody||"").trim()
+  if(!body)return
+  const safeTitle=title.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+  const html=`<!doctype html><html lang="ko"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${safeTitle}</title><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"/><style>body{margin:0;background:#f7f8fa;color:#191919;font-family:'Pretendard Variable','Pretendard','Noto Sans KR',-apple-system,sans-serif}.wrap{max-width:760px;margin:0 auto;padding:52px 22px 72px}.card{background:#fff;border:1px solid #e5e8eb;border-radius:16px;padding:34px 30px;box-shadow:0 12px 32px rgba(0,0,0,.06)}h1{margin:0 0 24px;font-size:26px;line-height:1.35;font-weight:700}.body{font-size:15px;line-height:1.8;color:#333}.body ul{padding-left:22px}.body a{color:#3182f6}@media(max-width:640px){.wrap{padding:24px 14px 48px}.card{padding:26px 20px;border-radius:12px}h1{font-size:22px}}</style></head><body><main class="wrap"><article class="card"><h1>${safeTitle}</h1><div class="body">${mdToHtml(body)}</div></article></main></body></html>`
+  const url=URL.createObjectURL(new Blob([html],{type:"text/html;charset=utf-8"}))
+  window.open(url,"_blank","noopener,noreferrer")
+  window.setTimeout(()=>URL.revokeObjectURL(url),60000)
 }
 
 // ─── ConsentBodyEditor ────────────────────────────────────────────────────
@@ -2407,7 +2423,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   function uc<K extends keyof Cfg["consents"][0]>(idx:number,k:K,v:Cfg["consents"][0][K]){setCfg(p=>({...p,consents:p.consents.map((c,i)=>i===idx?{...c,[k]:v}:c)}))}
   function patchConsent(idx:number,patch:Partial<Cfg["consents"][0]>){setCfg(p=>({...p,consents:p.consents.map((c,i)=>i===idx?{...c,...patch}:c)}))}
-  function addConsent(){setCfg(p=>({...p,consents:[...p.consents,{enabled:true,required:false,title:"추가 동의 항목",body:"",checkLabel:"동의합니다.",policyUrl:""}]}))}
+  function addConsent(){setCfg(p=>({...p,consents:[...p.consents,{enabled:true,required:false,title:"추가 동의 항목",body:"",checkLabel:"동의합니다.",policyUrl:"",policyMode:"brand"}]}))}
   function removeConsent(idx:number){setCfg(p=>({...p,consents:p.consents.filter((_,i)=>i!==idx)}))}
   function ut<K extends keyof Cfg["cta"]>(k:K,v:Cfg["cta"][K]){setCfg(p=>({...p,cta:{...p.cta,[k]:v}}))}
   function um<K extends keyof Cfg["modal"]>(k:K,v:Cfg["modal"][K]){setCfg(p=>({...p,modal:{...p.modal,[k]:v}}))}
@@ -4209,13 +4225,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const previewPageShowsConsents=previewConsentPosition==="start"?(!isMultiPage||pvPage===1):(!isMultiPage||pvPage===formPages)
   const renderPreviewConsents=()=>cfg.consents.filter(cs=>cs.enabled).map((cs,idx)=>{
     const policyType=cs.consentType||consentTypeFromTitle(cs.title)
-    const policyUrl=policyUrlForConsent(policyType,currentBrand)||cs.policyUrl
+    const customBody=String(cs.customPolicyBody||"").trim()
+    const policyUrl=cs.policyMode==="custom"?"":policyUrlForConsent(policyType,currentBrand)||cs.policyUrl
     return <div key={idx} style={{marginBottom:qg}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
         <div style={{fontSize:14,fontWeight:600,color:FC.t1,display:"flex",alignItems:"center",gap:3}}>
           {cs.title}{cs.required&&<span style={{color:accentBg,fontSize:14,fontWeight:600,lineHeight:1}}>*</span>}
         </div>
-        {policyUrl&&<a href={policyUrl} target="_blank" rel="noopener" style={{fontSize:12,fontWeight:600,color:accentBg,textDecoration:"none",padding:"2px 9px",borderRadius:5,border:`1px solid ${accentBg}44`,flexShrink:0}}>보기</a>}
+        {cs.policyMode==="custom"&&customBody
+          ? <button onClick={()=>openCustomPolicyPreview(cs)} style={{fontSize:12,fontWeight:600,color:accentBg,textDecoration:"none",padding:"2px 9px",borderRadius:5,border:`1px solid ${accentBg}44`,background:"transparent",cursor:"pointer",fontFamily:FONT,flexShrink:0}}>보기</button>
+          : policyUrl&&<a href={policyUrl} target="_blank" rel="noopener" style={{fontSize:12,fontWeight:600,color:accentBg,textDecoration:"none",padding:"2px 9px",borderRadius:5,border:`1px solid ${accentBg}44`,flexShrink:0}}>보기</a>}
       </div>
       {(()=>{
         const lines=cs.body.split("\n")
@@ -4973,25 +4992,59 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               patchConsent(idx,{
                 consentType:nextType,
                 ...(ct?{title:ct.label}:{}),
-                policyUrl:nextPolicyUrl,
+                ...(cs.policyMode==="custom"?{}:{policyUrl:nextPolicyUrl}),
+                ...(cs.policyMode==="custom"&&!cs.customPolicyTitle&&ct?{customPolicyTitle:ct.label}:{}),
               })
             }} style={{...selS}}>
               <option value="">— 동의 유형을 선택해주세요 —</option>
               {CONSENT_TYPES.map(ct=><option key={ct.key} value={ct.key}>{ct.label}</option>)}
             </select>
           </F>
-          <F label="법적 문서" hint="동의 유형과 현재 브랜드에 맞는 문서가 자동으로 연결됩니다." A={A}>
+          <F label="법적 문서" hint="브랜드 기본 문서를 쓰거나, 이 폼 전용 문서를 직접 작성할 수 있어요." A={A}>
             {(()=>{
               const type=cs.consentType||consentTypeFromTitle(cs.title)
               const autoUrl=type?policyUrlForConsent(type,currentBrand):""
+              const policyMode=cs.policyMode==="custom"?"custom":"brand"
               const resolvedUrl=autoUrl||cs.policyUrl||""
-              return <div style={{border:`1.5px solid ${resolvedUrl?A.border:A.red}`,borderRadius:A.r,background:A.card2,padding:"9px 10px",fontFamily:FONT}}>
-                <div style={{fontSize:12.5,fontWeight:600,color:resolvedUrl?A.t1:A.red,marginBottom:4}}>
-                  {type?consentLabelForType(type):"동의 유형을 먼저 선택해주세요"}
+              const customBody=String(cs.customPolicyBody||"").trim()
+              return <div style={{display:"flex",flexDirection:"column" as const,gap:9,fontFamily:FONT}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                  {([{key:"brand",label:"브랜드 기본 문서"},{key:"custom",label:"직접 작성 문서"}] as {key:ConsentDocMode;label:string}[]).map(item=>{
+                    const selected=policyMode===item.key
+                    return <button key={item.key} onClick={()=>{
+                      if(item.key==="brand"){
+                        patchConsent(idx,{policyMode:"brand",policyUrl:autoUrl||cs.policyUrl||""})
+                      }else{
+                        patchConsent(idx,{
+                          policyMode:"custom",
+                          customPolicyTitle:cs.customPolicyTitle||consentLabelForType(type)||cs.title||"법적 문서",
+                          customPolicyBody:cs.customPolicyBody||cs.body||"",
+                        })
+                      }
+                    }} style={{height:34,borderRadius:A.r,border:`1.5px solid ${selected?A.blue:A.border}`,background:selected?A.blue2:A.card2,color:selected?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:selected?700:500,cursor:"pointer"}}>
+                      {item.label}
+                    </button>
+                  })}
                 </div>
-                {resolvedUrl
-                  ? <a href={resolvedUrl} target="_blank" rel="noopener" style={{fontSize:11.5,color:A.blue,textDecoration:"none",wordBreak:"break-all"}}>{resolvedUrl}</a>
-                  : <div style={{fontSize:11.5,color:A.red}}>동의 유형 선택 시 자동으로 연결됩니다.</div>}
+                {policyMode==="brand"
+                  ? <div style={{border:`1.5px solid ${resolvedUrl?A.border:A.red}`,borderRadius:A.r,background:A.card2,padding:"9px 10px"}}>
+                      <div style={{fontSize:12.5,fontWeight:600,color:resolvedUrl?A.t1:A.red,marginBottom:4}}>
+                        {type?consentLabelForType(type):"동의 유형을 먼저 선택해주세요"}
+                      </div>
+                      {resolvedUrl
+                        ? <a href={resolvedUrl} target="_blank" rel="noopener" style={{fontSize:11.5,color:A.blue,textDecoration:"none",wordBreak:"break-all"}}>{resolvedUrl}</a>
+                        : <div style={{fontSize:11.5,color:A.red}}>동의 유형 선택 시 자동으로 연결됩니다.</div>}
+                    </div>
+                  : <div style={{display:"flex",flexDirection:"column" as const,gap:9}}>
+                      <TIn value={cs.customPolicyTitle||consentLabelForType(type)||cs.title||"법적 문서"} onChange={v=>uc(idx,"customPolicyTitle",v)} placeholder="문서 제목" A={A}/>
+                      <ConsentBodyEditor value={cs.customPolicyBody||""} onChange={v=>uc(idx,"customPolicyBody",v)} A={A}/>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                        <div style={{fontSize:11.5,color:customBody?A.t3:A.red,lineHeight:1.45}}>
+                          {customBody?"보기 버튼을 누르면 작성한 문서 페이지가 열립니다.":"문서 내용을 작성하면 폼의 보기 버튼이 표시됩니다."}
+                        </div>
+                        {customBody&&<button onClick={()=>openCustomPolicyPreview(cs)} style={{height:30,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.blue}44`,background:"transparent",color:A.blue,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>미리보기</button>}
+                      </div>
+                    </div>}
               </div>
             })()}
           </F>

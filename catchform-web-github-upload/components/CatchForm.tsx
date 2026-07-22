@@ -37,6 +37,7 @@ type Opt = { label: string; value: string; isEtc: boolean; nextPage?: number }
 type HelperItem = { text: string; callout?: boolean }
 type RecruitmentPeriodMode = "pre"|"formal"
 type ConsentPosition = "start"|"end"
+type ConsentDocMode = "brand"|"custom"
 type AdMode = "image"|"split"
 type FieldType = "text"|"name"|"email"|"phone"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"|"ad"
 type FormField = {
@@ -71,7 +72,7 @@ type Cfg = {
     }
     ad?: FormAdConfig
     form: { fields: FormField[]; showNum: boolean; dupText: string; pages: number; pageLabels?: string[]; consentPosition?: ConsentPosition }
-    consents: { enabled: boolean; required: boolean; title: string; consentType?: string; body: string; checkLabel: string; policyUrl: string }[]
+    consents: { enabled: boolean; required: boolean; title: string; consentType?: string; body: string; checkLabel: string; policyUrl: string; policyMode?: ConsentDocMode; customPolicyTitle?: string; customPolicyBody?: string }[]
     cta: { label: string; loadLabel: string; height: number; bg: string; color: string }
     modal: { title: string; body: string; btnLabel: string; btnUrl: string; btnReplace: boolean }
     styles: { theme: "dark"|"light"; fieldH: number; qGap: number; maxW: number; labelGap?: number; seniorMode?: boolean }
@@ -107,6 +108,7 @@ const consentTypeFromTitle = (title:string) => {
     return""
 }
 const policyUrlForConsent = (type:string,brand?:string) => CONSENT_POLICY_URLS[consentPolicyBrandKey(brand||"")][type] || ""
+const customPolicyPathForConsent = (slug:string,idx:number) => slug ? `/policy/${encodeURIComponent(slug)}/${idx}` : ""
 
 // ─── Supabase ─────────────────────────────────────────────────────────────
 let _sb: SupabaseClient | null = null
@@ -2013,13 +2015,17 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         const needsAccordion = lines.length > LIMIT
         const visible = needsAccordion && !open ? cs.body : cs.body
         const type = (cs as any).consentType || consentTypeFromTitle(cs.title)
-        const policyUrl = policyUrlForConsent(type, cfg.brand) || cs.policyUrl
+        const customPolicyBody = String((cs as any).customPolicyBody || "").trim()
+        const customPolicyHref = (cs as any).policyMode === "custom" && customPolicyBody ? customPolicyPathForConsent(formSlug || "", idx) : ""
+        const policyUrl = (cs as any).policyMode === "custom" ? "" : policyUrlForConsent(type, cfg.brand) || cs.policyUrl
         return <div key={idx} style={{ marginBottom: qg }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                 <div style={{ fontSize: fs(14), fontWeight:600, color: FC.t1, display: "flex", alignItems: "center", gap: 3 }}>
                     {cs.title}{cs.required && <span style={{ color: accentBg, fontSize: fs(14), fontWeight:600 }}>*</span>}
                 </div>
-                {policyUrl && <a href={policyUrl} target="_blank" rel="noopener" style={{ fontSize: fs(12), fontWeight:600, color: accentText, textDecoration: "none", padding: "2px 9px", borderRadius: 5, border: `1px solid ${accentBg}44`, flexShrink: 0 }}>보기</a>}
+                {customPolicyHref
+                    ? <a href={customPolicyHref} target="_blank" rel="noopener" style={{ fontSize: fs(12), fontWeight:600, color: accentText, textDecoration: "none", padding: "2px 9px", borderRadius: 5, border: `1px solid ${accentBg}44`, flexShrink: 0 }}>보기</a>
+                    : policyUrl && <a href={policyUrl} target="_blank" rel="noopener" style={{ fontSize: fs(12), fontWeight:600, color: accentText, textDecoration: "none", padding: "2px 9px", borderRadius: 5, border: `1px solid ${accentBg}44`, flexShrink: 0 }}>보기</a>}
             </div>
             <div style={{ borderTop: `1px solid ${FC.fieldBorder}`, paddingTop: 10, marginBottom: 10 }}>
                 <div style={{ fontSize: fs(12), color: FC.t2, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: mdToHtml(visible) }} />
