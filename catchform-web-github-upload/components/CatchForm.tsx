@@ -74,7 +74,7 @@ type Cfg = {
     consents: { enabled: boolean; required: boolean; title: string; consentType?: string; body: string; checkLabel: string; policyUrl: string }[]
     cta: { label: string; loadLabel: string; height: number; bg: string; color: string }
     modal: { title: string; body: string; btnLabel: string; btnUrl: string; btnReplace: boolean }
-    styles: { theme: "dark"|"light"; fieldH: number; qGap: number; maxW: number; labelGap?: number }
+    styles: { theme: "dark"|"light"; fieldH: number; qGap: number; maxW: number; labelGap?: number; seniorMode?: boolean }
     auth: { enabled: boolean; loginUrl: string; errText: string }
     integrations?: { googleSheets?: { enabled: boolean; mode: "existing"|"new"; accountEmail: string; sheetUrl: string; sheetName: string; webhookUrl: string; lastSyncStatus?: "idle"|"sent"|"error"; lastSyncAt?: string; lastSyncMessage?: string } }
     dashboard?: { isPublished?: boolean; publishedAt?: string; operationStart?: string; operationEnd?: string; alwaysOpen?: boolean }
@@ -208,7 +208,11 @@ function normalizeRuntimeConfig(config: Cfg): Cfg {
 // ─── Color tokens ─────────────────────────────────────────────────────────
 const DARK = { bg: "#13151C", fieldBg: "#1E2230", fieldBorder: "#2C3148", t1: "#F0F3FF", t2: "#8B91A8", t3: "#555E7A", red: "#FF4747" }
 const LIGHT = { bg: "#FFFFFF", fieldBg: "#F7F8FA", fieldBorder: "#E2E5EA", t1: "#1A1D27", t2: "#4A5068", t3: "#9EA8C0", red: "#FF4747" }
+const SENIOR = { bg: "#FFFFFF", fieldBg: "#FFFFFF", fieldBorder: "#9CA3AF", t1: "#111111", t2: "#18181B", t3: "#3F3F46", red: "#C81E1E" }
 const FONT = "'Pretendard Variable','Pretendard','Noto Sans KR',-apple-system,sans-serif"
+const seniorFontSize = (enabled: boolean, size: number) => enabled ? Math.round(size * 1.22 * 10) / 10 : size
+const seniorFieldHeight = (enabled: boolean, height: number) => enabled ? Math.max(52, Math.round(height * 1.18)) : height
+const seniorGap = (enabled: boolean, gap: number) => enabled ? Math.round(gap * 1.12) : gap
 const FILE_MAX_COUNT = 5
 const FILE_MAX_SIZE_MB = 10
 const FILE_MAX_SIZE = FILE_MAX_SIZE_MB * 1024 * 1024
@@ -335,7 +339,9 @@ function renderAdSlot(field: any, FC: typeof DARK, accentBg: string, radius: str
     const mode = field.adMode === "split" ? "split" : "image"
     const href = normalizeAdHref(field.adHref)
     const bg = field.adBg || accentBg + "14"
-    const textColor = field.adTextColor || FC.t1
+    const isSenior = FC.t1 === SENIOR.t1 && FC.fieldBorder === SENIOR.fieldBorder
+    const adFs = (size: number) => seniorFontSize(isSenior, size)
+    const textColor = isSenior ? SENIOR.t1 : field.adTextColor || FC.t1
     const hasElementImage = !!field.adElementImageUrl
     const compactHeight = 60
     const imageField = { ...field, imageFit: field.imageFit || "cover" }
@@ -343,15 +349,15 @@ function renderAdSlot(field: any, FC: typeof DARK, accentBg: string, radius: str
         ? <div style={imageBoxStyle(imageField, 112, 14, FC.fieldBg)}>
             <img src={field.imageUrl} alt={field.imageCaption || "광고"} style={imageImgStyle(imageField)} />
           </div>
-        : <div style={{ height: 92, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 16px", borderRadius: 14, border: `1px solid ${FC.fieldBorder}`, background: FC.fieldBg, color: FC.t3, fontSize: 13, fontWeight: 600 }}>
+        : <div style={{ height: 92, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 16px", borderRadius: 14, border: `1px solid ${FC.fieldBorder}`, background: FC.fieldBg, color: FC.t3, fontSize: adFs(13), fontWeight: 600 }}>
             이미지 배너
           </div>
     const splitContent = <div style={{ height: compactHeight, display: "flex", alignItems: "stretch", justifyContent: "space-between", gap: hasElementImage ? 10 : 8, padding: hasElementImage ? "0 8px 0 12px" : "6px 12px", borderRadius: 14, border: "none", background: bg, color: textColor, overflow: "hidden" }}>
         <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: 0, overflow: "hidden" }}>
-            <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.1, letterSpacing: "-0.2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{field.adMainText || "광고 메인 문구"}</div>
-            <div style={{ fontSize: 10.5, fontWeight: 400, lineHeight: 1.1, opacity: 0.72, marginTop: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{field.adSubText || "광고 서브 문구"}</div>
+            <div style={{ fontSize: adFs(13), fontWeight: 600, lineHeight: 1.1, letterSpacing: isSenior ? 0 : "-0.2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{field.adMainText || "광고 메인 문구"}</div>
+            <div style={{ fontSize: adFs(10.5), fontWeight: 400, lineHeight: 1.1, opacity: isSenior ? 0.9 : 0.72, marginTop: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{field.adSubText || "광고 서브 문구"}</div>
         </div>
-        <div style={{ width: hasElementImage ? "42%" : 64, minWidth: hasElementImage ? 96 : undefined, maxWidth: hasElementImage ? 150 : undefined, alignSelf: hasElementImage ? "stretch" : "center", height: hasElementImage ? "auto" : 28, borderRadius: hasElementImage ? 0 : 9, background: hasElementImage ? "transparent" : "rgba(255,255,255,0.42)", border: hasElementImage ? "none" : "1px solid rgba(255,255,255,0.45)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, color: textColor, fontSize: 11, fontWeight: 800, textAlign: "center", padding: hasElementImage ? 0 : 4, boxSizing: "border-box" }}>
+        <div style={{ width: hasElementImage ? "42%" : 64, minWidth: hasElementImage ? 96 : undefined, maxWidth: hasElementImage ? 150 : undefined, alignSelf: hasElementImage ? "stretch" : "center", height: hasElementImage ? "auto" : 28, borderRadius: hasElementImage ? 0 : 9, background: hasElementImage ? "transparent" : "rgba(255,255,255,0.42)", border: hasElementImage ? "none" : "1px solid rgba(255,255,255,0.45)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, color: textColor, fontSize: adFs(11), fontWeight: 800, textAlign: "center", padding: hasElementImage ? 0 : 4, boxSizing: "border-box" }}>
             {field.adElementImageUrl
                 ? <img src={field.adElementImageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                 : <span style={{ lineHeight: 1.25, whiteSpace: "pre-line" }}>{field.adElementText || "요소"}</span>}
@@ -631,12 +637,15 @@ export function CatchForm(props: {
 // ─── Form Renderer ────────────────────────────────────────────────────────
 function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKey, googleSheetsWebhookUrl }: { cfg: Cfg; supa: SupabaseClient | null; formSlug?: string; formId?: string; supabaseUrl?: string; supabaseAnonKey?: string; googleSheetsWebhookUrl?: string }) {
     const isDark = cfg.styles.theme === "dark"
-    const FC = isDark ? DARK : LIGHT
+    const seniorMode = !!cfg.styles.seniorMode
+    const FC = seniorMode ? SENIOR : isDark ? DARK : LIGHT
     const accentBg = cfg.cta.bg || "#3182F6"
-    const fh = cfg.styles.fieldH || 44
-    const qg = cfg.styles.qGap || 20
-    const lg = cfg.styles.labelGap ?? 8
-    const fr = "10px"
+    const accentText = seniorMode ? SENIOR.t1 : accentBg
+    const fs = (size: number) => seniorFontSize(seniorMode, size)
+    const fh = seniorFieldHeight(seniorMode, cfg.styles.fieldH || 44)
+    const qg = seniorGap(seniorMode, cfg.styles.qGap || 20)
+    const lg = seniorGap(seniorMode, cfg.styles.labelGap ?? 8)
+    const fr = seniorMode ? "12px" : "10px"
     const isKdt = cfg.formType === "kdt" && !!cfg.kdtFields
     const formPages = isKdt
         ? Math.max(3, ...(cfg.kdtFields || []).map(f => f.page || 1))
@@ -949,8 +958,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         trackEvent("share", { metadata: { channel: "Twitter", href: url } })
     }
 
-    const shareButtonStyle: React.CSSProperties = { width: "clamp(42px, 10vw, 58px)", aspectRatio: "1 / 1", borderRadius: "50%", border: "none", background: "#F2F4F7", color: "#000", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontWeight:600, fontSize: 13, flexShrink: 0 }
-    const shareMenuButtonStyle: React.CSSProperties = { width: "100%", height: 38, border: "none", background: "transparent", color: FC.t1, display: "flex", alignItems: "center", gap: 10, padding: "0 10px", borderRadius: 10, cursor: "pointer", fontFamily: FONT, fontSize: 13, fontWeight:600, textAlign: "left" as const }
+    const shareButtonStyle: React.CSSProperties = { width: seniorMode ? "clamp(48px, 11vw, 64px)" : "clamp(42px, 10vw, 58px)", aspectRatio: "1 / 1", borderRadius: "50%", border: "none", background: "#F2F4F7", color: "#000", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontWeight:600, fontSize: fs(13), flexShrink: 0 }
+    const shareMenuButtonStyle: React.CSSProperties = { width: "100%", height: seniorMode ? 44 : 38, border: "none", background: "transparent", color: FC.t1, display: "flex", alignItems: "center", gap: 10, padding: "0 10px", borderRadius: 10, cursor: "pointer", fontFamily: FONT, fontSize: fs(13), fontWeight:600, textAlign: "left" as const }
     const ShareIcon = ({type,size=18}:{type:"kakao"|"instagram"|"threads"|"x"|"link";size?:number}) => {
         if(type==="kakao")return <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
             <path d="M24 9C13.5 9 5.5 15.2 5.5 23c0 5 3.5 9.4 8.8 11.9l-1.7 7 7.6-4.4c1.2.2 2.5.3 3.8.3 10.5 0 18.5-6.2 18.5-14.8S34.5 9 24 9z" fill="currentColor"/>
@@ -1211,7 +1220,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
     const inp: React.CSSProperties = {
         width: "100%", height: fh, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`,
-        borderRadius: fr, color: FC.t1, fontFamily: FONT, fontSize: 13,
+        borderRadius: fr, color: FC.t1, fontFamily: FONT, fontSize: fs(13),
         padding: "0 13px", outline: "none", boxSizing: "border-box", transition: "border .15s"
     }
 
@@ -1670,8 +1679,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         const f = field as FormField
         if ((f.type as any) === "section_desc") {
             return <div key={f.id} style={{ padding: "14px 16px", borderRadius: fr, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`, marginBottom: qg }}>
-                <div style={{ fontSize: 14, fontWeight:600, color: FC.t1, marginBottom: (f as any).desc ? 6 : 0 }}>{f.label}</div>
-                {(f as any).desc && <div style={{ fontSize: 12.5, color: FC.t3, lineHeight: 1.7, whiteSpace: "pre-line" }}>{(f as any).desc}</div>}
+                <div style={{ fontSize: fs(14), fontWeight:600, color: FC.t1, marginBottom: (f as any).desc ? 6 : 0 }}>{f.label}</div>
+                {(f as any).desc && <div style={{ fontSize: fs(12.5), color: FC.t3, lineHeight: 1.7, whiteSpace: "pre-line" }}>{(f as any).desc}</div>}
             </div>
         }
         if (f.type === "ad") {
@@ -1689,15 +1698,15 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         const cols = f.cols || 1
 
         return <div key={f.id} style={{ marginBottom: qg }}>
-            {f.type !== "info" && <div style={{ fontSize: 13.5, fontWeight: 600, color: FC.t1, marginBottom: lg, lineHeight: 1.3, whiteSpace: "pre-line" }}>
-                {f.label}{f.required && <span style={{ color: accentBg, marginLeft: 3 }}>*</span>}
+            {f.type !== "info" && <div style={{ fontSize: fs(13.5), fontWeight: 600, color: FC.t1, marginBottom: lg, lineHeight: 1.35, whiteSpace: "pre-line" }}>
+                {f.label}{f.required && <span style={{ color: accentText, marginLeft: 3 }}>*</span>}
             </div>}
             {helpers.map((h, hi) => h.callout
                 ? <div key={hi} style={{ display: "flex", gap: 8, padding: "9px 12px", borderRadius: fr, background: accentBg + "0d", border: `1px solid ${accentBg}33`, marginBottom: 6 }}>
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, marginTop: 1 }}><circle cx="8" cy="8" r="6" stroke={accentBg} strokeWidth="1.4" /><path d="M8 7v4M8 5.5v.5" stroke={accentBg} strokeWidth="1.4" strokeLinecap="round" /></svg>
-                    <div style={{ fontSize: 12, color: accentBg, lineHeight: 1.6, fontWeight: 500 }} dangerouslySetInnerHTML={{ __html: mdToHtml(h.text) }} />
+                    <div style={{ fontSize: fs(12), color: accentText, lineHeight: 1.6, fontWeight: 500 }} dangerouslySetInnerHTML={{ __html: mdToHtml(h.text) }} />
                 </div>
-                : <div key={hi} style={{ fontSize: 12, color: FC.t3, marginBottom: 4, lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: mdToHtml(h.text) }} />
+                : <div key={hi} style={{ fontSize: fs(12), color: FC.t3, marginBottom: 4, lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: mdToHtml(h.text) }} />
             )}
 
             {/* Text */}
@@ -1714,7 +1723,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
             {/* Textarea */}
             {f.type === "textarea" && <textarea value={val} onChange={e => { setVal(f.id, e.target.value); clearErr(f.id) }} placeholder={f.placeholder || ""}
-                style={{ width: "100%", minHeight: 90, background: FC.fieldBg, border: `1px solid ${fieldErr ? FC.red : FC.fieldBorder}`, borderRadius: fr, color: FC.t1, fontFamily: FONT, fontSize: 13, padding: "10px 13px", outline: "none", resize: "vertical", boxSizing: "border-box", lineHeight: 1.6, transition: "border .15s" }}
+                style={{ width: "100%", minHeight: seniorMode ? 112 : 90, background: FC.fieldBg, border: `1px solid ${fieldErr ? FC.red : FC.fieldBorder}`, borderRadius: fr, color: FC.t1, fontFamily: FONT, fontSize: fs(13), padding: "10px 13px", outline: "none", resize: "vertical", boxSizing: "border-box", lineHeight: 1.65, transition: "border .15s" }}
                 onFocus={e => { trackFieldTouch(f); e.target.style.borderColor = accentBg }} onBlur={e => e.target.style.borderColor = fieldErr ? FC.red : FC.fieldBorder} />}
 
             {/* Info */}
@@ -1722,8 +1731,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 {(f as any).imageUrl && <div style={imageBoxStyle(f, 260, 0, FC.fieldBg)}>
                     <img src={(f as any).imageUrl} alt={(f as any).imageCaption || ""} style={imageImgStyle(f)} />
                 </div>}
-                {(f.placeholder || !(f as any).imageUrl) && <div style={{ padding: (f as any).imageUrl ? "10px 14px" : "0", fontSize: 13, color: FC.t1, opacity: 0.75, lineHeight: 1.7, fontFamily: FONT }} dangerouslySetInnerHTML={{ __html: mdToHtml(f.placeholder || "") }} />}
-                {(f as any).imageCaption && (f as any).imageUrl && <div style={{ fontSize: 11.5, color: FC.t3, padding: "0 14px 10px", fontFamily: FONT }}>{(f as any).imageCaption}</div>}
+                {(f.placeholder || !(f as any).imageUrl) && <div style={{ padding: (f as any).imageUrl ? "10px 14px" : "0", fontSize: fs(13), color: FC.t1, opacity: seniorMode ? 1 : 0.75, lineHeight: 1.7, fontFamily: FONT }} dangerouslySetInnerHTML={{ __html: mdToHtml(f.placeholder || "") }} />}
+                {(f as any).imageCaption && (f as any).imageUrl && <div style={{ fontSize: fs(11.5), color: FC.t3, padding: "0 14px 10px", fontFamily: FONT }}>{(f as any).imageCaption}</div>}
             </div>}
 
             {/* Date */}
@@ -1781,7 +1790,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     }
                     return (
                     <div>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: FC.t3, textAlign: "center", marginBottom: 6, fontFamily: FONT }}>{label}</div>
+                        <div style={{ fontSize: fs(11), fontWeight: 600, color: FC.t3, textAlign: "center", marginBottom: 6, fontFamily: FONT }}>{label}</div>
                         <div style={{ position: "relative", height: WHEEL_ITEM_HEIGHT * WHEEL_VISIBLE_ITEMS, borderRadius: 18, border: `1px solid ${FC.fieldBorder}`, background: FC.fieldBg, boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.02)", overflow: "hidden" }}>
                             <div style={{ position: "absolute", left: 7, right: 7, top: WHEEL_SPACER_HEIGHT, height: WHEEL_ITEM_HEIGHT, borderTop: `1px solid ${FC.fieldBorder}`, borderBottom: `1px solid ${FC.fieldBorder}`, borderRadius: 10, background: accentBg + "12", pointerEvents: "none", zIndex: 1 }} />
                             <div className="cf-date-wheel-list" ref={node => { if (node && node.dataset.syncKey !== syncKey && node.dataset.userScrolling !== "1") { node.dataset.syncKey = syncKey; node.scrollTop = activeIndex * WHEEL_ITEM_HEIGHT } }}
@@ -1799,7 +1808,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                                     const isActive = value === activeValue
                                     const distance = Math.abs(idx - activeIndex)
                                     return <button key={value} onClick={() => onSelect(value)}
-                                        style={{ width: "100%", height: WHEEL_ITEM_HEIGHT, scrollSnapAlign: "center", border: "none", background: "transparent", color: isActive ? FC.t1 : distance === 1 ? FC.t2 : FC.t3, fontFamily: FONT, fontSize: isActive ? 18 : distance === 1 ? 15 : 12.5, fontWeight: isActive ? 700 : 500, cursor: "pointer", transition: "all .12s ease" }}>
+                                        style={{ width: "100%", height: WHEEL_ITEM_HEIGHT, scrollSnapAlign: "center", border: "none", background: "transparent", color: isActive ? FC.t1 : distance === 1 ? FC.t2 : FC.t3, fontFamily: FONT, fontSize: isActive ? fs(18) : distance === 1 ? fs(15) : fs(12.5), fontWeight: isActive ? 700 : 500, cursor: "pointer", transition: "all .12s ease" }}>
                                         {format(value)}
                                     </button>
                                 })}
@@ -1811,7 +1820,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 }
                 return <div style={{ position: "relative", display: "inline-block" }}>
                     <div onClick={openPicker} style={{ height: fh, display: "inline-flex", alignItems: "center", gap: 10, padding: "0 14px", borderRadius: fr, border: `1px solid ${open ? accentBg : fieldErr ? FC.red : FC.fieldBorder}`, background: FC.fieldBg, cursor: "pointer", userSelect: "none", transition: "border .15s" }}>
-                        <span style={{ fontSize: 13, color: displayVal ? FC.t1 : FC.t3, fontFamily: FONT }}>{displayVal || "날짜를 선택해주세요"}</span>
+                        <span style={{ fontSize: fs(13), color: displayVal ? FC.t1 : FC.t3, fontFamily: FONT }}>{displayVal || "날짜를 선택해주세요"}</span>
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ color: FC.t3, flexShrink: 0 }}><rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.4" /><path d="M5 2v2M11 2v2M2 7h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
                     </div>
                     {open && <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 200, background: FC.bg || "#fff", border: `1px solid ${FC.fieldBorder}`, borderRadius: 20, padding: 14, boxShadow: "0 12px 36px rgba(0,0,0,0.18)", width: 342 }}>
@@ -1823,9 +1832,9 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                         </div>
                         <div style={{ marginTop: 12, borderTop: `1px solid ${FC.fieldBorder}`, paddingTop: 11, display: "flex", justifyContent: "center", gap: 8 }}>
                             <button onClick={() => setDraftDate(today.getFullYear(), today.getMonth(), today.getDate())}
-                                style={{ padding: "5px 14px", borderRadius: 8, border: `1px solid ${FC.fieldBorder}`, background: "transparent", color: FC.t3, fontFamily: FONT, fontSize: 12.5, cursor: "pointer" }}>오늘</button>
+                                style={{ padding: "5px 14px", borderRadius: 8, border: `1px solid ${FC.fieldBorder}`, background: "transparent", color: FC.t3, fontFamily: FONT, fontSize: fs(12.5), cursor: "pointer" }}>오늘</button>
                             <button onClick={() => applyDate(dy, dm, selectedDay)}
-                                style={{ padding: "5px 20px", borderRadius: 8, border: `1px solid ${accentBg}`, background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>확인</button>
+                                style={{ padding: "5px 20px", borderRadius: 8, border: `1px solid ${accentBg}`, background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: fs(12.5), fontWeight: 600, cursor: "pointer" }}>확인</button>
                         </div>
                     </div>}
                 </div>
@@ -1839,10 +1848,10 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 const hours = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0"))
                 const mins = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"))
                 const boxS: React.CSSProperties = { position: "relative", width: 80, flexShrink: 0 }
-                const inpT: React.CSSProperties = { width: "100%", height: fh, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`, borderRadius: fr, color: FC.t1, fontFamily: FONT, fontSize: 14, padding: "0 28px 0 12px", outline: "none", cursor: "text", boxSizing: "border-box", transition: "border .15s" }
+                const inpT: React.CSSProperties = { width: "100%", height: fh, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`, borderRadius: fr, color: FC.t1, fontFamily: FONT, fontSize: fs(14), padding: "0 28px 0 12px", outline: "none", cursor: "text", boxSizing: "border-box", transition: "border .15s" }
                 return <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <div style={{ display: "flex", borderRadius: fr, border: `1px solid ${FC.fieldBorder}`, overflow: "hidden", flexShrink: 0 }}>
-                        {["오전", "오후"].map(v => <button key={v} onClick={() => setVal(f.id + "_ampm", v)} style={{ height: fh, padding: "0 12px", border: "none", background: ampm === v ? accentBg : FC.fieldBg, color: ampm === v ? "#fff" : FC.t2, fontFamily: FONT, fontSize: 13, fontWeight: ampm === v ? 600 : 400, cursor: "pointer" }}>{v}</button>)}
+                        {["오전", "오후"].map(v => <button key={v} onClick={() => setVal(f.id + "_ampm", v)} style={{ height: fh, padding: "0 12px", border: "none", background: ampm === v ? accentBg : FC.fieldBg, color: ampm === v ? "#fff" : FC.t2, fontFamily: FONT, fontSize: fs(13), fontWeight: ampm === v ? 600 : 400, cursor: "pointer" }}>{v}</button>)}
                     </div>
                     <div style={boxS}>
                         <input value={hh} onChange={e => { const v = e.target.value.replace(/\D/g, ""); if (v === "" || Number(v) <= 12) setVal(f.id + "_h", v) }} onBlur={e => { if (hh && Number(hh) >= 1) setVal(f.id + "_h", String(Number(hh)).padStart(2, "0")) }} placeholder="시" maxLength={2} style={inpT} inputMode="numeric" />
@@ -1851,7 +1860,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                             <option value="">시</option>{hours.map(h => <option key={h} value={h}>{h}</option>)}
                         </select>
                     </div>
-                    <span style={{ color: FC.t3, fontWeight:600, fontSize: 16, flexShrink: 0 }}>:</span>
+                    <span style={{ color: FC.t3, fontWeight:600, fontSize: fs(16), flexShrink: 0 }}>:</span>
                     <div style={boxS}>
                         <input value={mm} onChange={e => { const v = e.target.value.replace(/\D/g, ""); if (v === "" || Number(v) <= 59) setVal(f.id + "_m", v) }} onBlur={e => { if (mm !== "") setVal(f.id + "_m", String(Number(mm)).padStart(2, "0")) }} placeholder="분" maxLength={2} style={inpT} inputMode="numeric" />
                         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: FC.t3 }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -1869,8 +1878,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 const sel = ddOpts.find(o => o.value === val)
                 return <div style={{ position: "relative" }}>
                     <div onClick={() => { trackFieldTouch(f); setDropOpen(p => ({ ...p, [f.id]: !p[f.id] })) }} style={{ ...inp, height: fh, display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", border: `1px solid ${open ? accentBg : fieldErr ? FC.red : FC.fieldBorder}` }}>
-                        <span style={{ fontSize: 13, color: sel ? FC.t1 : FC.t3, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sel?.label || f.placeholder || "선택해주세요."}</span>
-                        <span style={{ fontSize: 11, color: FC.t3, flexShrink: 0 }}>{open ? "▴" : "▾"}</span>
+                        <span style={{ fontSize: fs(13), color: sel ? FC.t1 : FC.t3, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sel?.label || f.placeholder || "선택해주세요."}</span>
+                        <span style={{ fontSize: fs(11), color: FC.t3, flexShrink: 0 }}>{open ? "▴" : "▾"}</span>
                     </div>
                     {open && <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: FC.bg || FC.fieldBg, border: `1px solid ${FC.fieldBorder}`, borderRadius: fr, maxHeight: 200, overflowY: "auto", zIndex: 50, boxShadow: "0 4px 16px rgba(0,0,0,0.12)" }}>
                         {ddOpts.map(opt => {
@@ -1879,7 +1888,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                                 onClick={() => { setVal(f.id, opt.value); setDropOpen(p => ({ ...p, [f.id]: false })); clearErr(f.id) }}
                                 onMouseEnter={e => { if (!s) (e.currentTarget as HTMLElement).style.background = accentBg + "0f" }}
                                 onMouseLeave={e => { if (!s) (e.currentTarget as HTMLElement).style.background = "transparent" }}
-                                style={{ padding: "9px 13px", cursor: "pointer", fontSize: 13, fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "space-between", background: s ? accentBg + "14" : "transparent", color: s ? accentBg : FC.t1, transition: "background .12s" }}>
+                                style={{ padding: "9px 13px", cursor: "pointer", fontSize: fs(13), fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "space-between", background: s ? accentBg + "14" : "transparent", color: s ? accentText : FC.t1, transition: "background .12s" }}>
                                 <span style={{ fontWeight: s ? 600 : 400 }}>{opt.label}</span>
                                 {s && <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8l4 4 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                             </div>
@@ -1903,7 +1912,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                                     if (opt.nextPage === 9999) setTimeout(() => { setShareCopied(false); setShowModal(true) }, 300)
                                     else setTimeout(() => setPage(opt.nextPage!), 300)
                                 }
-                            }} style={{ padding: "10px 8px", borderRadius: fr, border: `1px solid ${s ? accentBg : FC.fieldBorder}`, background: s ? accentBg + "14" : "transparent", color: s ? accentBg : FC.t2, fontFamily: FONT, fontSize: 13, cursor: "pointer", fontWeight: s ? 600 : 400, textAlign: "center", whiteSpace: "pre-wrap", wordBreak: "keep-all" }}>
+                            }} style={{ padding: seniorMode ? "12px 10px" : "10px 8px", borderRadius: fr, border: `1px solid ${s ? accentBg : FC.fieldBorder}`, background: s ? accentBg + "14" : "transparent", color: s ? accentText : FC.t2, fontFamily: FONT, fontSize: fs(13), cursor: "pointer", fontWeight: s ? 600 : 400, textAlign: "center", whiteSpace: "pre-wrap", wordBreak: "keep-all" }}>
                                 {opt.label}
                             </button>
                         })}
@@ -1926,7 +1935,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                                 <div style={{ width: 18, height: 18, borderRadius: 4, border: `1px solid ${isChk ? accentBg : FC.fieldBorder}`, background: isChk ? accentBg : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .15s" }}>
                                     {isChk && <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                                 </div>
-                                <span style={{ fontSize: 13, color: FC.t1, fontFamily: FONT }}>{opt.label}</span>
+                                <span style={{ fontSize: fs(13), color: FC.t1, fontFamily: FONT }}>{opt.label}</span>
                             </div>
                         })}
                     </div>
@@ -1942,11 +1951,11 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 const names = Array.isArray(rawNames) ? rawNames : rawNames ? [rawNames] : []
                 const hasFiles = names.length > 0
                 return <div>
-                    <label htmlFor={`file_${f.id}`} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, height: fh, borderRadius: fr, border: `1.5px dashed ${hasFiles ? accentBg : FC.fieldBorder}`, background: hasFiles ? accentBg + "0a" : FC.fieldBg, cursor: "pointer", fontFamily: FONT, fontSize: 13, color: hasFiles ? accentBg : FC.t3, fontWeight: 500 }}>
+                    <label htmlFor={`file_${f.id}`} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, height: fh, borderRadius: fr, border: `1.5px dashed ${hasFiles ? accentBg : FC.fieldBorder}`, background: hasFiles ? accentBg + "0a" : FC.fieldBg, cursor: "pointer", fontFamily: FONT, fontSize: fs(13), color: hasFiles ? accentText : FC.t3, fontWeight: 500 }}>
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 11V5M5.5 7.5L8 5l2.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /><path d="M3 11.5A2.5 2.5 0 0 0 5.5 14h5A2.5 2.5 0 0 0 13 11.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
                         {hasFiles ? `${names.length}개 파일 선택됨` : f.placeholder || "파일 업로드"}
                     </label>
-                    <div style={{fontSize:11.5,color:FC.t3,marginTop:6,fontFamily:FONT}}>{FILE_LIMIT_TEXT}</div>
+                    <div style={{fontSize:fs(11.5),color:FC.t3,marginTop:6,fontFamily:FONT}}>{FILE_LIMIT_TEXT}</div>
                     <input id={`file_${f.id}`} type="file" multiple style={{ display: "none" }} onChange={e => {
                         const picked = Array.from(e.target.files || [])
                         if (picked.length) {
@@ -1973,17 +1982,17 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     }} />
                     {hasFiles && <div style={{display:"flex",flexDirection:"column",gap:5,marginTop:7}}>
                         {names.map((name, fileIdx) => <div key={`${name}_${fileIdx}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", borderRadius: fr, background: accentBg + "10", border: `1px solid ${accentBg}33` }}>
-                            <span style={{ fontSize: 12, color: accentBg, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                            <span style={{ fontSize: fs(12), color: accentText, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
                             <button onClick={() => {
                                 setFileNames(p => { const cur:any = p[f.id] || []; const arr = Array.isArray(cur) ? cur : cur ? [cur] : []; return { ...p, [f.id]: arr.filter((_, i) => i !== fileIdx) } })
                                 setFileObjects(p => { const cur:any = p[f.id] || []; const arr = Array.isArray(cur) ? cur : cur ? [cur] : []; return { ...p, [f.id]: arr.filter((_, i) => i !== fileIdx) } })
-                            }} style={{ fontSize: 13, color: accentBg, border: "none", background: "none", cursor: "pointer", padding: "0 0 0 8px", flexShrink: 0, lineHeight: 1 }}>×</button>
+                            }} style={{ fontSize: fs(13), color: accentText, border: "none", background: "none", cursor: "pointer", padding: "0 0 0 8px", flexShrink: 0, lineHeight: 1 }}>×</button>
                         </div>)}
                     </div>}
                 </div>
             })()}
 
-            {fieldErr && <div style={{ fontSize: 12, color: FC.red, marginTop: 5, fontFamily: FONT }}>{fieldErr}</div>}
+            {fieldErr && <div style={{ fontSize: fs(12), color: FC.red, marginTop: 5, fontFamily: FONT }}>{fieldErr}</div>}
         </div>
     }
 
@@ -2000,25 +2009,25 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         const policyUrl = policyUrlForConsent(type, cfg.brand) || cs.policyUrl
         return <div key={idx} style={{ marginBottom: qg }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                <div style={{ fontSize: 14, fontWeight:600, color: FC.t1, display: "flex", alignItems: "center", gap: 3 }}>
-                    {cs.title}{cs.required && <span style={{ color: accentBg, fontSize: 14, fontWeight:600 }}>*</span>}
+                <div style={{ fontSize: fs(14), fontWeight:600, color: FC.t1, display: "flex", alignItems: "center", gap: 3 }}>
+                    {cs.title}{cs.required && <span style={{ color: accentText, fontSize: fs(14), fontWeight:600 }}>*</span>}
                 </div>
-                {policyUrl && <a href={policyUrl} target="_blank" rel="noopener" style={{ fontSize: 12, fontWeight:600, color: accentBg, textDecoration: "none", padding: "2px 9px", borderRadius: 5, border: `1px solid ${accentBg}44`, flexShrink: 0 }}>보기</a>}
+                {policyUrl && <a href={policyUrl} target="_blank" rel="noopener" style={{ fontSize: fs(12), fontWeight:600, color: accentText, textDecoration: "none", padding: "2px 9px", borderRadius: 5, border: `1px solid ${accentBg}44`, flexShrink: 0 }}>보기</a>}
             </div>
             <div style={{ borderTop: `1px solid ${FC.fieldBorder}`, paddingTop: 10, marginBottom: 10 }}>
-                <div style={{ fontSize: 12, color: FC.t2, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: mdToHtml(visible) }} />
-                {needsAccordion && <button onClick={() => setConsentOpen(p => { const n = [...p]; n[idx] = !n[idx]; return n })} style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4, background: "none", border: "none", cursor: "pointer", color: accentBg, fontFamily: FONT, fontSize: 11.5, fontWeight: 600, padding: 0 }}>
+                <div style={{ fontSize: fs(12), color: FC.t2, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: mdToHtml(visible) }} />
+                {needsAccordion && <button onClick={() => setConsentOpen(p => { const n = [...p]; n[idx] = !n[idx]; return n })} style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4, background: "none", border: "none", cursor: "pointer", color: accentText, fontFamily: FONT, fontSize: fs(11.5), fontWeight: 600, padding: 0 }}>
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .2s" }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     {open ? "접기" : "전체 보기"}
                 </button>}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer" }} onClick={() => setConsentOk(p => { const n = [...p]; n[idx] = !n[idx]; return n })}>
                 <div style={{ width: 16, height: 16, borderRadius: 4, border: `1px solid ${consentOk[idx] ? accentBg + "cc" : FC.fieldBorder}`, background: consentOk[idx] ? accentBg + "d9" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .15s" }}>
-                    {consentOk[idx] && <span style={{ color: "#fff", fontSize: 11, fontWeight:600 }}>✓</span>}
+                    {consentOk[idx] && <span style={{ color: "#fff", fontSize: fs(11), fontWeight:600 }}>✓</span>}
                 </div>
-                <span style={{ fontSize: 13, color: FC.t2 }}>{cs.checkLabel}</span>
+                <span style={{ fontSize: fs(13), color: FC.t2 }}>{cs.checkLabel}</span>
             </div>
-            {errors[`consent_${idx}`] && <div style={{ fontSize: 12, color: FC.red, marginTop: 5, fontFamily: FONT }}>{errors[`consent_${idx}`]}</div>}
+            {errors[`consent_${idx}`] && <div style={{ fontSize: fs(12), color: FC.red, marginTop: 5, fontFamily: FONT }}>{errors[`consent_${idx}`]}</div>}
         </div>
     })
 
@@ -2045,7 +2054,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         <div style={{ width: "100%", minHeight: "100vh", background: FC.bg, color: FC.t1, "--link-color": accentBg } as React.CSSProperties}>
             <style>{`@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css'); body,html{background:${FC.bg}!important;margin:0;}`}</style>
             <button onClick={() => setShareMenuOpen(v => !v)} title="폼 공유하기"
-                style={{ position: "fixed", right: 20, bottom: 20, zIndex: 900, height: 44, padding: "0 15px", borderRadius: 999, border: `1px solid ${accentBg}33`, background: accentBg, color: cfg.cta.color || "#fff", boxShadow: "0 10px 28px rgba(0,0,0,0.18)", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontFamily: FONT, fontSize: 13.5, fontWeight:600 }}>
+                style={{ position: "fixed", right: 20, bottom: 20, zIndex: 900, height: seniorMode ? 50 : 44, padding: "0 15px", borderRadius: 999, border: `1px solid ${accentBg}33`, background: accentBg, color: cfg.cta.color || "#fff", boxShadow: "0 10px 28px rgba(0,0,0,0.18)", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontFamily: FONT, fontSize: fs(13.5), fontWeight:600 }}>
                 <svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M8 10V2.8M5.3 5.5 8 2.8l2.7 2.7M3 7.5v4.8c0 .7.5 1.2 1.2 1.2h7.6c.7 0 1.2-.5 1.2-1.2V7.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 공유
             </button>
@@ -2063,10 +2072,10 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     <div style={{ width: 54, height: 54, borderRadius: "50%", background: `${FC.red}12`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", color: FC.red }}>
                         <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2"/><path d="M12 7v6M12 17h.01" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </div>
-                    <div style={{ fontSize: 18, fontWeight: 600, color: FC.t1, marginBottom: 8, fontFamily: FONT }}>{operationGate.title}</div>
-                    <div style={{ fontSize: 13.5, color: FC.t2, lineHeight: 1.6, marginBottom: 18, fontFamily: FONT }}>{operationGate.body}</div>
+                    <div style={{ fontSize: fs(18), fontWeight: 600, color: FC.t1, marginBottom: 8, fontFamily: FONT }}>{operationGate.title}</div>
+                    <div style={{ fontSize: fs(13.5), color: FC.t2, lineHeight: 1.6, marginBottom: 18, fontFamily: FONT }}>{operationGate.body}</div>
                     <button onClick={() => setShowOperationModal(false)}
-                        style={{ width: "100%", height: 44, borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: "pointer" }}>
+                        style={{ width: "100%", height: seniorFieldHeight(seniorMode, 44), borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: fs(14), fontWeight:600, cursor: "pointer" }}>
                         확인
                     </button>
                 </div>
@@ -2074,31 +2083,31 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             {/* Auth modal */}
             {cfg.auth?.enabled && showAuthModal && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 }}>
                 <div style={{ background: FC.bg || "#fff", borderRadius: 16, padding: "32px 28px", width: "min(360px,90%)", boxShadow: "0 8px 40px rgba(0,0,0,0.3)" }}>
-                    <div style={{ fontSize: 18, fontWeight:600, color: FC.t1, marginBottom: 6, fontFamily: FONT }}>로그인이 필요해요</div>
-                    <div style={{ fontSize: 13, color: FC.t3, marginBottom: 24, fontFamily: FONT }}>{cfg.auth.errText || "이 폼은 로그인 후 작성할 수 있어요."}</div>
+                    <div style={{ fontSize: fs(18), fontWeight:600, color: FC.t1, marginBottom: 6, fontFamily: FONT }}>로그인이 필요해요</div>
+                    <div style={{ fontSize: fs(13), color: FC.t3, marginBottom: 24, fontFamily: FONT }}>{cfg.auth.errText || "이 폼은 로그인 후 작성할 수 있어요."}</div>
                     <div style={{ marginBottom: 12 }}>
                         <input value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="이메일" type="email"
-                            style={{ width: "100%", height: 44, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`, borderRadius: fr, color: FC.t1, fontFamily: FONT, fontSize: 13, padding: "0 13px", outline: "none", boxSizing: "border-box" as const }} />
+                            style={{ width: "100%", height: fh, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`, borderRadius: fr, color: FC.t1, fontFamily: FONT, fontSize: fs(13), padding: "0 13px", outline: "none", boxSizing: "border-box" as const }} />
                     </div>
                     <div style={{ marginBottom: 16 }}>
                         <input value={authPw} onChange={e => setAuthPw(e.target.value)} placeholder="비밀번호" type="password"
                             onKeyDown={e => { if (e.key === "Enter") handleAuthLogin() }}
-                            style={{ width: "100%", height: 44, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`, borderRadius: fr, color: FC.t1, fontFamily: FONT, fontSize: 13, padding: "0 13px", outline: "none", boxSizing: "border-box" as const }} />
+                            style={{ width: "100%", height: fh, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`, borderRadius: fr, color: FC.t1, fontFamily: FONT, fontSize: fs(13), padding: "0 13px", outline: "none", boxSizing: "border-box" as const }} />
                     </div>
-                    {authErr && <div style={{ fontSize: 12, color: FC.red, marginBottom: 12, fontFamily: FONT }}>{authErr}</div>}
+                    {authErr && <div style={{ fontSize: fs(12), color: FC.red, marginBottom: 12, fontFamily: FONT }}>{authErr}</div>}
                     <button onClick={handleAuthLogin} disabled={authLoading}
-                        style={{ width: "100%", height: 48, borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: authLoading ? "not-allowed" : "pointer", opacity: authLoading ? 0.7 : 1 }}>
+                        style={{ width: "100%", height: seniorFieldHeight(seniorMode, 48), borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: fs(14), fontWeight:600, cursor: authLoading ? "not-allowed" : "pointer", opacity: authLoading ? 0.7 : 1 }}>
                         {authLoading ? "로그인 중..." : "로그인"}
                     </button>
                     {cfg.auth.loginUrl && <div style={{ marginTop: 12, textAlign: "center" as const }}>
-                        <a href={cfg.auth.loginUrl} style={{ fontSize: 12, color: FC.t3, fontFamily: FONT }}>다른 방법으로 로그인</a>
+                        <a href={cfg.auth.loginUrl} style={{ fontSize: fs(12), color: FC.t3, fontFamily: FONT }}>다른 방법으로 로그인</a>
                     </div>}
                 </div>
             </div>}
-            <div style={{ width: "100%", maxWidth: cfg.styles.maxW, margin: "0 auto", fontFamily: FONT, padding: "40px 20px 80px", boxSizing: "border-box" as const }}>
+            <div style={{ width: "100%", maxWidth: cfg.styles.maxW, margin: "0 auto", fontFamily: FONT, padding: seniorMode ? "44px 20px 88px" : "40px 20px 80px", boxSizing: "border-box" as const }}>
             {operationGate && <div style={{ marginBottom: 18, padding: "13px 14px", borderRadius: fr, background: `${FC.red}0f`, border: `1px solid ${FC.red}30`, color: FC.red, fontFamily: FONT }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>{operationGate.title}</div>
-                <div style={{ fontSize: 12.5, lineHeight: 1.55, color: FC.red }}>{operationGate.body}</div>
+                <div style={{ fontSize: fs(13.5), fontWeight: 600, marginBottom: 4 }}>{operationGate.title}</div>
+                <div style={{ fontSize: fs(12.5), lineHeight: 1.55, color: FC.red }}>{operationGate.body}</div>
             </div>}
 
             {/* Header image */}
@@ -2108,9 +2117,9 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
             {/* Header text */}
             {(cfg.header.overline || cfg.header.title) && <div style={{ marginBottom: 24, textAlign: "center" as const }}>
-                {cfg.header.overline && <div style={{ fontSize: 12, fontWeight: 600, color: accentBg, marginBottom: 6, letterSpacing: "0.5px" }}>{cfg.header.overline}</div>}
-                {cfg.header.title && <div style={{ fontSize: 22, fontWeight: 600, color: FC.t1, lineHeight: 1.3, letterSpacing: "-0.5px" }}>{cfg.header.title}</div>}
-                {(cfg.header.educationStart || cfg.header.educationEnd) && <div style={{ fontSize: 13, color: FC.t2, marginTop: 8 }}>
+                {cfg.header.overline && <div style={{ fontSize: fs(12), fontWeight: 600, color: accentText, marginBottom: 6, letterSpacing: seniorMode ? 0 : "0.5px" }}>{cfg.header.overline}</div>}
+                {cfg.header.title && <div style={{ fontSize: fs(22), fontWeight: 600, color: FC.t1, lineHeight: 1.35, letterSpacing: seniorMode ? 0 : "-0.5px" }}>{cfg.header.title}</div>}
+                {(cfg.header.educationStart || cfg.header.educationEnd) && <div style={{ fontSize: fs(13), color: FC.t2, marginTop: 8 }}>
                     {fmtDateKo(cfg.header.educationStart)}{cfg.header.educationStart && cfg.header.educationEnd && " ~ "}{fmtDateKo(cfg.header.educationEnd)}
                     {(cfg.header.tuitionFree || cfg.header.tuitionAmount) && <span style={{ margin: "0 8px", color: FC.t3 }}>|</span>}
                     {cfg.header.tuitionFree ? cfg.header.tuitionFreeText || "수강료 전액 무료" : cfg.header.tuitionAmount ? `${cfg.header.tuitionAmount}원` : ""}
@@ -2124,8 +2133,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
             {/* Notice */}
             {page === 1 && cfg.header.noticeEnabled && cfg.header.noticeText && <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
-                <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 16px", borderRadius: (cfg.header.noticeShape || "pill") === "pill" ? 999 : 10, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`, fontSize: 12.5, color: FC.t2, lineHeight: 1.5 }}>
-                    {cfg.header.noticeIconEnabled && <span style={{ width: 17, height: 17, borderRadius: "50%", border: `1px solid ${FC.fieldBorder}`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, flexShrink: 0 }}>{cfg.header.noticeIconText}</span>}
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 16px", borderRadius: (cfg.header.noticeShape || "pill") === "pill" ? 999 : 10, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`, fontSize: fs(12.5), color: FC.t2, lineHeight: 1.5 }}>
+                    {cfg.header.noticeIconEnabled && <span style={{ width: seniorMode ? 20 : 17, height: seniorMode ? 20 : 17, borderRadius: "50%", border: `1px solid ${FC.fieldBorder}`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: fs(10), flexShrink: 0 }}>{cfg.header.noticeIconText}</span>}
                     <span dangerouslySetInnerHTML={{ __html: mdToHtml(cfg.header.noticeText) }} />
                 </div>
             </div>}
@@ -2136,11 +2145,11 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     <div style={{ flex: 1, height: 3, borderRadius: 2, background: FC.fieldBorder, overflow: "hidden" }}>
                         <div style={{ height: "100%", borderRadius: 2, background: accentBg, width: `${(page / formPages) * 100}%`, transition: "width .35s" }} />
                     </div>
-                    <span style={{ fontSize: 11, color: FC.t3, flexShrink: 0 }}>{page}/{formPages}</span>
+                    <span style={{ fontSize: fs(11), color: FC.t3, flexShrink: 0 }}>{page}/{formPages}</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <div style={{ width: 4, height: 18, borderRadius: 2, background: accentBg, flexShrink: 0 }} />
-                    <span style={{ fontSize: 15, fontWeight:600, color: FC.t1, letterSpacing: "-0.2px" }}>{getPageLabel(page)}</span>
+                    <span style={{ fontSize: fs(15), fontWeight:600, color: FC.t1, letterSpacing: seniorMode ? 0 : "-0.2px" }}>{getPageLabel(page)}</span>
                 </div>
             </div>}
 
@@ -2151,22 +2160,22 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
             {showConsentsAtEnd && renderConsents()}
 
-            {dupErr && !showDupModal && <div style={{ fontSize: 13, color: FC.red, textAlign: "center", marginBottom: 12, fontFamily: FONT }}>{dupErr}</div>}
+            {dupErr && !showDupModal && <div style={{ fontSize: fs(13), color: FC.red, textAlign: "center", marginBottom: 12, fontFamily: FONT }}>{dupErr}</div>}
 
             {/* Navigation buttons */}
             <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-                {isMultiPage && page > 1 && <button onClick={() => setPage(p => p - 1)} style={{ flex: 1, height: cfg.cta.height, borderRadius: fr, border: "none", background: FC.fieldBg || "#F2F4F6", color: FC.t2, fontFamily: FONT, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>이전</button>}
+                {isMultiPage && page > 1 && <button onClick={() => setPage(p => p - 1)} style={{ flex: 1, height: seniorFieldHeight(seniorMode, cfg.cta.height), borderRadius: fr, border: "none", background: FC.fieldBg || "#F2F4F6", color: FC.t2, fontFamily: FONT, fontSize: fs(14), fontWeight: 600, cursor: "pointer" }}>이전</button>}
                 {isMultiPage && page < formPages
                     ? <button
                         disabled={!isPageComplete}
                         onClick={() => { if (formDisabled) { setShowOperationModal(true); return } persistLocalDraft(page + 1); saveRemoteDraft(false, page + 1); setPage(p => p + 1) }}
-                        style={{ flex: 2, height: cfg.cta.height, borderRadius: fr, border: "none", background: !formDisabled && isPageComplete ? accentBg : accentBg + "55", color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: !formDisabled && isPageComplete ? "pointer" : "not-allowed" }}>
+                        style={{ flex: 2, height: seniorFieldHeight(seniorMode, cfg.cta.height), borderRadius: fr, border: "none", background: !formDisabled && isPageComplete ? accentBg : accentBg + "55", color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: fs(14), fontWeight:600, cursor: !formDisabled && isPageComplete ? "pointer" : "not-allowed" }}>
                         다음
                       </button>
                     : <button
                         disabled={submitting || !isPageComplete}
                         onClick={handleSubmit}
-                        style={{ flex: 2, height: cfg.cta.height, borderRadius: fr, border: "none", background: !formDisabled && isPageComplete ? accentBg : accentBg + "55", color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: (formDisabled || submitting || !isPageComplete) ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1 }}>
+                        style={{ flex: 2, height: seniorFieldHeight(seniorMode, cfg.cta.height), borderRadius: fr, border: "none", background: !formDisabled && isPageComplete ? accentBg : accentBg + "55", color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: fs(14), fontWeight:600, cursor: (formDisabled || submitting || !isPageComplete) ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1 }}>
                         {submitting ? (cfg.cta.loadLabel || "제출 중...") : cfg.cta.label}
                       </button>}
             </div>
@@ -2177,16 +2186,16 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#FFF1F1", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </div>
-                    <div style={{ fontSize: 17, fontWeight:600, color: FC.t1, marginBottom: 10, letterSpacing: "-0.3px", fontFamily: FONT }}>중복 신청 안내</div>
-                    <div style={{ fontSize: 13.5, color: FC.t2, lineHeight: 1.6, marginBottom: 24, fontFamily: FONT, whiteSpace: "pre-line" as const }}>
+                    <div style={{ fontSize: fs(17), fontWeight:600, color: FC.t1, marginBottom: 10, letterSpacing: seniorMode ? 0 : "-0.3px", fontFamily: FONT }}>중복 신청 안내</div>
+                    <div style={{ fontSize: fs(13.5), color: FC.t2, lineHeight: 1.6, marginBottom: 24, fontFamily: FONT, whiteSpace: "pre-line" as const }}>
                         {dupErr || "이미 신청 내역이 있어요."}
                     </div>
                     <button onClick={() => window.open("https://insideout.or.kr/program", "_blank")}
-                        style={{ width: "100%", height: 48, borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: "pointer", marginBottom: 10 }}>
+                        style={{ width: "100%", height: seniorFieldHeight(seniorMode, 48), borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: fs(14), fontWeight:600, cursor: "pointer", marginBottom: 10 }}>
                         프로그램 더 보러가기
                     </button>
                     <button onClick={() => setShowDupModal(false)}
-                        style={{ width: "100%", height: 40, borderRadius: fr, border: `1px solid ${FC.fieldBorder}`, background: "transparent", color: FC.t2, fontFamily: FONT, fontSize: 13.5, cursor: "pointer" }}>
+                        style={{ width: "100%", height: seniorFieldHeight(seniorMode, 40), borderRadius: fr, border: `1px solid ${FC.fieldBorder}`, background: "transparent", color: FC.t2, fontFamily: FONT, fontSize: fs(13.5), cursor: "pointer" }}>
                         닫기
                     </button>
                 </div>
@@ -2197,8 +2206,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     <div style={{ width: 48, height: 48, borderRadius: "50%", background: accentBg + "22", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke={accentBg} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </div>
-                    <div style={{ fontSize: 18, fontWeight:600, color: FC.t1, marginBottom: 8, letterSpacing: "-0.3px" }}>{cfg.modal.title}</div>
-                    {cfg.modal.body && <div style={{ fontSize: 13.5, color: FC.t2, lineHeight: 1.6, marginBottom: 16 }}>{cfg.modal.body}</div>}
+                    <div style={{ fontSize: fs(18), fontWeight:600, color: FC.t1, marginBottom: 8, letterSpacing: seniorMode ? 0 : "-0.3px" }}>{cfg.modal.title}</div>
+                    {cfg.modal.body && <div style={{ fontSize: fs(13.5), color: FC.t2, lineHeight: 1.6, marginBottom: 16 }}>{cfg.modal.body}</div>}
                     <div style={{ display: "flex", justifyContent: "center", gap: "clamp(8px, 2.2vw, 18px)", marginBottom: 22 }}>
                         <button onClick={shareKakao} title="카카오톡 공유" style={shareButtonStyle}>
                             <ShareIcon type="kakao" size={28} />
@@ -2216,9 +2225,9 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                             <ShareIcon type="link" size={28} />
                         </button>
                     </div>
-                    {shareCopied && <div style={{fontSize:12,color:accentBg,fontWeight:600,marginTop:-10,marginBottom:12}}>URL이 복사됐어요.</div>}
+                    {shareCopied && <div style={{fontSize:fs(12),color:accentText,fontWeight:600,marginTop:-10,marginBottom:12}}>URL이 복사됐어요.</div>}
                     <button onClick={() => { if (cfg.modal.btnUrl) { if (cfg.modal.btnReplace) window.location.replace(cfg.modal.btnUrl); else window.location.href = cfg.modal.btnUrl } else setShowModal(false) }}
-                        style={{ width: "100%", height: 44, borderRadius: 8, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: "pointer" }}>
+                        style={{ width: "100%", height: seniorFieldHeight(seniorMode, 44), borderRadius: 8, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: fs(14), fontWeight:600, cursor: "pointer" }}>
                         {cfg.modal.btnLabel || "확인"}
                     </button>
                 </div>

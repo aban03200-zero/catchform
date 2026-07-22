@@ -34,7 +34,7 @@ type Cfg = {
   consents: { enabled:boolean; required:boolean; title:string; consentType?:string; body:string; checkLabel:string; policyUrl:string }[]
   cta: { label:string; loadLabel:string; height:number; bg:string; color:string }
   modal: { title:string; body:string; btnLabel:string; btnUrl:string; btnReplace:boolean }
-  styles: { theme:Theme; fieldH:number; qGap:number; maxW:number; labelGap?:number }
+  styles: { theme:Theme; fieldH:number; qGap:number; maxW:number; labelGap?:number; seniorMode?:boolean }
   auth: { enabled:boolean; loginUrl:string; errText:string }
   integrations?: { googleSheets?: { enabled:boolean; mode:"existing"|"new"; accountEmail:string; sheetUrl:string; sheetName:string; webhookUrl:string; lastSyncStatus?:"idle"|"sent"|"error"; lastSyncAt?:string; lastSyncMessage?:string }; qrLinks?:QrLink[] }
   dashboard?: DashboardMeta
@@ -68,6 +68,7 @@ const ADK: AT = {
 type FCS = { bg:string; fieldBg:string; fieldBorder:string; t1:string; t2:string; t3:string; red:string }
 const FD: FCS = { bg:"#0B0C0E", fieldBg:"rgba(255,255,255,0.04)", fieldBorder:"rgba(255,255,255,0.10)", t1:"rgba(255,255,255,0.92)", t2:"rgba(255,255,255,0.62)", t3:"rgba(255,255,255,0.32)", red:"#FF4B4B" }
 const FL: FCS = { bg:"#FFFFFF", fieldBg:"rgba(0,0,0,0.03)", fieldBorder:"rgba(0,0,0,0.12)", t1:"rgba(0,0,0,0.88)", t2:"rgba(0,0,0,0.55)", t3:"rgba(0,0,0,0.32)", red:"#FF4B4B" }
+const FS: FCS = { bg:"#FFFFFF", fieldBg:"#FFFFFF", fieldBorder:"#9CA3AF", t1:"#111111", t2:"#18181B", t3:"#3F3F46", red:"#C81E1E" }
 // Pretendard 폰트 로드
 if(typeof document!=="undefined"&&!document.getElementById("pretendard-cdn")){
   const l=document.createElement("link");l.id="pretendard-cdn";l.rel="stylesheet";
@@ -85,6 +86,9 @@ if(typeof document!=="undefined"&&!document.getElementById("catchform-keyframes"
   document.head.appendChild(s)
 }
 const FONT = "'Pretendard Variable','Pretendard','Noto Sans KR',-apple-system,'Apple SD Gothic Neo',sans-serif"
+const seniorFontSize = (enabled:boolean, size:number) => enabled ? Math.round(size * 1.22 * 10) / 10 : size
+const seniorFieldHeight = (enabled:boolean, height:number) => enabled ? Math.max(52, Math.round(height * 1.18)) : height
+const seniorGap = (enabled:boolean, gap:number) => enabled ? Math.round(gap * 1.12) : gap
 const DASHBOARD_PAGE_SIZE = 60
 function normalizeAdminRole(role:any):AdminRole{
   const normalized=String(role||"").trim().toLowerCase()
@@ -754,7 +758,7 @@ const DEF: Cfg = {
   consents:[{enabled:true,required:true,title:"개인정보 수집 및 이용동의",body:"프로그램 오픈 알림 안내를 위해 이름, 연락처, 이메일을 수집하며 해당 목적 외에는 사용되지 않습니다.\n수집된 정보는 알림 발송 후 안전하게 파기됩니다.",checkLabel:"개인정보 수집 및 이용에 동의합니다.",policyUrl:""}],
   cta:{label:"오픈 알림 신청하기",loadLabel:"신청 중...",height:48,bg:"#E85C5C",color:"#FFFFFF"},
   modal:{title:"알림 신청이 완료되었어요!",body:"오픈 소식과 모집 안내를 가장 먼저 전달드릴게요.",btnLabel:"교육과정 더 보러가기",btnUrl:"https://insideout.or.kr/program",btnReplace:false},
-  styles:{theme:"light",fieldH:44,qGap:28,maxW:560,labelGap:12},
+  styles:{theme:"light",fieldH:44,qGap:28,maxW:560,labelGap:12,seniorMode:false},
   auth:{enabled:true,loginUrl:"/login",errText:"로그인이 필요해요."},
   integrations:{googleSheets:DEFAULT_GOOGLE_SHEETS,qrLinks:[]},
   brand:"",
@@ -856,7 +860,7 @@ const DEF_KDT: Cfg = {
   ],
   cta:{label:"교육과정 신청하기",loadLabel:"신청 중...",height:52,bg:"#529DFF",color:"#FFFFFF"},
   modal:{title:"신청이 완료되었어요!",body:"담당자가 검토 후 연락드릴게요.",btnLabel:"교육과정 더 보러가기",btnUrl:"https://insideout.or.kr/program",btnReplace:false},
-  styles:{theme:"light",fieldH:44,qGap:28,maxW:560,labelGap:12},
+  styles:{theme:"light",fieldH:44,qGap:28,maxW:560,labelGap:12,seniorMode:false},
   auth:{enabled:true,loginUrl:"/login",errText:"로그인이 필요해요."},
   brand:"",
   formType:"blank" as const,
@@ -868,7 +872,7 @@ const DEF_BLANK: Cfg = {
   consents:[{enabled:false,required:false,title:"",body:"",checkLabel:"",policyUrl:""}],
   cta:{label:"신청하기",loadLabel:"신청 중...",height:48,bg:"#3182F6",color:"#FFFFFF"},
   modal:{title:"신청이 완료되었어요!",body:"",btnLabel:"교육과정 더 보러가기",btnUrl:"https://insideout.or.kr/program",btnReplace:false},
-  styles:{theme:"light",fieldH:44,qGap:28,maxW:560,labelGap:12},
+  styles:{theme:"light",fieldH:44,qGap:28,maxW:560,labelGap:12,seniorMode:false},
   auth:{enabled:true,loginUrl:"/login",errText:"로그인이 필요해요."},
   brand:"",
   formType:"blank" as const,
@@ -888,7 +892,7 @@ const DEF_EDU_BIZ: Cfg = {
   consents:[{enabled:true,required:true,title:"개인정보 수집 및 이용동의",body:"수집 항목: 기업명, 담당자 성함·연락처·이메일\n수집 목적: 교육 사업 신청 접수 및 안내\n보유 기간: 사업 종료 후 1년",checkLabel:"개인정보 수집 및 이용에 동의합니다.",policyUrl:""}],
   cta:{label:"신청하기",loadLabel:"신청 중...",height:48,bg:"#529DFF",color:"#FFFFFF"},
   modal:{title:"신청이 완료되었어요!",body:"담당자가 검토 후 연락드릴게요.",btnLabel:"교육과정 더 보러가기",btnUrl:"https://insideout.or.kr/program",btnReplace:false},
-  styles:{theme:"light",fieldH:44,qGap:28,maxW:560,labelGap:12},
+  styles:{theme:"light",fieldH:44,qGap:28,maxW:560,labelGap:12,seniorMode:false},
   auth:{enabled:true,loginUrl:"/login",errText:"로그인이 필요해요."},
   brand:"",
   formType:"edu_biz" as const,
@@ -913,7 +917,7 @@ const DEF_COMPANY: Cfg = {
   consents:[{enabled:true,required:true,title:"개인정보 수집 및 이용동의",body:"수집 항목: 기업명, 담당자 성함·연락처·이메일\n수집 목적: 참여기업 프로그램 신청 접수 및 안내\n보유 기간: 프로그램 종료 후 1년",checkLabel:"개인정보 수집 및 이용에 동의합니다.",policyUrl:""}],
   cta:{label:"신청하기",loadLabel:"신청 중...",height:48,bg:"#529DFF",color:"#FFFFFF"},
   modal:{title:"신청이 완료되었어요!",body:"담당자가 검토 후 연락드릴게요.",btnLabel:"교육과정 더 보러가기",btnUrl:"https://insideout.or.kr/program",btnReplace:false},
-  styles:{theme:"light",fieldH:44,qGap:28,maxW:560,labelGap:12},
+  styles:{theme:"light",fieldH:44,qGap:28,maxW:560,labelGap:12,seniorMode:false},
   auth:{enabled:true,loginUrl:"/login",errText:"로그인이 필요해요."},
   brand:"",
   formType:"company" as const,
@@ -936,7 +940,7 @@ const DEF_RECRUIT: Cfg = {
   consents:[{enabled:true,required:true,title:"개인정보 수집 및 이용동의",body:"수집 항목: 성함, 연락처, 이메일\n수집 목적: 채용 전형 진행\n보유 기간: 채용 전형 종료 후 6개월",checkLabel:"개인정보 수집 및 이용에 동의합니다.",policyUrl:""}],
   cta:{label:"지원하기",loadLabel:"제출 중...",height:48,bg:"#529DFF",color:"#FFFFFF"},
   modal:{title:"지원이 완료되었어요!",body:"서류 검토 후 연락드릴게요.",btnLabel:"교육과정 더 보러가기",btnUrl:"https://insideout.or.kr/program",btnReplace:false},
-  styles:{theme:"light",fieldH:44,qGap:28,maxW:560,labelGap:12},
+  styles:{theme:"light",fieldH:44,qGap:28,maxW:560,labelGap:12,seniorMode:false},
   auth:{enabled:true,loginUrl:"/login",errText:"로그인이 필요해요."},
   brand:"",
   formType:"recruit" as const,
@@ -3346,7 +3350,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   function renderPreviewAdSlot(field:any){
     const mode=field.adMode==="split"?"split":"image"
     const bg=field.adBg||accentBg+"14"
-    const textColor=field.adTextColor||FC.t1
+    const textColor=seniorMode?FC.t1:field.adTextColor||FC.t1
     const hasElementImage=!!field.adElementImageUrl
     const compactHeight=60
     const imageField={...field,imageFit:field.imageFit||"cover"}
@@ -3356,17 +3360,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           ? <div style={{...imagePreviewBoxStyle(imageField,112),borderRadius:14,background:FC.fieldBg}}>
               <img src={field.imageUrl} alt={field.imageCaption||"광고"} style={imagePreviewImgStyle(imageField)}/>
             </div>
-          : <div style={{height:96,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 16px",fontSize:13,color:FC.t3,fontWeight:600,border:`1.5px dashed ${FC.fieldBorder}`,borderRadius:14,background:FC.fieldBg}}>
+          : <div style={{height:96,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 16px",fontSize:fs(13),color:FC.t3,fontWeight:600,border:`1.5px dashed ${FC.fieldBorder}`,borderRadius:14,background:FC.fieldBg}}>
               이미지 배너를 업로드해주세요. {AD_IMAGE_SIZE_TEXT}
             </div>}
       </div>
     }
     return <div style={{position:"relative" as const,height:compactHeight,display:"flex",alignItems:"stretch",justifyContent:"space-between",gap:hasElementImage?10:8,padding:hasElementImage?"0 8px 0 12px":"6px 12px",borderRadius:14,border:"none",background:bg,color:textColor,overflow:"hidden"}}>
       <div style={{minWidth:0,flex:1,display:"flex",flexDirection:"column" as const,justifyContent:"center",padding:0,overflow:"hidden"}}>
-        <div style={{fontSize:13,fontWeight:600,lineHeight:1.1,letterSpacing:"-0.2px",whiteSpace:"nowrap" as const,overflow:"hidden",textOverflow:"ellipsis"}}>{field.adMainText||"광고 메인 문구"}</div>
-        <div style={{fontSize:10.5,fontWeight:400,lineHeight:1.1,opacity:0.72,marginTop:5,whiteSpace:"nowrap" as const,overflow:"hidden",textOverflow:"ellipsis"}}>{field.adSubText||"광고 서브 문구"}</div>
+        <div style={{fontSize:fs(13),fontWeight:600,lineHeight:1.1,letterSpacing:seniorMode?0:"-0.2px",whiteSpace:"nowrap" as const,overflow:"hidden",textOverflow:"ellipsis"}}>{field.adMainText||"광고 메인 문구"}</div>
+        <div style={{fontSize:fs(10.5),fontWeight:400,lineHeight:1.1,opacity:seniorMode?0.9:0.72,marginTop:5,whiteSpace:"nowrap" as const,overflow:"hidden",textOverflow:"ellipsis"}}>{field.adSubText||"광고 서브 문구"}</div>
       </div>
-      <div style={{width:hasElementImage?"42%":64,minWidth:hasElementImage?96:undefined,maxWidth:hasElementImage?150:undefined,alignSelf:hasElementImage?"stretch":"center",height:hasElementImage?"auto":28,borderRadius:hasElementImage?0:9,background:hasElementImage?"transparent":"rgba(255,255,255,0.42)",border:hasElementImage?"none":"1px solid rgba(255,255,255,0.45)",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0,color:textColor,fontSize:11,fontWeight:800,textAlign:"center" as const,padding:hasElementImage?0:4,boxSizing:"border-box" as const}}>
+      <div style={{width:hasElementImage?"42%":64,minWidth:hasElementImage?96:undefined,maxWidth:hasElementImage?150:undefined,alignSelf:hasElementImage?"stretch":"center",height:hasElementImage?"auto":28,borderRadius:hasElementImage?0:9,background:hasElementImage?"transparent":"rgba(255,255,255,0.42)",border:hasElementImage?"none":"1px solid rgba(255,255,255,0.45)",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",flexShrink:0,color:textColor,fontSize:fs(11),fontWeight:800,textAlign:"center" as const,padding:hasElementImage?0:4,boxSizing:"border-box" as const}}>
         {field.adElementImageUrl
           ? <img src={field.adElementImageUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
           : <span style={{lineHeight:1.25,whiteSpace:"pre-line" as const}}>{field.adElementText||"요소"}</span>}
@@ -4169,11 +4173,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   if(view==="analytics") return renderAnalyticsPage()
   if(view!=="builder") return null  // safety guard
 
-  const FC=cfg.styles.theme==="dark"?FD:FL
+  const seniorMode=!!cfg.styles.seniorMode
+  const FC=seniorMode?FS:cfg.styles.theme==="dark"?FD:FL
   const accentBg=cfg.cta.bg||"#E85C5C"
-  const fh=cfg.styles.fieldH||44
-  const qg=cfg.styles.qGap||16
-  const fr=cfg.styles.theme==="dark"?"6px":"8px"
+  const accentText=seniorMode?FS.t1:accentBg
+  const fh=seniorFieldHeight(seniorMode,cfg.styles.fieldH||44)
+  const qg=seniorGap(seniorMode,cfg.styles.qGap||16)
+  const fr=seniorMode?"10px":cfg.styles.theme==="dark"?"6px":"8px"
+  const fs=(size:number)=>seniorFontSize(seniorMode,size)
   const previewConsentPosition:ConsentPosition=cfg.form.consentPosition==="start"?"start":"end"
   const previewPageShowsConsents=previewConsentPosition==="start"?(!isMultiPage||pvPage===1):(!isMultiPage||pvPage===formPages)
   const renderPreviewConsents=()=>cfg.consents.filter(cs=>cs.enabled).map((cs,idx)=>{
@@ -5242,7 +5249,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       </div>
 
       case "styles": return <div style={pd}>
+        <FG title="시니어 모드" A={A}>
+          <TRow label="시니어 모드 활성화" on={!!cfg.styles.seniorMode} toggle={()=>us("seniorMode",!cfg.styles.seniorMode)} A={A}/>
+          <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginTop:-2}}>
+            고령자가 더 쉽게 읽고 입력할 수 있도록 폰트와 입력 영역을 키우고, 글씨 색을 검정에 가깝게 표시합니다.
+          </div>
+        </FG>
         <FG title="폼 테마" A={A}>
+          {cfg.styles.seniorMode&&<div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginBottom:10}}>
+            시니어 모드가 켜져 있으면 실제 폼은 가독성을 위해 라이트 고대비 스타일로 표시됩니다.
+          </div>}
           <div style={{display:"flex",gap:10}}>
             {(["dark","light"] as Theme[]).map(t=>{const a=cfg.styles.theme===t;return(
               <div key={t} onClick={()=>us("theme",t)} style={{flex:1,padding:"12px 10px",borderRadius:A.r,border:`2px solid ${a?A.blue:A.border}`,cursor:"pointer",textAlign:"center" as const,transition:"border .12s"}}>
@@ -5298,9 +5314,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(isKdt) return renderKdtPreview()
     const fields:any[] = (cfg.form.fields||[]).filter((f:any)=>(f.page||1)===pvPage)
     const allFieldsForPreview = fields
-    const fh = cfg.styles.fieldH||44
-    const fr2 = cfg.styles.theme==="dark"?"6px":"8px"
-    const qg = cfg.styles.qGap||16
+    const fh = seniorFieldHeight(seniorMode,cfg.styles.fieldH||44)
+    const fr2 = seniorMode?"10px":cfg.styles.theme==="dark"?"6px":"8px"
+    const qg = seniorGap(seniorMode,cfg.styles.qGap||16)
     const validateEmail=(v:string)=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
     const validatePhone=(v:string)=>/^01[0-9]-\d{3,4}-\d{4}$/.test(v)
     const setError=(id:string,msg:string)=>setPvFieldErrors(p=>({...p,[id]:msg}))
@@ -5313,9 +5329,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <img src={cfg.header.imageUrl} alt="" style={imagePreviewImgStyle(cfg.header)}/>
         </div>}
         <div style={{textAlign:"center" as const,marginBottom:22}}>
-          {cfg.header.overline&&<div style={{fontSize:12,fontWeight:600,color:accentBg,marginBottom:8}}>{cfg.header.overline}</div>}
-          <div style={{fontSize:22,fontWeight:600,color:FC.t1,lineHeight:1.2,letterSpacing:"-0.5px",marginBottom:10}}>{cfg.header.title}</div>
-          <div style={{display:"flex",justifyContent:"center",gap:8,fontSize:12.5,color:FC.t2,flexWrap:"wrap" as const}}>
+          {cfg.header.overline&&<div style={{fontSize:fs(12),fontWeight:600,color:accentText,marginBottom:8}}>{cfg.header.overline}</div>}
+          <div style={{fontSize:fs(22),fontWeight:600,color:FC.t1,lineHeight:1.25,letterSpacing:seniorMode?0:"-0.5px",marginBottom:10}}>{cfg.header.title}</div>
+          <div style={{display:"flex",justifyContent:"center",gap:8,fontSize:fs(12.5),color:FC.t2,flexWrap:"wrap" as const}}>
             {(()=>{const s=cfg.header.educationStart,e=cfg.header.educationEnd;if(!s&&!e)return null;const days=s&&e?Math.round((new Date(e+"T00:00:00").getTime()-new Date(s+"T00:00:00").getTime())/(1000*60*60*24))+1:0;return <span>{s&&e?`${fmtDateKo(s)} ~ ${fmtDateKo(e)} · ${days<30?"총 "+days+"일":days%7>0?"총 "+Math.floor(days/7)+"주 "+days%7+"일":"총 "+Math.floor(days/7)+"주"}`:s?fmtDateKo(s):fmtDateKo(e)}</span>})()}
             {cfg.header.tuitionFree?<><span style={{opacity:.3}}>|</span><span>{cfg.header.tuitionFreeText||"수강료 전액 무료"}</span></>:cfg.header.tuitionAmount?<><span style={{opacity:.3}}>|</span><span>{cfg.header.tuitionAmount}원</span></>:null}
             {cfg.header.stipend&&<><span style={{opacity:.3}}>|</span><span>지급 수당 {cfg.header.stipend}</span></>}
@@ -5325,8 +5341,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           {renderPreviewAdSlot({...DEFAULT_FORM_AD,...cfg.ad})}
         </div>}
         {pvPage===1&&cfg.header.noticeEnabled&&<div style={{display:"flex",justifyContent:"center",marginBottom:24}}>
-          <div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"9px 16px",borderRadius:(cfg.header.noticeShape||"pill")==="pill"?999:10,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,fontSize:12.5,color:FC.t2}}>
-            {cfg.header.noticeIconEnabled&&<span style={{width:17,height:17,borderRadius:"50%",border:`1px solid ${FC.fieldBorder}`,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,flexShrink:0}}>{cfg.header.noticeIconText}</span>}
+          <div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"9px 16px",borderRadius:(cfg.header.noticeShape||"pill")==="pill"?999:10,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,fontSize:fs(12.5),color:FC.t2}}>
+            {cfg.header.noticeIconEnabled&&<span style={{width:seniorMode?20:17,height:seniorMode?20:17,borderRadius:"50%",border:`1px solid ${FC.fieldBorder}`,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:fs(10),flexShrink:0}}>{cfg.header.noticeIconText}</span>}
             <span style={{lineHeight:1.5}} dangerouslySetInnerHTML={{__html:mdToHtml(cfg.header.noticeText)}}/>
           </div>
         </div>}
@@ -5336,11 +5352,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <div style={{flex:1,height:3,borderRadius:2,background:FC.fieldBorder,overflow:"hidden"}}>
               <div style={{height:"100%",borderRadius:2,background:accentBg,width:`${(pvPage/formPages)*100}%`,transition:"width .35s cubic-bezier(.4,0,.2,1)"}}/>
             </div>
-            <span style={{fontSize:11,color:FC.t3,flexShrink:0,fontFamily:FONT}}>{pvPage}/{formPages}</span>
+            <span style={{fontSize:fs(11),color:FC.t3,flexShrink:0,fontFamily:FONT}}>{pvPage}/{formPages}</span>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <div style={{width:4,height:18,borderRadius:2,background:accentBg,flexShrink:0}}/>
-            <span style={{fontSize:15,fontWeight:600,color:FC.t1,fontFamily:FONT,letterSpacing:"-0.2px"}}>{getPageLabel(pvPage)}</span>
+            <span style={{fontSize:fs(15),fontWeight:600,color:FC.t1,fontFamily:FONT,letterSpacing:seniorMode?0:"-0.2px"}}>{getPageLabel(pvPage)}</span>
           </div>
         </div>}
         {/* Dynamic fields */}
@@ -5348,8 +5364,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           {fields.map((field:any,i:number)=>{
           // KDT section_desc
           if(field.type==="section_desc") return <div key={field.id} style={{padding:"14px 16px",borderRadius:fr2,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`}}>
-            <div style={{fontSize:14,fontWeight:600,color:FC.t1,marginBottom:field.desc?6:0}}>{field.label}</div>
-            {field.desc&&<div style={{fontSize:12.5,color:FC.t3,lineHeight:1.7,whiteSpace:"pre-line" as const}}>{field.desc}</div>}
+            <div style={{fontSize:fs(14),fontWeight:600,color:FC.t1,marginBottom:field.desc?6:0}}>{field.label}</div>
+            {field.desc&&<div style={{fontSize:fs(12.5),color:FC.t3,lineHeight:1.7,whiteSpace:"pre-line" as const}}>{field.desc}</div>}
           </div>
           const id=field.id
           const num=i+1
@@ -5359,7 +5375,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           const setDrop=(v:boolean)=>setPvDropOpen(prev=>({...prev,[id]:v}))
           const selOpt=(field.opts||[]).find((o:any)=>o.value===val)
           const accentC=accentBg
-          const inp:React.CSSProperties={width:"100%",height:fh,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,borderRadius:fr2,color:FC.t1,fontFamily:FONT,fontSize:13,padding:"0 13px",outline:"none",boxSizing:"border-box" as const,transition:"border .15s"}
+          const inp:React.CSSProperties={width:"100%",height:fh,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,borderRadius:fr2,color:FC.t1,fontFamily:FONT,fontSize:fs(13),padding:"0 13px",outline:"none",boxSizing:"border-box" as const,transition:"border .15s"}
           const isSelected=selectedFieldId===id
           const isDragOver=dragOver===i
           const FTYPES_INLINE=[
@@ -5409,8 +5425,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {/* Label row */}
             {!isDisplayOnlyFieldType(field.type)&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:cfg.styles.labelGap??8}}>
               {isSelected&&<span style={{cursor:"grab",color:FC.t3,fontSize:14,lineHeight:1,flexShrink:0,userSelect:"none" as const}}>⠿</span>}
-              <div style={{fontSize:13.5,fontWeight:600,color:FC.t1,flex:1,whiteSpace:"pre-line" as const,lineHeight:1.3}}>
-                {field.label}{field.required&&<span style={{color:accentC,marginLeft:3}}>*</span>}
+              <div style={{fontSize:fs(13.5),fontWeight:600,color:FC.t1,flex:1,whiteSpace:"pre-line" as const,lineHeight:1.35}}>
+                {field.label}{field.required&&<span style={{color:accentText,marginLeft:3}}>*</span>}
               </div>
               {isSelected&&<div style={{position:"relative" as const}}>
                 <button onClick={e=>{e.stopPropagation();setReplaceId(replaceId===id?null:id)}}
@@ -5439,9 +5455,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 h.callout
                   ?<div key={hi} style={{display:"flex",gap:8,padding:"9px 12px",borderRadius:fr2,background:accentC+"0d",border:`1px solid ${accentC}33`,marginBottom:6}}>
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><circle cx="8" cy="8" r="6" stroke={accentC} strokeWidth="1.4"/><path d="M8 7v4M8 5.5v.5" stroke={accentC} strokeWidth="1.4" strokeLinecap="round"/></svg>
-                    <div style={{fontSize:12,color:accentC,lineHeight:1.6,fontWeight:500}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>
+                    <div style={{fontSize:fs(12),color:accentText,lineHeight:1.6,fontWeight:500}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>
                   </div>
-                  :<div key={hi} style={{fontSize:12,color:FC.t3,marginBottom:4,lineHeight:1.6}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>
+                  :<div key={hi} style={{fontSize:fs(12),color:FC.t3,marginBottom:4,lineHeight:1.6}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>
               )
             })()}
             {(field.type==="text"||field.type==="name")&&
@@ -5452,13 +5468,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <input value={val} onChange={e=>{setVal(e.target.value);clearError(id)}} placeholder={field.placeholder||""} style={{...inp,borderColor:pvFieldErrors[id]?FC.red||"#FF4B4B":FC.fieldBorder}}
                 onFocus={e=>e.target.style.borderColor=pvFieldErrors[id]?FC.red||"#FF4B4B":accentC}
                 onBlur={e=>{e.target.style.borderColor=pvFieldErrors[id]?FC.red||"#FF4B4B":FC.fieldBorder;if(val&&!validateEmail(val))setError(id,"올바른 이메일 형식을 입력해주세요. (예: example@email.com)");else clearError(id)}}/>
-              {pvFieldErrors[id]&&<div style={{fontSize:11.5,color:FC.red||"#FF4B4B",marginTop:4,fontFamily:FONT}}>{pvFieldErrors[id]}</div>}
+              {pvFieldErrors[id]&&<div style={{fontSize:fs(11.5),color:FC.red||"#FF4B4B",marginTop:4,fontFamily:FONT}}>{pvFieldErrors[id]}</div>}
             </div>}
             {field.type==="phone"&&<div>
               <input value={val} onChange={e=>{const raw=e.target.value.replace(/\D/g,"").slice(0,11);const fmt=raw.length<=3?raw:raw.length<=7?`${raw.slice(0,3)}-${raw.slice(3)}`:`${raw.slice(0,3)}-${raw.slice(3,7)}-${raw.slice(7)}`;setVal(fmt);clearError(id)}} placeholder={field.placeholder||"예) 010-1234-5678"} inputMode="numeric" style={{...inp,borderColor:pvFieldErrors[id]?FC.red||"#FF4B4B":FC.fieldBorder}}
                 onFocus={e=>e.target.style.borderColor=pvFieldErrors[id]?FC.red||"#FF4B4B":accentC}
                 onBlur={e=>{e.target.style.borderColor=pvFieldErrors[id]?FC.red||"#FF4B4B":FC.fieldBorder;if(val&&!validatePhone(val))setError(id,"올바른 휴대폰 번호를 입력해주세요. (예: 010-1234-5678)");else clearError(id)}}/>
-              {pvFieldErrors[id]&&<div style={{fontSize:11.5,color:FC.red||"#FF4B4B",marginTop:4,fontFamily:FONT}}>{pvFieldErrors[id]}</div>}
+              {pvFieldErrors[id]&&<div style={{fontSize:fs(11.5),color:FC.red||"#FF4B4B",marginTop:4,fontFamily:FONT}}>{pvFieldErrors[id]}</div>}
             </div>}
             {field.type==="date"&&(()=>{
               const dpOpen=pvDropOpen[id+"_dp"]||false
@@ -5741,14 +5757,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const fields = cfg.kdtFields||[]
     const pages = Array.from({length:formPages},(_,i)=>i+1)
     const curFields = fields.filter(f=>f.page===pvPage)
-    const fh = cfg.styles.fieldH||48
-    const fr2 = cfg.styles.theme==="dark"?"6px":"8px"
+    const fh = seniorFieldHeight(seniorMode,cfg.styles.fieldH||48)
+    const fr2 = seniorMode?"10px":cfg.styles.theme==="dark"?"6px":"8px"
     return <div style={{flex:1,overflowY:"auto" as const,display:"flex",justifyContent:"center",padding:"24px 20px 56px",background:FC.bg}}>
       <div style={{width:"100%",maxWidth:cfg.styles.maxW}}>
         {/* 헤더 */}
         {cfg.header.title&&<div style={{marginBottom:24}}>
-          {cfg.header.overline&&<div style={{fontSize:12,fontWeight:600,color:accentBg,marginBottom:6}}>{cfg.header.overline}</div>}
-          <div style={{fontSize:22,fontWeight:600,color:FC.t1,letterSpacing:"-0.5px"}}>{cfg.header.title}</div>
+          {cfg.header.overline&&<div style={{fontSize:fs(12),fontWeight:600,color:accentText,marginBottom:6}}>{cfg.header.overline}</div>}
+          <div style={{fontSize:fs(22),fontWeight:600,color:FC.t1,letterSpacing:seniorMode?0:"-0.5px"}}>{cfg.header.title}</div>
         </div>}
         {cfg.ad?.enabled&&<div onClick={()=>setSec("ad")} style={{marginBottom:24,cursor:"pointer",outline:sec==="ad"?`2px solid ${accentBg}`:"none",outlineOffset:4,borderRadius:14}}>
           {renderPreviewAdSlot({...DEFAULT_FORM_AD,...cfg.ad})}
@@ -5761,7 +5777,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <span style={{width:16,height:16,borderRadius:"50%",background:active?"rgba(255,255,255,0.25)":done?accentBg+"22":"transparent",border:`1.5px solid ${active?"rgba(255,255,255,0.6)":done?accentBg+"88":FC.fieldBorder}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:600,color:active?"#fff":done?accentBg:FC.t3,flexShrink:0,transition:"all .35s"}}>
                 {done?<svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>:p}
               </span>
-              <span style={{fontSize:active?13:10.5,fontWeight:active?600:500,color:active?"#fff":done?FC.t2:FC.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,transition:"all .35s",maxWidth:active?"none":"60px"}}>
+              <span style={{fontSize:active?fs(13):fs(10.5),fontWeight:active?600:500,color:active?"#fff":done?FC.t2:FC.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,transition:"all .35s",maxWidth:active?"none":"60px"}}>
                 {getPageLabel(p)}
               </span>
             </button>
@@ -5771,8 +5787,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{display:"flex",flexDirection:"column" as const,gap:cfg.styles.qGap||20}}>
           {curFields.map((field,idx)=>{
             if(field.type==="section_desc") return <div key={field.id} style={{padding:"14px 16px",borderRadius:fr2,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`}}>
-              <div style={{fontSize:14,fontWeight:600,color:FC.t1,marginBottom:field.desc?6:0}}>{field.label}</div>
-              {field.desc&&<div style={{fontSize:12.5,color:FC.t3,lineHeight:1.7,whiteSpace:"pre-line" as const}}>{field.desc}</div>}
+              <div style={{fontSize:fs(14),fontWeight:600,color:FC.t1,marginBottom:field.desc?6:0}}>{field.label}</div>
+              {field.desc&&<div style={{fontSize:fs(12.5),color:FC.t3,lineHeight:1.7,whiteSpace:"pre-line" as const}}>{field.desc}</div>}
             </div>
             const kdtId=field.id
             const kdtIsSelected=selectedFieldId===kdtId
@@ -5787,8 +5803,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               {dragInsertAt===idx&&dragIdx!==idx&&<div style={{position:"absolute" as const,top:-(cfg.styles.qGap||20)/2-1,left:0,right:0,height:2,borderRadius:1,background:accentBg,zIndex:10,pointerEvents:"none" as const}}/>}
               {!isDisplayOnlyFieldType(field.type)&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:cfg.styles.labelGap??8}}>
                 {kdtIsSelected&&<span style={{cursor:"grab",color:FC.t3,fontSize:14,lineHeight:1,flexShrink:0,userSelect:"none" as const}}>⠿</span>}
-                <div style={{fontSize:13.5,fontWeight:600,color:FC.t1,flex:1,whiteSpace:"pre-line" as const,lineHeight:1.3}}>
-                  {field.label}{field.required&&<span style={{color:accentBg,marginLeft:3}}>*</span>}
+                <div style={{fontSize:fs(13.5),fontWeight:600,color:FC.t1,flex:1,whiteSpace:"pre-line" as const,lineHeight:1.35}}>
+                  {field.label}{field.required&&<span style={{color:accentText,marginLeft:3}}>*</span>}
                 </div>
                 {kdtIsSelected&&<div style={{position:"relative" as const}}>
                   <button onClick={e=>{e.stopPropagation();setReplaceId(replaceId===kdtId?null:kdtId)}}
@@ -5808,12 +5824,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   </div>}
                 </div>}
               </div>}
-              {(()=>{if(isDisplayOnlyFieldType(field.type))return null;const rawH:any[]=((field as any).helpers&&(field as any).helpers.length)?(field as any).helpers:((field as any).helper)?[{text:(field as any).helper,callout:false}]:[];const hs=rawH.map((h:any)=>typeof h==="string"?{text:h,callout:false}:h);return hs.filter((h:any)=>h.text&&h.text.trim()).map((h:any,hi:number)=>h.callout?<div key={hi} style={{display:"flex",gap:8,padding:"9px 12px",borderRadius:fr2,background:accentBg+"0d",border:`1px solid ${accentBg}33`,marginBottom:6}}><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><circle cx="8" cy="8" r="6" stroke={accentBg} strokeWidth="1.4"/><path d="M8 7v4M8 5.5v.5" stroke={accentBg} strokeWidth="1.4" strokeLinecap="round"/></svg><div style={{fontSize:12,color:accentBg,lineHeight:1.6,fontWeight:500}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>  </div>:<div key={hi} style={{fontSize:12,color:FC.t3,marginBottom:4,lineHeight:1.6}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>)})()}
+              {(()=>{if(isDisplayOnlyFieldType(field.type))return null;const rawH:any[]=((field as any).helpers&&(field as any).helpers.length)?(field as any).helpers:((field as any).helper)?[{text:(field as any).helper,callout:false}]:[];const hs=rawH.map((h:any)=>typeof h==="string"?{text:h,callout:false}:h);return hs.filter((h:any)=>h.text&&h.text.trim()).map((h:any,hi:number)=>h.callout?<div key={hi} style={{display:"flex",gap:8,padding:"9px 12px",borderRadius:fr2,background:accentBg+"0d",border:`1px solid ${accentBg}33`,marginBottom:6}}><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><circle cx="8" cy="8" r="6" stroke={accentBg} strokeWidth="1.4"/><path d="M8 7v4M8 5.5v.5" stroke={accentBg} strokeWidth="1.4" strokeLinecap="round"/></svg><div style={{fontSize:fs(12),color:accentText,lineHeight:1.6,fontWeight:500}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>  </div>:<div key={hi} style={{fontSize:fs(12),color:FC.t3,marginBottom:4,lineHeight:1.6}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>)})()}
               {(field.type==="text"||field.type==="name")&&<input
                 value={pvKdtVals[field.id]||""}
                 onChange={e=>setPvKdtVals(v=>({...v,[field.id]:e.target.value}))}
                 placeholder={field.placeholder||""}
-                style={{width:"100%",height:fh,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,borderRadius:fr2,color:FC.t1,fontFamily:FONT,fontSize:13,padding:"0 13px",outline:"none",boxSizing:"border-box" as const,transition:"border .15s"}}
+                style={{width:"100%",height:fh,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,borderRadius:fr2,color:FC.t1,fontFamily:FONT,fontSize:fs(13),padding:"0 13px",outline:"none",boxSizing:"border-box" as const,transition:"border .15s"}}
                 onFocus={e=>{e.target.style.borderColor=accentBg}}
                 onBlur={e=>{e.target.style.borderColor=FC.fieldBorder}}
               />}
@@ -5821,33 +5837,33 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               {field.type==="date"&&<input type="date"
                 value={pvKdtVals[field.id]||""}
                 onChange={e=>setPvKdtVals(v=>({...v,[field.id]:e.target.value}))}
-                style={{width:"100%",height:fh,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,borderRadius:fr2,color:pvKdtVals[field.id]?FC.t1:FC.t3,fontFamily:FONT,fontSize:13,padding:"0 13px",outline:"none",boxSizing:"border-box" as const,colorScheme:cfg.styles.theme==="dark"?"dark" as any:"light" as any}}
+                style={{width:"100%",height:fh,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,borderRadius:fr2,color:pvKdtVals[field.id]?FC.t1:FC.t3,fontFamily:FONT,fontSize:fs(13),padding:"0 13px",outline:"none",boxSizing:"border-box" as const,colorScheme:cfg.styles.theme==="dark"&&!seniorMode?"dark" as any:"light" as any}}
               />}
               {field.type==="textarea"&&<textarea
                 value={pvKdtVals[field.id]||""}
                 onChange={e=>setPvKdtVals(v=>({...v,[field.id]:e.target.value}))}
                 placeholder={field.placeholder||""}
-                style={{width:"100%",minHeight:90,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,borderRadius:fr2,color:FC.t1,fontFamily:FONT,fontSize:13,padding:"10px 13px",outline:"none",resize:"vertical" as const,boxSizing:"border-box" as const,lineHeight:1.6,transition:"border .15s"}}
+                style={{width:"100%",minHeight:seniorMode?112:90,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,borderRadius:fr2,color:FC.t1,fontFamily:FONT,fontSize:fs(13),padding:"10px 13px",outline:"none",resize:"vertical" as const,boxSizing:"border-box" as const,lineHeight:1.65,transition:"border .15s"}}
                 onFocus={e=>{e.target.style.borderColor=accentBg}}
                 onBlur={e=>{e.target.style.borderColor=FC.fieldBorder}}
               />}
-              {field.type==="info"&&<div style={{borderRadius:fr2,background:FC.fieldBg,fontSize:13,lineHeight:1.7,fontFamily:FONT,overflow:"hidden"}}>
+              {field.type==="info"&&<div style={{borderRadius:fr2,background:FC.fieldBg,fontSize:fs(13),lineHeight:1.7,fontFamily:FONT,overflow:"hidden"}}>
                 {(field as any).imageUrl&&<div style={{...imagePreviewBoxStyle(field,220),borderRadius:0,background:FC.fieldBg}}>
                   <img src={(field as any).imageUrl} alt={(field as any).imageCaption||""} style={imagePreviewImgStyle(field)}/>
                 </div>}
                 {((field as any).placeholder||!(field as any).imageUrl)&&<div style={{padding:"12px 14px"}} dangerouslySetInnerHTML={{__html:mdToHtml((field as any).placeholder||"")}}/>}
-                {(field as any).imageCaption&&(field as any).imageUrl&&<div style={{fontSize:11,color:FC.t3,padding:"0 14px 10px"}}>{(field as any).imageCaption}</div>}
+                {(field as any).imageCaption&&(field as any).imageUrl&&<div style={{fontSize:fs(11),color:FC.t3,padding:"0 14px 10px"}}>{(field as any).imageCaption}</div>}
               </div>}
               {field.type==="dropdown"&&<div style={{position:"relative" as const}}>
                 <div onClick={()=>setPvKdtDrops(v=>({...v,[field.id]:!v[field.id]}))}
                   style={{height:fh,background:FC.fieldBg,border:`1px solid ${pvKdtDrops[field.id]?accentBg:FC.fieldBorder}`,borderRadius:fr2,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 13px",cursor:"pointer",transition:"border .15s"}}>
-                  <span style={{fontSize:13,color:pvKdtVals[field.id]?FC.t1:FC.t3,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{pvKdtVals[field.id]||field.placeholder||"선택해주세요."}</span>
-                  <span style={{fontSize:11,color:FC.t3,flexShrink:0,marginLeft:6}}>{pvKdtDrops[field.id]?"▴":"▾"}</span>
+                  <span style={{fontSize:fs(13),color:pvKdtVals[field.id]?FC.t1:FC.t3,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{pvKdtVals[field.id]||field.placeholder||"선택해주세요."}</span>
+                  <span style={{fontSize:fs(11),color:FC.t3,flexShrink:0,marginLeft:6}}>{pvKdtDrops[field.id]?"▴":"▾"}</span>
                 </div>
                 {pvKdtDrops[field.id]&&<div style={{position:"absolute" as const,top:"100%",left:0,right:0,marginTop:4,background:FC.bg,border:`1px solid ${FC.fieldBorder}`,borderRadius:fr2,maxHeight:180,overflowY:"auto" as const,zIndex:50,boxShadow:"0 4px 16px rgba(0,0,0,0.12)"}}>
                   {(field.options||[]).map(opt=>{const sel=pvKdtVals[field.id]===opt;return(
                     <div key={opt} onClick={()=>{setPvKdtVals(v=>({...v,[field.id]:opt}));setPvKdtDrops(v=>({...v,[field.id]:false}))}}
-                      style={{padding:"9px 13px",cursor:"pointer",fontSize:13,fontFamily:FONT,display:"flex",alignItems:"center",justifyContent:"space-between",background:sel?accentBg+"14":"transparent",color:sel?accentBg:FC.t1,transition:"background .08s"}}
+                      style={{padding:"9px 13px",cursor:"pointer",fontSize:fs(13),fontFamily:FONT,display:"flex",alignItems:"center",justifyContent:"space-between",background:sel?accentBg+"14":"transparent",color:sel?accentText:FC.t1,transition:"background .08s"}}
                       onMouseEnter={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background=FC.fieldBg}}
                       onMouseLeave={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background="transparent"}}>
                       <span>{opt}</span>{sel&&<span style={{fontWeight:600}}>✓</span>}
@@ -5863,7 +5879,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 <div style={{display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:8}}>
                   {opts.map((opt:any)=>{const sel=pvKdtVals[field.id]===opt.value;return(
                     <button key={opt.value} onClick={()=>setPvKdtVals(v=>({...v,[field.id]:sel?"":opt.value}))}
-                      style={{padding:"10px 8px",borderRadius:fr2,border:`1px solid ${sel?accentBg:FC.fieldBorder}`,background:sel?accentBg+"14":"transparent",color:sel?accentBg:FC.t2,fontFamily:FONT,fontSize:13,cursor:"pointer",fontWeight:sel?600:400,transition:"all .12s",textAlign:"center" as const,whiteSpace:"pre-wrap" as const,wordBreak:"keep-all" as const}}>
+                      style={{padding:seniorMode?"12px 10px":"10px 8px",borderRadius:fr2,border:`1px solid ${sel?accentBg:FC.fieldBorder}`,background:sel?accentBg+"14":"transparent",color:sel?accentText:FC.t2,fontFamily:FONT,fontSize:fs(13),cursor:"pointer",fontWeight:sel?600:400,transition:"all .12s",textAlign:"center" as const,whiteSpace:"pre-wrap" as const,wordBreak:"keep-all" as const}}>
                       {opt.label}
                     </button>
                   )})}
@@ -5871,7 +5887,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 {selOpt?.isEtc&&<div style={{marginTop:8}}>
                   <input value={pvKdtVals[field.id+"_etc"]||""} onChange={e=>setPvKdtVals(v=>({...v,[field.id+"_etc"]:e.target.value}))}
                     placeholder={(field as any).etcPh||"직접 입력해주세요."}
-                    style={{width:"100%",height:fh,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,borderRadius:fr2,color:FC.t1,fontFamily:FONT,fontSize:13,padding:"0 13px",outline:"none",boxSizing:"border-box" as const}}
+                    style={{width:"100%",height:fh,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,borderRadius:fr2,color:FC.t1,fontFamily:FONT,fontSize:fs(13),padding:"0 13px",outline:"none",boxSizing:"border-box" as const}}
                     onFocus={e=>e.target.style.borderColor=accentBg} onBlur={e=>e.target.style.borderColor=FC.fieldBorder}/>
                 </div>}
                 </div>
@@ -5881,9 +5897,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </div>
         {/* 페이지 이동 */}
         <div style={{display:"flex",gap:10,marginTop:28}}>
-          {isMultiPage&&pvPage>1&&<button onClick={()=>setPvPage(p=>p-1)} style={{flex:1,height:fh,borderRadius:fr2,border:`1px solid ${FC.fieldBorder}`,background:"transparent",color:FC.t2,fontFamily:FONT,fontSize:14,fontWeight:600,cursor:"pointer"}}>이전</button>}
-          {pvPage<3?<button onClick={()=>setPvPage(p=>p+1)} style={{flex:1,height:fh,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color||"#fff",fontFamily:FONT,fontSize:14,fontWeight:600,cursor:"pointer"}}>다음</button>
-          :<button style={{flex:1,height:fh,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color||"#fff",fontFamily:FONT,fontSize:14,fontWeight:600,cursor:"pointer"}}>{cfg.cta.label}</button>}
+          {isMultiPage&&pvPage>1&&<button onClick={()=>setPvPage(p=>p-1)} style={{flex:1,height:fh,borderRadius:fr2,border:`1px solid ${FC.fieldBorder}`,background:"transparent",color:FC.t2,fontFamily:FONT,fontSize:fs(14),fontWeight:600,cursor:"pointer"}}>이전</button>}
+          {pvPage<3?<button onClick={()=>setPvPage(p=>p+1)} style={{flex:1,height:fh,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color||"#fff",fontFamily:FONT,fontSize:fs(14),fontWeight:600,cursor:"pointer"}}>다음</button>
+          :<button style={{flex:1,height:fh,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color||"#fff",fontFamily:FONT,fontSize:fs(14),fontWeight:600,cursor:"pointer"}}>{cfg.cta.label}</button>}
         </div>
       </div>
     </div>
