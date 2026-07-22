@@ -3068,13 +3068,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       return [event.id||`${event.session_id||""}:${event.event_type||""}:${event.created_at||""}`,normalized]
     })).values()).sort((a:any,b:any)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())
   }
+  function analyticsScopeCoversEvents(event:any,openTrashedBatchIds:Set<string>){
+    const meta=analyticsEventMeta(event)
+    return openTrashedBatchIds.has(meta.batch_id)||Number(meta.deleted_event_count||0)>0
+  }
   function splitVisibleAnalyticsEvents(rawEvents:any[]){
     const metaOf=(event:any)=>analyticsEventMeta(event)
     const closedIds=new Set(rawEvents.filter(event=>["response_restored","analytics_scope_restored","response_purged","analytics_scope_purged"].includes(event.event_type)).map(event=>metaOf(event).trash_event_id).filter(Boolean))
     const purgedDraftSessions=new Set(rawEvents.filter(event=>event.event_type==="response_purged").map(event=>metaOf(event).session_id).filter(Boolean))
     const openTrashedBatchIds=new Set(rawEvents.filter(event=>event.event_type==="response_trashed"&&!closedIds.has(event.id)).map(event=>metaOf(event).batch_id).filter(Boolean))
     const activeScope=[...rawEvents]
-      .filter(event=>event.event_type==="analytics_scope_trashed"&&!closedIds.has(event.id)&&openTrashedBatchIds.has(metaOf(event).batch_id))
+      .filter(event=>event.event_type==="analytics_scope_trashed"&&!closedIds.has(event.id)&&analyticsScopeCoversEvents(event,openTrashedBatchIds))
       .sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())[0]
     const trashedDraftSessions=new Set(rawEvents.filter(event=>event.event_type==="response_trashed"&&!closedIds.has(event.id)&&metaOf(event).trash_kind==="draft"&&!purgedDraftSessions.has(metaOf(event).session_id)).map(event=>metaOf(event).session_id).filter(Boolean))
     return rawEvents.filter(event=>!analyticsTrashTypes.includes(event.event_type))
@@ -3273,15 +3277,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }))
       const batchId=analyticsTrashSessionId("trash_batch")
       const allRows=responseGroups.flatMap(group=>group.rows.map((row:any)=>({tableName:group.tableName,row})))
-      await insertAnalyticsAdminEvents(allRows.map(({tableName,row})=>({event_type:"response_trashed",metadata:{trash_kind:"submitted",table_name:tableName,original_row:row,batch_id:batchId,deleted_at:new Date().toISOString()}})))
+      const deletedAt=new Date().toISOString()
+      const deletedEventCount=analyticsEvents.filter(event=>!analyticsTrashTypes.includes(event.event_type)).length
+      await insertAnalyticsAdminEvents(allRows.map(({tableName,row})=>({event_type:"response_trashed",metadata:{trash_kind:"submitted",table_name:tableName,original_row:row,batch_id:batchId,deleted_at:deletedAt}})))
       for(const tableName of tableNames){
         const res=await supa.from(tableName).delete().eq("form_id",loadedId)
         if(res.error)throw res.error
       }
-      await insertAnalyticsAdminEvent("analytics_scope_trashed",{trash_kind:"scope",batch_id:batchId,deleted_count:allRows.length,deleted_at:new Date().toISOString()})
+      await insertAnalyticsAdminEvent("analytics_scope_trashed",{trash_kind:"scope",batch_id:batchId,deleted_count:allRows.length,deleted_event_count:deletedEventCount,deleted_at:deletedAt})
       setShowDeleteAllAnalytics(false)
       await loadAnalytics()
-      showToast("해당 폼의 응답 데이터를 휴지통으로 이동했어요.")
+      showToast("해당 폼의 응답 데이터와 기간별 인사이트를 휴지통으로 이동했어요.")
     } catch(e){
       showToast("전체 응답 삭제 실패: "+((e as any)?.message||"오류"),false)
     } finally {
