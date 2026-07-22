@@ -2125,7 +2125,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             {/* Header text */}
             {(cfg.header.overline || cfg.header.title) && <div style={{ marginBottom: 24, textAlign: "center" as const }}>
                 {cfg.header.overline && <div style={{ fontSize: fs(12), fontWeight: 600, color: accentText, marginBottom: 6, letterSpacing: seniorMode ? 0 : "0.5px" }}>{cfg.header.overline}</div>}
-                {cfg.header.title && <div style={{ fontSize: fs(22), fontWeight: 600, color: FC.t1, lineHeight: 1.35, letterSpacing: seniorMode ? 0 : "-0.5px" }}>{cfg.header.title}</div>}
+                {cfg.header.title && <div style={{ fontSize: fs(22), fontWeight: 600, color: FC.t1, lineHeight: 1.35, letterSpacing: seniorMode ? 0 : "-0.5px", whiteSpace: "pre-line" }}>{cfg.header.title}</div>}
                 {(cfg.header.educationStart || cfg.header.educationEnd) && <div style={{ fontSize: fs(13), color: FC.t2, marginTop: 8 }}>
                     {fmtDateKo(cfg.header.educationStart)}{cfg.header.educationStart && cfg.header.educationEnd && " ~ "}{fmtDateKo(cfg.header.educationEnd)}
                     {(cfg.header.tuitionFree || cfg.header.tuitionAmount) && <span style={{ margin: "0 8px", color: FC.t3 }}>|</span>}

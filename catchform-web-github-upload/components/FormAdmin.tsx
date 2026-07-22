@@ -4334,7 +4334,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </F>
           })()}
           {cfg.header.programUnlinked&&<div style={{padding:"9px 11px",marginBottom:10,borderRadius:A.r,border:`1px solid ${A.blue}33`,background:A.blue2,color:A.blue,fontSize:12,lineHeight:1.55}}>교육과정과 연결하지 않습니다. 저장할 때 폼 운영 기간을 설정해주세요.</div>}
-          <F label="제목" A={A}><TIn value={cfg.header.title} onChange={v=>uh("title",v)} A={A}/></F>
+          <F label="제목" hint="Enter로 원하는 위치에서 줄바꿈할 수 있어요." A={A}>
+            <TArea value={cfg.header.title} onChange={v=>uh("title",v)} minH={84} A={A}/>
+          </F>
           <F label="지원 유형" A={A}>
             {cfg.formType==="alert"
               ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12.5,color:A.t3,fontFamily:FONT}}>
@@ -5354,7 +5356,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </div>}
         <div style={{textAlign:"center" as const,marginBottom:22}}>
           {cfg.header.overline&&<div style={{fontSize:fs(12),fontWeight:600,color:accentText,marginBottom:8}}>{cfg.header.overline}</div>}
-          <div style={{fontSize:fs(22),fontWeight:600,color:FC.t1,lineHeight:1.25,letterSpacing:seniorMode?0:"-0.5px",marginBottom:10}}>{cfg.header.title}</div>
+          <div style={{fontSize:fs(22),fontWeight:600,color:FC.t1,lineHeight:1.25,letterSpacing:seniorMode?0:"-0.5px",marginBottom:10,whiteSpace:"pre-line" as const}}>{cfg.header.title}</div>
           <div style={{display:"flex",justifyContent:"center",gap:8,fontSize:fs(12.5),color:FC.t2,flexWrap:"wrap" as const}}>
             {(()=>{const s=cfg.header.educationStart,e=cfg.header.educationEnd;if(!s&&!e)return null;const days=s&&e?Math.round((new Date(e+"T00:00:00").getTime()-new Date(s+"T00:00:00").getTime())/(1000*60*60*24))+1:0;return <span>{s&&e?`${fmtDateKo(s)} ~ ${fmtDateKo(e)} · ${days<30?"총 "+days+"일":days%7>0?"총 "+Math.floor(days/7)+"주 "+days%7+"일":"총 "+Math.floor(days/7)+"주"}`:s?fmtDateKo(s):fmtDateKo(e)}</span>})()}
             {cfg.header.tuitionFree?<><span style={{opacity:.3}}>|</span><span>{cfg.header.tuitionFreeText||"수강료 전액 무료"}</span></>:cfg.header.tuitionAmount?<><span style={{opacity:.3}}>|</span><span>{cfg.header.tuitionAmount}원</span></>:null}
@@ -5792,7 +5794,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         {/* 헤더 */}
         {cfg.header.title&&<div style={{marginBottom:24}}>
           {cfg.header.overline&&<div style={{fontSize:fs(12),fontWeight:600,color:accentText,marginBottom:6}}>{cfg.header.overline}</div>}
-          <div style={{fontSize:fs(22),fontWeight:600,color:FC.t1,letterSpacing:seniorMode?0:"-0.5px"}}>{cfg.header.title}</div>
+          <div style={{fontSize:fs(22),fontWeight:600,color:FC.t1,lineHeight:1.25,letterSpacing:seniorMode?0:"-0.5px",whiteSpace:"pre-line" as const}}>{cfg.header.title}</div>
         </div>}
         {cfg.ad?.enabled&&<div onClick={()=>setSec("ad")} style={{marginBottom:24,cursor:"pointer",outline:sec==="ad"?`2px solid ${accentBg}`:"none",outlineOffset:4,borderRadius:14}}>
           {renderPreviewAdSlot({...DEFAULT_FORM_AD,...cfg.ad})}
