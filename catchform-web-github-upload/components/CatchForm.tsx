@@ -1706,7 +1706,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
         return <div key={f.id} style={{ marginBottom: qg }}>
             {f.type !== "info" && <div style={{ fontSize: fs(13.5), fontWeight: 600, color: FC.t1, marginBottom: lg, lineHeight: 1.35, whiteSpace: "pre-line" }}>
-                {f.label}{f.required && <span style={{ color: accentText, marginLeft: 3 }}>*</span>}
+                {f.label}{f.required && <span style={{ color: accentBg, marginLeft: 3 }}>*</span>}
             </div>}
             {helpers.map((h, hi) => h.callout
                 ? <div key={hi} style={{ display: "flex", gap: 8, padding: "9px 12px", borderRadius: fr, background: accentBg + "0d", border: `1px solid ${accentBg}33`, marginBottom: hi === helpers.length - 1 ? helperCalloutGap : 6 }}>
@@ -2017,7 +2017,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         return <div key={idx} style={{ marginBottom: qg }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                 <div style={{ fontSize: fs(14), fontWeight:600, color: FC.t1, display: "flex", alignItems: "center", gap: 3 }}>
-                    {cs.title}{cs.required && <span style={{ color: accentText, fontSize: fs(14), fontWeight:600 }}>*</span>}
+                    {cs.title}{cs.required && <span style={{ color: accentBg, fontSize: fs(14), fontWeight:600 }}>*</span>}
                 </div>
                 {policyUrl && <a href={policyUrl} target="_blank" rel="noopener" style={{ fontSize: fs(12), fontWeight:600, color: accentText, textDecoration: "none", padding: "2px 9px", borderRadius: 5, border: `1px solid ${accentBg}44`, flexShrink: 0 }}>보기</a>}
             </div>

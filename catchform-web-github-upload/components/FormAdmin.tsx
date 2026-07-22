@@ -5454,7 +5454,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {!isDisplayOnlyFieldType(field.type)&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:cfg.styles.labelGap??8}}>
               {isSelected&&<span style={{cursor:"grab",color:FC.t3,fontSize:14,lineHeight:1,flexShrink:0,userSelect:"none" as const}}>⠿</span>}
               <div style={{fontSize:fs(13.5),fontWeight:600,color:FC.t1,flex:1,whiteSpace:"pre-line" as const,lineHeight:1.35}}>
-                {field.label}{field.required&&<span style={{color:accentText,marginLeft:3}}>*</span>}
+                {field.label}{field.required&&<span style={{color:accentBg,marginLeft:3}}>*</span>}
               </div>
               {isSelected&&<div style={{position:"relative" as const}}>
                 <button onClick={e=>{e.stopPropagation();setReplaceId(replaceId===id?null:id)}}
@@ -5832,7 +5832,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               {!isDisplayOnlyFieldType(field.type)&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:cfg.styles.labelGap??8}}>
                 {kdtIsSelected&&<span style={{cursor:"grab",color:FC.t3,fontSize:14,lineHeight:1,flexShrink:0,userSelect:"none" as const}}>⠿</span>}
                 <div style={{fontSize:fs(13.5),fontWeight:600,color:FC.t1,flex:1,whiteSpace:"pre-line" as const,lineHeight:1.35}}>
-                  {field.label}{field.required&&<span style={{color:accentText,marginLeft:3}}>*</span>}
+                  {field.label}{field.required&&<span style={{color:accentBg,marginLeft:3}}>*</span>}
                 </div>
                 {kdtIsSelected&&<div style={{position:"relative" as const}}>
                   <button onClick={e=>{e.stopPropagation();setReplaceId(replaceId===kdtId?null:kdtId)}}
