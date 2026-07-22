@@ -68,7 +68,8 @@ const ADK: AT = {
 type FCS = { bg:string; fieldBg:string; fieldBorder:string; t1:string; t2:string; t3:string; red:string }
 const FD: FCS = { bg:"#0B0C0E", fieldBg:"rgba(255,255,255,0.04)", fieldBorder:"rgba(255,255,255,0.10)", t1:"rgba(255,255,255,0.92)", t2:"rgba(255,255,255,0.62)", t3:"rgba(255,255,255,0.32)", red:"#FF4B4B" }
 const FL: FCS = { bg:"#FFFFFF", fieldBg:"rgba(0,0,0,0.03)", fieldBorder:"rgba(0,0,0,0.12)", t1:"rgba(0,0,0,0.88)", t2:"rgba(0,0,0,0.55)", t3:"rgba(0,0,0,0.32)", red:"#FF4B4B" }
-const FS: FCS = { bg:"#FFFFFF", fieldBg:"#FFFFFF", fieldBorder:"#9CA3AF", t1:"#111111", t2:"#18181B", t3:"#3F3F46", red:"#C81E1E" }
+const SENIOR_TEXT = { t1:"#111111", t2:"#18181B", t3:"#3F3F46", red:"#C81E1E" }
+const seniorFormColors = (base:FCS):FCS => ({ ...base, ...SENIOR_TEXT })
 // Pretendard 폰트 로드
 if(typeof document!=="undefined"&&!document.getElementById("pretendard-cdn")){
   const l=document.createElement("link");l.id="pretendard-cdn";l.rel="stylesheet";
@@ -4174,9 +4175,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   if(view!=="builder") return null  // safety guard
 
   const seniorMode=!!cfg.styles.seniorMode
-  const FC=seniorMode?FS:cfg.styles.theme==="dark"?FD:FL
+  const baseFC=cfg.styles.theme==="dark"?FD:FL
+  const FC=seniorMode?seniorFormColors(baseFC):baseFC
   const accentBg=cfg.cta.bg||"#E85C5C"
-  const accentText=seniorMode?FS.t1:accentBg
+  const accentText=seniorMode?SENIOR_TEXT.t1:accentBg
   const fh=seniorFieldHeight(seniorMode,cfg.styles.fieldH||44)
   const qg=seniorGap(seniorMode,cfg.styles.qGap||16)
   const fr=seniorMode?"10px":cfg.styles.theme==="dark"?"6px":"8px"
@@ -5257,7 +5259,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </FG>
         <FG title="폼 테마" A={A}>
           {cfg.styles.seniorMode&&<div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginBottom:10}}>
-            시니어 모드가 켜져 있으면 실제 폼은 가독성을 위해 라이트 고대비 스타일로 표시됩니다.
+            시니어 모드가 켜져 있어도 테마와 입력 박스 색은 유지되고, 글자색과 크기만 가독성 중심으로 바뀝니다.
           </div>}
           <div style={{display:"flex",gap:10}}>
             {(["dark","light"] as Theme[]).map(t=>{const a=cfg.styles.theme===t;return(

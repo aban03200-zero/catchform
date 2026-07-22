@@ -208,7 +208,8 @@ function normalizeRuntimeConfig(config: Cfg): Cfg {
 // ─── Color tokens ─────────────────────────────────────────────────────────
 const DARK = { bg: "#13151C", fieldBg: "#1E2230", fieldBorder: "#2C3148", t1: "#F0F3FF", t2: "#8B91A8", t3: "#555E7A", red: "#FF4747" }
 const LIGHT = { bg: "#FFFFFF", fieldBg: "#F7F8FA", fieldBorder: "#E2E5EA", t1: "#1A1D27", t2: "#4A5068", t3: "#9EA8C0", red: "#FF4747" }
-const SENIOR = { bg: "#FFFFFF", fieldBg: "#FFFFFF", fieldBorder: "#9CA3AF", t1: "#111111", t2: "#18181B", t3: "#3F3F46", red: "#C81E1E" }
+const SENIOR_TEXT = { t1: "#111111", t2: "#18181B", t3: "#3F3F46", red: "#C81E1E" }
+const seniorFormColors = (base: typeof DARK): typeof DARK => ({ ...base, ...SENIOR_TEXT })
 const FONT = "'Pretendard Variable','Pretendard','Noto Sans KR',-apple-system,sans-serif"
 const seniorFontSize = (enabled: boolean, size: number) => enabled ? Math.round(size * 1.22 * 10) / 10 : size
 const seniorFieldHeight = (enabled: boolean, height: number) => enabled ? Math.max(52, Math.round(height * 1.18)) : height
@@ -339,9 +340,9 @@ function renderAdSlot(field: any, FC: typeof DARK, accentBg: string, radius: str
     const mode = field.adMode === "split" ? "split" : "image"
     const href = normalizeAdHref(field.adHref)
     const bg = field.adBg || accentBg + "14"
-    const isSenior = FC.t1 === SENIOR.t1 && FC.fieldBorder === SENIOR.fieldBorder
+    const isSenior = FC.t1 === SENIOR_TEXT.t1
     const adFs = (size: number) => seniorFontSize(isSenior, size)
-    const textColor = isSenior ? SENIOR.t1 : field.adTextColor || FC.t1
+    const textColor = isSenior ? SENIOR_TEXT.t1 : field.adTextColor || FC.t1
     const hasElementImage = !!field.adElementImageUrl
     const compactHeight = 60
     const imageField = { ...field, imageFit: field.imageFit || "cover" }
@@ -638,9 +639,10 @@ export function CatchForm(props: {
 function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKey, googleSheetsWebhookUrl }: { cfg: Cfg; supa: SupabaseClient | null; formSlug?: string; formId?: string; supabaseUrl?: string; supabaseAnonKey?: string; googleSheetsWebhookUrl?: string }) {
     const isDark = cfg.styles.theme === "dark"
     const seniorMode = !!cfg.styles.seniorMode
-    const FC = seniorMode ? SENIOR : isDark ? DARK : LIGHT
+    const baseFC = isDark ? DARK : LIGHT
+    const FC = seniorMode ? seniorFormColors(baseFC) : baseFC
     const accentBg = cfg.cta.bg || "#3182F6"
-    const accentText = seniorMode ? SENIOR.t1 : accentBg
+    const accentText = seniorMode ? SENIOR_TEXT.t1 : accentBg
     const fs = (size: number) => seniorFontSize(seniorMode, size)
     const fh = seniorFieldHeight(seniorMode, cfg.styles.fieldH || 44)
     const qg = seniorGap(seniorMode, cfg.styles.qGap || 20)
