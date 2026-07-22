@@ -5380,6 +5380,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           const selOpt=(field.opts||[]).find((o:any)=>o.value===val)
           const accentC=accentBg
           const inp:React.CSSProperties={width:"100%",height:fh,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,borderRadius:fr2,color:FC.t1,fontFamily:FONT,fontSize:fs(13),padding:"0 13px",outline:"none",boxSizing:"border-box" as const,transition:"border .15s"}
+          const helperGap=seniorMode?10:4
+          const helperCalloutGap=seniorMode?12:6
+          const optionGridGap=seniorMode?12:8
+          const checkboxGridGap=seniorMode?14:8
           const isSelected=selectedFieldId===id
           const isDragOver=dragOver===i
           const FTYPES_INLINE=[
@@ -5457,11 +5461,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               if(isDisplayOnlyFieldType(field.type))return null
               return hs.filter(h=>h.text.trim()).map((h,hi)=>
                 h.callout
-                  ?<div key={hi} style={{display:"flex",gap:8,padding:"9px 12px",borderRadius:fr2,background:accentC+"0d",border:`1px solid ${accentC}33`,marginBottom:6}}>
+                  ?<div key={hi} style={{display:"flex",gap:8,padding:"9px 12px",borderRadius:fr2,background:accentC+"0d",border:`1px solid ${accentC}33`,marginBottom:hi===hs.filter(item=>item.text.trim()).length-1?helperCalloutGap:6}}>
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><circle cx="8" cy="8" r="6" stroke={accentC} strokeWidth="1.4"/><path d="M8 7v4M8 5.5v.5" stroke={accentC} strokeWidth="1.4" strokeLinecap="round"/></svg>
                     <div style={{fontSize:fs(12),color:accentText,lineHeight:1.6,fontWeight:500}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>
                   </div>
-                  :<div key={hi} style={{fontSize:fs(12),color:FC.t3,marginBottom:4,lineHeight:1.6}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>
+                  :<div key={hi} style={{fontSize:fs(12),color:FC.t3,marginBottom:hi===hs.filter(item=>item.text.trim()).length-1?helperGap:4,lineHeight:1.6}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>
               )
             })()}
             {(field.type==="text"||field.type==="name")&&
@@ -5697,7 +5701,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               const cols=(field as any).cols||1
               const selOpt=opts.find((o:any)=>o.value===val)
               return <div>
-              <div style={{display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:8}}>
+              <div style={{display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:optionGridGap}}>
                 {opts.map((opt:any)=>{const s=opt.value===val;return(
                   <button key={opt.value} onClick={()=>{setVal(s?"":opt.value);if(!s&&opt.nextPage){if(opt.nextPage===9999){setTimeout(()=>setPvShowModal(true),300)}else{setTimeout(()=>setPvPage(opt.nextPage),300)}}}}
                     style={{padding:"10px 8px",borderRadius:fr2,border:`1px solid ${s?accentC:FC.fieldBorder}`,background:s?accentC+"14":"transparent",color:s?accentC:FC.t2,fontFamily:FONT,fontSize:13,cursor:"pointer",fontWeight:s?600:400,transition:"all .12s",textAlign:"center" as const,whiteSpace:"pre-wrap" as const,wordBreak:"keep-all" as const}}>
@@ -5723,7 +5727,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               const checkedVals=pvFieldChecked[id]||[]
               const etcOpt=cbOpts.find((opt:any)=>opt.isEtc&&checkedVals.includes(opt.value))
               return <div>
-                <div style={{display:"grid",gridTemplateColumns:`repeat(${cbCols},1fr)`,gap:8}}>
+                <div style={{display:"grid",gridTemplateColumns:`repeat(${cbCols},1fr)`,gap:checkboxGridGap}}>
                   {cbOpts.map(opt=>{
                     const checked=checkedVals.includes(opt.value)
                     const toggle=()=>setPvFieldChecked(p=>{const cur=p[id]||[];return{...p,[id]:checked?cur.filter(v=>v!==opt.value):[...cur,opt.value]}})

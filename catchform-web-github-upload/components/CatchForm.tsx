@@ -1698,17 +1698,21 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
         const opts: Opt[] = getFieldOpts(f)
         const cols = f.cols || 1
+        const helperGap = seniorMode ? 10 : 4
+        const helperCalloutGap = seniorMode ? 12 : 6
+        const optionGridGap = seniorMode ? 12 : 8
+        const checkboxGridGap = seniorMode ? 14 : 8
 
         return <div key={f.id} style={{ marginBottom: qg }}>
             {f.type !== "info" && <div style={{ fontSize: fs(13.5), fontWeight: 600, color: FC.t1, marginBottom: lg, lineHeight: 1.35, whiteSpace: "pre-line" }}>
                 {f.label}{f.required && <span style={{ color: accentText, marginLeft: 3 }}>*</span>}
             </div>}
             {helpers.map((h, hi) => h.callout
-                ? <div key={hi} style={{ display: "flex", gap: 8, padding: "9px 12px", borderRadius: fr, background: accentBg + "0d", border: `1px solid ${accentBg}33`, marginBottom: 6 }}>
+                ? <div key={hi} style={{ display: "flex", gap: 8, padding: "9px 12px", borderRadius: fr, background: accentBg + "0d", border: `1px solid ${accentBg}33`, marginBottom: hi === helpers.length - 1 ? helperCalloutGap : 6 }}>
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, marginTop: 1 }}><circle cx="8" cy="8" r="6" stroke={accentBg} strokeWidth="1.4" /><path d="M8 7v4M8 5.5v.5" stroke={accentBg} strokeWidth="1.4" strokeLinecap="round" /></svg>
                     <div style={{ fontSize: fs(12), color: accentText, lineHeight: 1.6, fontWeight: 500 }} dangerouslySetInnerHTML={{ __html: mdToHtml(h.text) }} />
                 </div>
-                : <div key={hi} style={{ fontSize: fs(12), color: FC.t3, marginBottom: 4, lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: mdToHtml(h.text) }} />
+                : <div key={hi} style={{ fontSize: fs(12), color: FC.t3, marginBottom: hi === helpers.length - 1 ? helperGap : 4, lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: mdToHtml(h.text) }} />
             )}
 
             {/* Text */}
@@ -1903,7 +1907,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             {f.type === "button_select" && (() => {
                 const selOpt = opts.find(o => o.value === val)
                 return <div>
-                    <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: optionGridGap }}>
                         {opts.map(opt => {
                             const s = opt.value === val
                             return <button key={opt.value} onClick={() => {
@@ -1930,7 +1934,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 const checkedVals = checked[f.id] || []
                 const etcOpt = opts.find(opt => opt.isEtc && checkedVals.includes(opt.value))
                 return <div>
-                    <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: checkboxGridGap }}>
                         {opts.map(opt => {
                             const isChk = checkedVals.includes(opt.value)
                             return <div key={opt.value} onClick={() => { trackFieldTouch(f); setChecked(p => { const cur = p[f.id] || []; return { ...p, [f.id]: isChk ? cur.filter(v => v !== opt.value) : [...cur, opt.value] } }); clearErr(f.id) }} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
