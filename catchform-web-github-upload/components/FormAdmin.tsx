@@ -1150,7 +1150,7 @@ function FieldOptAdder({fieldIdx,onAdd,A}:{fieldIdx:number;onAdd:(lbl:string,val
 
 // ─── Markdown helpers ─────────────────────────────────────────────────────
 function mdToHtml(text:string):string{
-  const source=String(text||"").replace(/&quot;|&#34;/g,'"').replace(/&apos;|&#39;/g,"'")
+  const source=String(text||"").replace(/&quot;|&#34;/g,'"').replace(/&apos;|&#39;/g,"'").replace(/&#42;|&ast;/gi,"*")
   const esc=(s:string)=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
   const attr=(s:string)=>esc(s).replace(/"/g,"&quot;").replace(/'/g,"&#39;")
   const safeHref=(raw:string)=>{
@@ -1162,16 +1162,26 @@ function mdToHtml(text:string):string{
     }catch{}
     return"#"
   }
+  const tokens:string[]=[]
+  const tokenFor=(html:string)=>{
+    const token=`\uE000${tokens.length}\uE000`
+    tokens.push(html)
+    return token
+  }
+  const richText=(body:string)=>esc(body).replace(/\n/g,"<br>")
+  const sourceWithRich=source
+    .replace(/\*\*__([\s\S]+?)__\*\*/g,(_match,body)=>tokenFor(`<strong style="font-weight:600"><span style="text-decoration:underline">${richText(body)}</span></strong>`))
+    .replace(/__\*\*([\s\S]+?)\*\*__/g,(_match,body)=>tokenFor(`<strong style="font-weight:600"><span style="text-decoration:underline">${richText(body)}</span></strong>`))
+    .replace(/\*\*([\s\S]+?)\*\*/g,(_match,body)=>tokenFor(`<strong style="font-weight:600">${richText(body)}</strong>`))
+    .replace(/__([\s\S]+?)__/g,(_match,body)=>tokenFor(`<span style="text-decoration:underline">${richText(body)}</span>`))
+  const restoreTokens=(html:string)=>html.replace(/\uE000(\d+)\uE000/g,(_match,idx)=>tokens[Number(idx)]||"")
   const fmt=(s:string)=>{
     const e=esc(s)
-    return e
-      .replace(/\*\*__([^]*?)__\*\*/g,'<strong style="font-weight:600"><span style="text-decoration:underline">$1</span></strong>')
-      .replace(/__\*\*([^]*?)\*\*__/g,'<strong style="font-weight:600"><span style="text-decoration:underline">$1</span></strong>')
-      .replace(/\*\*([^]*?)\*\*/g,'<strong style="font-weight:600">$1</strong>')
-      .replace(/__([^]*?)__/g,'<span style="text-decoration:underline">$1</span>')
+    return restoreTokens(e
       .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,(_match,label,href)=>`<a href="${safeHref(href)}" style="color:var(--link-color,#3182F6);text-decoration:underline" target="_blank" rel="noopener noreferrer">${label}</a>`)
+    )
   }
-  const lines=source.split("\n")
+  const lines=sourceWithRich.split("\n")
   let html=""
   let inList=false
   for(let i=0;i<lines.length;i++){
@@ -1199,7 +1209,7 @@ function htmlToMd(html:string):string{
     .replace(/<u>([\s\S]*?)<\/u>/gi,"__$1__")
     .replace(/<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi,"[$2]($1)")
     .replace(/<hr[^>]*>/gi,"\n---\n")
-    .replace(/<li>([\s\S]*?)<\/li>/gi,"- $1\n")
+    .replace(/<li[^>]*>([\s\S]*?)<\/li>/gi,"- $1\n")
     .replace(/<\/?ul[^>]*>/gi,"")
     .replace(/<\/?ol[^>]*>/gi,"")
     .replace(/<br\s*\/?>/gi,"\n")
