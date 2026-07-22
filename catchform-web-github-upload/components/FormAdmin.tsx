@@ -1148,6 +1148,7 @@ function FieldOptAdder({fieldIdx,onAdd,A}:{fieldIdx:number;onAdd:(lbl:string,val
 
 // ─── Markdown helpers ─────────────────────────────────────────────────────
 function mdToHtml(text:string):string{
+  const source=String(text||"").replace(/&quot;|&#34;/g,'"').replace(/&apos;|&#39;/g,"'")
   const esc=(s:string)=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
   const attr=(s:string)=>esc(s).replace(/"/g,"&quot;").replace(/'/g,"&#39;")
   const safeHref=(raw:string)=>{
@@ -1168,7 +1169,7 @@ function mdToHtml(text:string):string{
       .replace(/__([^]*?)__/g,'<span style="text-decoration:underline">$1</span>')
       .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,(_match,label,href)=>`<a href="${safeHref(href)}" style="color:var(--link-color,#3182F6);text-decoration:underline" target="_blank" rel="noopener noreferrer">${label}</a>`)
   }
-  const lines=text.split("\n")
+  const lines=source.split("\n")
   let html=""
   let inList=false
   for(let i=0;i<lines.length;i++){
@@ -1190,7 +1191,8 @@ function mdToHtml(text:string):string{
 function htmlToMd(html:string):string{
   return html
     .replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi,"**$1**")
-    .replace(/<b>([\s\S]*?)<\/b>/gi,"**$1**")
+    .replace(/<b[^>]*>([\s\S]*?)<\/b>/gi,"**$1**")
+    .replace(/<span[^>]*font-weight\s*:\s*(?:bold|[5-9]00)[^>]*>([\s\S]*?)<\/span>/gi,"**$1**")
     .replace(/<span[^>]*text-decoration:underline[^>]*>([\s\S]*?)<\/span>/gi,"__$1__")
     .replace(/<u>([\s\S]*?)<\/u>/gi,"__$1__")
     .replace(/<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi,"[$2]($1)")
@@ -1206,6 +1208,7 @@ function htmlToMd(html:string):string{
     .replace(/<[^>]+>/g,"")
     .replace(/&nbsp;/g," ")
     .replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
+    .replace(/&quot;|&#34;/g,'"').replace(/&apos;|&#39;/g,"'")
     .replace(/\n{3,}/g,"\n\n")
     .trimEnd()
 }
@@ -1280,6 +1283,23 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
 
   const applyFormat=(cmd:"bold"|"underline")=>{
     const el=edRef.current;if(!el)return
+    const sel=window.getSelection()
+    const range=sel&&sel.rangeCount>0?sel.getRangeAt(0):null
+    if(range&&!range.collapsed&&el.contains(range.commonAncestorContainer)){
+      const wrapper=cmd==="bold"?document.createElement("strong"):document.createElement("span")
+      if(cmd==="bold")wrapper.style.fontWeight="600"
+      else wrapper.style.textDecoration="underline"
+      wrapper.appendChild(range.extractContents())
+      range.insertNode(wrapper)
+      const nextRange=document.createRange()
+      nextRange.setStartAfter(wrapper)
+      nextRange.collapse(true)
+      sel.removeAllRanges()
+      sel.addRange(nextRange)
+      setIsFocused(true)
+      onChange(htmlToMd(el.innerHTML))
+      return
+    }
     el.focus()
     document.execCommand(cmd,false)
     onChange(htmlToMd(el.innerHTML))
