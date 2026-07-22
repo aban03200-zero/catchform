@@ -211,9 +211,9 @@ const LIGHT = { bg: "#FFFFFF", fieldBg: "#F7F8FA", fieldBorder: "#E2E5EA", t1: "
 const SENIOR_TEXT = { t1: "#111111", t2: "#18181B", t3: "#3F3F46", red: "#C81E1E" }
 const seniorFormColors = (base: typeof DARK): typeof DARK => ({ ...base, ...SENIOR_TEXT })
 const FONT = "'Pretendard Variable','Pretendard','Noto Sans KR',-apple-system,sans-serif"
-const seniorFontSize = (enabled: boolean, size: number) => enabled ? Math.round(size * 1.22 * 10) / 10 : size
-const seniorFieldHeight = (enabled: boolean, height: number) => enabled ? Math.max(52, Math.round(height * 1.18)) : height
-const seniorGap = (enabled: boolean, gap: number) => enabled ? Math.round(gap * 1.12) : gap
+const seniorFontSize = (enabled: boolean, size: number) => enabled ? Math.round(size * 1.34 * 10) / 10 : size
+const seniorFieldHeight = (enabled: boolean, height: number) => enabled ? Math.max(56, Math.round(height * 1.24)) : height
+const seniorGap = (enabled: boolean, gap: number) => enabled ? Math.round(gap * 1.16) : gap
 const FILE_MAX_COUNT = 5
 const FILE_MAX_SIZE_MB = 10
 const FILE_MAX_SIZE = FILE_MAX_SIZE_MB * 1024 * 1024

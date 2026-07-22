@@ -87,9 +87,9 @@ if(typeof document!=="undefined"&&!document.getElementById("catchform-keyframes"
   document.head.appendChild(s)
 }
 const FONT = "'Pretendard Variable','Pretendard','Noto Sans KR',-apple-system,'Apple SD Gothic Neo',sans-serif"
-const seniorFontSize = (enabled:boolean, size:number) => enabled ? Math.round(size * 1.22 * 10) / 10 : size
-const seniorFieldHeight = (enabled:boolean, height:number) => enabled ? Math.max(52, Math.round(height * 1.18)) : height
-const seniorGap = (enabled:boolean, gap:number) => enabled ? Math.round(gap * 1.12) : gap
+const seniorFontSize = (enabled:boolean, size:number) => enabled ? Math.round(size * 1.34 * 10) / 10 : size
+const seniorFieldHeight = (enabled:boolean, height:number) => enabled ? Math.max(56, Math.round(height * 1.24)) : height
+const seniorGap = (enabled:boolean, gap:number) => enabled ? Math.round(gap * 1.16) : gap
 const DASHBOARD_PAGE_SIZE = 60
 function normalizeAdminRole(role:any):AdminRole{
   const normalized=String(role||"").trim().toLowerCase()
