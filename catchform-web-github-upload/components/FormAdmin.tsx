@@ -1301,40 +1301,42 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
   }
 
   const btnS:React.CSSProperties={width:28,height:26,borderRadius:4,border:`1px solid ${A.border}`,background:"transparent",cursor:"pointer",color:A.t1,fontFamily:FONT2,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}
-  return <div>
-    <div style={{display:"flex",gap:4,marginBottom:5,alignItems:"center"}}>
-      <button onMouseDown={e=>{e.preventDefault();applyFormat("bold")}} title="굵게" style={{...btnS,fontWeight:600}}>B</button>
-      <button onMouseDown={e=>{e.preventDefault();applyFormat("underline")}} title="밑줄" style={{...btnS,textDecoration:"underline"}}>U</button>
-      <button onMouseDown={e=>{e.preventDefault();
-        // Save current selection before input opens and steals focus
-        const sel=window.getSelection()
-        if(sel&&sel.rangeCount>0)savedRangeRef.current=sel.getRangeAt(0).cloneRange()
-        setShowLink(v=>!v);setLinkUrl("")}} title="링크" style={btnS}>
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M6.5 9.5a4.24 4.24 0 0 0 6 0l2-2a4.24 4.24 0 0 0-6-6L7 3M9.5 6.5a4.24 4.24 0 0 0-6 0l-2 2a4.24 4.24 0 0 0 6 6L9 13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-      </button>
-      <div style={{width:1,height:16,background:A.border,margin:"0 2px"}}/>
-      <button onMouseDown={e=>{e.preventDefault();const el=edRef.current;if(!el)return;el.focus();
-        const sel=window.getSelection();if(!sel||!sel.rangeCount)return;
-        const range=sel.getRangeAt(0);const text=sel.toString();
-        if(text){range.deleteContents();range.insertNode(document.createTextNode("- "+text));sel.collapseToEnd()}
-        else{document.execCommand("insertText",false,"- ")}
-        onChange(htmlToMd(el.innerHTML))}} title="불렛 리스트" style={btnS}>
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="2.5" cy="4" r="1.2" fill="currentColor"/><circle cx="2.5" cy="8" r="1.2" fill="currentColor"/><circle cx="2.5" cy="12" r="1.2" fill="currentColor"/><path d="M5.5 4h9M5.5 8h9M5.5 12h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-      </button>
-      <button onMouseDown={e=>{e.preventDefault();const el=edRef.current;if(!el)return;el.focus();document.execCommand("insertHTML",false,'<hr style="border:none;border-top:1px solid currentColor;opacity:0.2;margin:6px 0"/><br>');onChange(htmlToMd(el.innerHTML))}} title="구분선" style={btnS}>
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 8h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><path d="M4 4h8M4 12h8" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.4"/></svg>
-      </button>
-      <span style={{fontSize:11,color:A.t3,marginLeft:2}}>텍스트 선택 후 클릭</span>
+  return <div style={{position:"relative"}}>
+    <div style={{position:"sticky" as const,top:0,zIndex:5,background:A.card,padding:"0 0 6px",marginBottom:5}}>
+      <div style={{display:"flex",gap:4,alignItems:"center"}}>
+        <button onMouseDown={e=>{e.preventDefault();applyFormat("bold")}} title="굵게" style={{...btnS,fontWeight:600}}>B</button>
+        <button onMouseDown={e=>{e.preventDefault();applyFormat("underline")}} title="밑줄" style={{...btnS,textDecoration:"underline"}}>U</button>
+        <button onMouseDown={e=>{e.preventDefault();
+          // Save current selection before input opens and steals focus
+          const sel=window.getSelection()
+          if(sel&&sel.rangeCount>0)savedRangeRef.current=sel.getRangeAt(0).cloneRange()
+          setShowLink(v=>!v);setLinkUrl("")}} title="링크" style={btnS}>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M6.5 9.5a4.24 4.24 0 0 0 6 0l2-2a4.24 4.24 0 0 0-6-6L7 3M9.5 6.5a4.24 4.24 0 0 0-6 0l-2 2a4.24 4.24 0 0 0 6 6L9 13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+        </button>
+        <div style={{width:1,height:16,background:A.border,margin:"0 2px"}}/>
+        <button onMouseDown={e=>{e.preventDefault();const el=edRef.current;if(!el)return;el.focus();
+          const sel=window.getSelection();if(!sel||!sel.rangeCount)return;
+          const range=sel.getRangeAt(0);const text=sel.toString();
+          if(text){range.deleteContents();range.insertNode(document.createTextNode("- "+text));sel.collapseToEnd()}
+          else{document.execCommand("insertText",false,"- ")}
+          onChange(htmlToMd(el.innerHTML))}} title="불렛 리스트" style={btnS}>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="2.5" cy="4" r="1.2" fill="currentColor"/><circle cx="2.5" cy="8" r="1.2" fill="currentColor"/><circle cx="2.5" cy="12" r="1.2" fill="currentColor"/><path d="M5.5 4h9M5.5 8h9M5.5 12h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+        </button>
+        <button onMouseDown={e=>{e.preventDefault();const el=edRef.current;if(!el)return;el.focus();document.execCommand("insertHTML",false,'<hr style="border:none;border-top:1px solid currentColor;opacity:0.2;margin:6px 0"/><br>');onChange(htmlToMd(el.innerHTML))}} title="구분선" style={btnS}>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 8h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><path d="M4 4h8M4 12h8" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.4"/></svg>
+        </button>
+        <span style={{fontSize:11,color:A.t3,marginLeft:2}}>텍스트 선택 후 클릭</span>
+      </div>
+      {showLink&&<div style={{display:"flex",gap:5,marginTop:6,alignItems:"center"}}>
+        <input value={linkUrl} onChange={e=>setLinkUrl(e.target.value)}
+          onKeyDown={e=>{if(e.key==="Enter")insertLink()}}
+          placeholder="https://..."
+          autoFocus
+          style={{flex:1,background:A.card,border:`1px solid ${A.blue}`,borderRadius:A.r,color:A.t1,fontFamily:FONT2,fontSize:12,padding:"5px 9px",outline:"none",boxSizing:"border-box" as const}}/>
+        <button onClick={insertLink} style={{height:26,padding:"0 10px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT2,fontSize:12,cursor:"pointer",fontWeight:600}}>삽입</button>
+        <button onClick={()=>{setShowLink(false);setLinkUrl("")}} style={{height:26,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT2,fontSize:12,cursor:"pointer"}}>취소</button>
+      </div>}
     </div>
-    {showLink&&<div style={{display:"flex",gap:5,marginBottom:6,alignItems:"center"}}>
-      <input value={linkUrl} onChange={e=>setLinkUrl(e.target.value)}
-        onKeyDown={e=>{if(e.key==="Enter")insertLink()}}
-        placeholder="https://..."
-        autoFocus
-        style={{flex:1,background:A.card,border:`1px solid ${A.blue}`,borderRadius:A.r,color:A.t1,fontFamily:FONT2,fontSize:12,padding:"5px 9px",outline:"none",boxSizing:"border-box" as const}}/>
-      <button onClick={insertLink} style={{height:26,padding:"0 10px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT2,fontSize:12,cursor:"pointer",fontWeight:600}}>삽입</button>
-      <button onClick={()=>{setShowLink(false);setLinkUrl("")}} style={{height:26,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT2,fontSize:12,cursor:"pointer"}}>취소</button>
-    </div>}
     <div
       ref={edRef}
       contentEditable
