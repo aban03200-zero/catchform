@@ -25,7 +25,7 @@ type KdtField = { id:string; label:string; type:KdtFieldType; required?:boolean;
 type AdMode = "image"|"split"
 type FieldType = "text"|"name"|"phone"|"email"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"|"ad"
 type HelperItem = { text:string; callout?:boolean }
-type FormField = { id:string; type:FieldType; label:string; placeholder?:string; helper?:string; helpers?:HelperItem[]; required?:boolean; opts?:Opt[]; etcPh?:string; dupCheck?:boolean; page?:number; cols?:number; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMode?:AdMode; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string }
+type FormField = { id:string; type:FieldType; label:string; placeholder?:string; helper?:string; helpers?:HelperItem[]; required?:boolean; opts?:Opt[]; etcPh?:string; dupCheck?:boolean; page?:number; cols?:number; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMode?:AdMode; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string; birthYearLimitEnabled?:boolean; birthYearLimitYear?:number|string; birthYearLimitMessage?:string }
 type FormAdConfig = { enabled:boolean; adMode:AdMode; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string }
 type QrLink = { code:string; url:string; label?:string; type?:string; createdAt?:string }
 type Cfg = {
@@ -110,6 +110,24 @@ const FILE_LIMIT_TEXT = `최대 ${FILE_MAX_COUNT}개, 파일당 ${FILE_MAX_SIZE_
 const AD_IMAGE_SIZE_TEXT = "권장 1200 × 300px (4:1)"
 const DISPLAY_ONLY_FIELD_TYPES = new Set(["info","section_desc","ad"])
 function isDisplayOnlyFieldType(type:any){return DISPLAY_ONLY_FIELD_TYPES.has(String(type||""))}
+function birthYearLimitOf(field:any){
+  if(!field?.birthYearLimitEnabled)return null
+  const year=Number(String(field.birthYearLimitYear??"").replace(/[^\d]/g,""))
+  return Number.isFinite(year)&&year>=1000&&year<=9999?year:null
+}
+function selectedBirthYearOf(value:any){
+  const match=String(value||"").match(/^(\d{4})/)
+  const year=match?Number(match[1]):NaN
+  return Number.isFinite(year)?year:null
+}
+function dateBirthYearLimitError(field:any,value:any){
+  if(field?.type!=="date"||!value)return""
+  const limitYear=birthYearLimitOf(field)
+  if(!limitYear)return""
+  const selectedYear=selectedBirthYearOf(value)
+  if(!selectedYear)return""
+  return selectedYear>limitYear?(String(field.birthYearLimitMessage||"").trim()||`${limitYear}년생 이하만 응답할 수 있어요.`):""
+}
 const CATCHFORM_DIRECT_FORM_BASE_URL = "https://catchform.vercel.app/form"
 const FORM_SUMMARY_SELECT = "id,name,slug,updated_at,brand,config_brand:config->>brand,header_title:config->header->>title,program_id:config->header->>programId,recruitment_period_mode:config->header->>recruitmentPeriodMode,form_type:config->>formType,dashboard_meta:config->dashboard"
 const DEFAULT_GOOGLE_SHEETS = {enabled:false,mode:"existing" as const,accountEmail:"",sheetUrl:"",sheetName:"",webhookUrl:"",lastSyncStatus:"idle" as const,lastSyncAt:"",lastSyncMessage:""}
@@ -4920,6 +4938,24 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     <div style={{padding:"10px 12px"}}><F label="선택 안내 문구" hint="아무것도 선택하지 않았을 때 표시됩니다" A={A}><TIn value={(field as any).placeholder||"선택해주세요."} onChange={v=>patchActiveField(idx,{placeholder:v})} A={A}/></F></div>}
                   {(field as any).type==="file"&&
                     <div style={{padding:"10px 12px"}}><F label="버튼 안내 문구" hint={FILE_LIMIT_TEXT} A={A}><TIn value={(field as any).placeholder||"파일 업로드"} onChange={v=>patchActiveField(idx,{placeholder:v})} A={A}/></F></div>}
+                  {(field as any).type==="date"&&(()=>{
+                    const enabled=!!(field as any).birthYearLimitEnabled
+                    const fallbackYear=String(new Date().getFullYear()-18)
+                    return <div style={{padding:"10px 12px"}}>
+                      <TRow label="출생연도 제한" on={enabled} toggle={()=>patchActiveField(idx,{birthYearLimitEnabled:!enabled,...(!enabled&&!(field as any).birthYearLimitYear?{birthYearLimitYear:fallbackYear}:{})})} A={A}/>
+                      {enabled&&<div style={{display:"flex",flexDirection:"column",gap:10,padding:"10px 12px",borderRadius:A.r,background:A.card,border:`1px solid ${A.border}`}}>
+                        <F label="응답 가능 기준" hint="예: 2005 입력 시 2005년생 이하만 제출할 수 있어요." A={A}>
+                          <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:8,alignItems:"center"}}>
+                            <TIn type="number" value={String((field as any).birthYearLimitYear||"")} onChange={v=>patchActiveField(idx,{birthYearLimitYear:v.replace(/[^\d]/g,"").slice(0,4)})} placeholder="예) 2005" A={A}/>
+                            <span style={{fontSize:12.5,fontWeight:600,color:A.t2,fontFamily:FONT,whiteSpace:"nowrap"}}>년생 이하</span>
+                          </div>
+                        </F>
+                        <F label="오류 문구" hint="비워두면 자동 문구가 표시됩니다." A={A}>
+                          <TIn value={(field as any).birthYearLimitMessage||""} onChange={v=>patchActiveField(idx,{birthYearLimitMessage:v})} placeholder={`${(field as any).birthYearLimitYear||fallbackYear}년생 이하만 응답할 수 있어요.`} A={A}/>
+                        </F>
+                      </div>}
+                    </div>
+                  })()}
                   {!isDisplayOnlyFieldType((field as any).type)&&<div style={{padding:"4px 12px"}}><TRow label="필수 입력" on={!!(field as any).required} toggle={()=>patchActiveField(idx,{required:!(field as any).required})} A={A}/></div>}
                   {((field as any).type==="dropdown"||(field as any).type==="button_select"||(field as any).type==="checkbox")&&(()=>{
                     return <div style={{padding:"10px 12px"}}>
@@ -5641,7 +5677,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               const setDpD=(d:number)=>setPvDpD(p=>({...p,[id]:d}))
               const displayVal=parsed?`${parsed.getFullYear()}년 ${parsed.getMonth()+1}월 ${parsed.getDate()}일`:""
               const MONTHS=["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"]
-              const minYear=today.getFullYear()-80
+              const minYear=today.getFullYear()-((field as any).birthYearLimitEnabled?120:80)
               const maxYear=today.getFullYear()+40
               const daysInMonth=new Date(dpY,dpM+1,0).getDate()
               const selectedDay=Math.min(Math.max(1,pvDpD[id]??(parsed?parsed.getDate():today.getDate())),daysInMonth)
@@ -5657,8 +5693,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 const safeYear=Math.min(maxYear,Math.max(minYear,year))
                 const safeMonth=Math.min(11,Math.max(0,month))
                 const safeDay=Math.min(new Date(safeYear,safeMonth+1,0).getDate(),Math.max(1,day))
-                setVal(`${safeYear}-${String(safeMonth+1).padStart(2,"0")}-${String(safeDay).padStart(2,"0")}`)
-                clearError(id)
+                const nextValue=`${safeYear}-${String(safeMonth+1).padStart(2,"0")}-${String(safeDay).padStart(2,"0")}`
+                setVal(nextValue)
+                const err=dateBirthYearLimitError(field,nextValue)
+                if(err)setError(id,err)
+                else clearError(id)
                 setDpOpen(false)
               }
               const openPicker=()=>{
@@ -5710,7 +5749,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               }
               return <div style={{position:"relative" as const,display:"inline-block"}}>
                 <div onClick={openPicker}
-                  style={{height:fh,display:"inline-flex",alignItems:"center",gap:10,padding:"0 14px",borderRadius:fr2,border:`1px solid ${dpOpen?accentC:FC.fieldBorder}`,background:FC.fieldBg,cursor:"pointer",userSelect:"none" as const,transition:"border .15s"}}>
+                  style={{height:fh,display:"inline-flex",alignItems:"center",gap:10,padding:"0 14px",borderRadius:fr2,border:`1px solid ${dpOpen?accentC:pvFieldErrors[id]?FC.red||"#FF4B4B":FC.fieldBorder}`,background:FC.fieldBg,cursor:"pointer",userSelect:"none" as const,transition:"border .15s"}}>
                   <span style={{fontSize:fs(13),color:displayVal?FC.t1:FC.t3,fontFamily:FONT}}>{displayVal||"날짜를 선택해주세요"}</span>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,color:FC.t3}}><rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.4"/><path d="M5 2v2M11 2v2M2 7h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
                 </div>
@@ -5732,6 +5771,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     </button>
                   </div>
                 </div>}
+                {pvFieldErrors[id]&&<div style={{fontSize:fs(11.5),color:FC.red||"#FF4B4B",marginTop:4,fontFamily:FONT}}>{pvFieldErrors[id]}</div>}
               </div>
             })()}
             {field.type==="time"&&(()=>{
@@ -5991,9 +6031,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               {field.type==="ad"&&renderPreviewAdSlot(field)}
               {field.type==="date"&&<input type="date"
                 value={pvKdtVals[field.id]||""}
-                onChange={e=>setPvKdtVals(v=>({...v,[field.id]:e.target.value}))}
-                style={{width:"100%",height:fh,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,borderRadius:fr2,color:pvKdtVals[field.id]?FC.t1:FC.t3,fontFamily:FONT,fontSize:fs(13),padding:"0 13px",outline:"none",boxSizing:"border-box" as const,colorScheme:cfg.styles.theme==="dark"&&!seniorMode?"dark" as any:"light" as any}}
+                onChange={e=>{
+                  const nextValue=e.target.value
+                  setPvKdtVals(v=>({...v,[field.id]:nextValue}))
+                  const err=dateBirthYearLimitError(field,nextValue)
+                  setPvFieldErrors(p=>{const n={...p};if(err)n[field.id]=err;else delete n[field.id];return n})
+                }}
+                style={{width:"100%",height:fh,background:FC.fieldBg,border:`1px solid ${pvFieldErrors[field.id]?FC.red||"#FF4B4B":FC.fieldBorder}`,borderRadius:fr2,color:pvKdtVals[field.id]?FC.t1:FC.t3,fontFamily:FONT,fontSize:fs(13),padding:"0 13px",outline:"none",boxSizing:"border-box" as const,colorScheme:cfg.styles.theme==="dark"&&!seniorMode?"dark" as any:"light" as any}}
               />}
+              {field.type==="date"&&pvFieldErrors[field.id]&&<div style={{fontSize:fs(11.5),color:FC.red||"#FF4B4B",marginTop:4,fontFamily:FONT}}>{pvFieldErrors[field.id]}</div>}
               {field.type==="textarea"&&<textarea
                 value={pvKdtVals[field.id]||""}
                 onChange={e=>setPvKdtVals(v=>({...v,[field.id]:e.target.value}))}

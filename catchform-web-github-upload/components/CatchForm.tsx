@@ -47,6 +47,7 @@ type FormField = {
     imageUrl?: string; imageCaption?: string; imageFit?: "contain"|"cover"; imagePosX?: number; imagePosY?: number
     imageCropX?: number; imageCropY?: number; imageCropW?: number; imageCropH?: number; imageNaturalW?: number; imageNaturalH?: number
     adMode?: AdMode; adMainText?: string; adSubText?: string; adElementText?: string; adElementImageUrl?: string; adHref?: string; adBg?: string; adTextColor?: string
+    birthYearLimitEnabled?: boolean; birthYearLimitYear?: number | string; birthYearLimitMessage?: string
 }
 type FormAdConfig = {
     enabled: boolean; adMode: AdMode
@@ -1209,19 +1210,44 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         return () => document.removeEventListener("visibilitychange", onHidden)
     }, [page, formId, formSlug])
 
+    const birthYearLimitOf = React.useCallback((field: FormField): number | null => {
+        if (!field.birthYearLimitEnabled) return null
+        const raw = String(field.birthYearLimitYear ?? "").trim()
+        const year = Number(raw.replace(/[^\d]/g, ""))
+        if (!Number.isFinite(year) || year < 1000 || year > 9999) return null
+        return year
+    }, [])
+    const selectedBirthYearOf = React.useCallback((value: string): number | null => {
+        const match = String(value || "").match(/^(\d{4})/)
+        const year = match ? Number(match[1]) : NaN
+        return Number.isFinite(year) ? year : null
+    }, [])
+    const dateBirthYearLimitError = React.useCallback((field: FormField, value: string): string => {
+        if (field.type !== "date" || !value) return ""
+        const limitYear = birthYearLimitOf(field)
+        if (!limitYear) return ""
+        const selectedYear = selectedBirthYearOf(value)
+        if (!selectedYear) return ""
+        if (selectedYear > limitYear) {
+            return String(field.birthYearLimitMessage || "").trim() || `${limitYear}년생 이하만 응답할 수 있어요.`
+        }
+        return ""
+    }, [birthYearLimitOf, selectedBirthYearOf])
+
     // Check if all required fields on current page are filled
     const isPageComplete = React.useMemo(() => {
         for (const field of currentFields) {
             const f = field as FormField
-            if (!f.required) continue
             if (isDisplayOnlyFieldType(f.type)) continue
             if (f.type === "checkbox") {
-                if (!(checked[f.id] || []).length) return false
+                if (f.required && !(checked[f.id] || []).length) return false
             } else if (f.type === "file") {
                 const fs:any = fileObjects[f.id] || []
-                if (!(Array.isArray(fs) ? fs : [fs]).filter(Boolean).length) return false
+                if (f.required && !(Array.isArray(fs) ? fs : [fs]).filter(Boolean).length) return false
             } else {
-                if (!(vals[f.id] || "").trim()) return false
+                const value = vals[f.id] || ""
+                if (f.required && !value.trim()) return false
+                if (dateBirthYearLimitError(f, value)) return false
             }
         }
         if (currentPageShowsConsents) {
@@ -1231,7 +1257,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             }
         }
         return true
-    }, [currentFields, vals, checked, consentOk, currentPageShowsConsents, fileObjects])
+    }, [currentFields, vals, checked, consentOk, currentPageShowsConsents, fileObjects, dateBirthYearLimitError])
 
     const inp: React.CSSProperties = {
         width: "100%", height: fh, background: FC.fieldBg, border: `1px solid ${FC.fieldBorder}`,
@@ -1243,6 +1269,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         if (field.type === "checkbox") return ""
         if (field.type === "file") return ""
         if (field.required && !val.trim()) return "필수 입력 항목이에요."
+        const dateLimitError = dateBirthYearLimitError(field, val)
+        if (dateLimitError) return dateLimitError
         if (field.type === "email" && val && !isValidEmail(val)) return "올바른 이메일 형식을 입력해주세요."
         if (field.type === "text" && field.id.toLowerCase().includes("phone") && val && !isValidPhone(val)) return "올바른 휴대폰 번호를 입력해주세요."
         return ""
@@ -1331,13 +1359,18 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         let hasErr = false
         for (const field of currentFields) {
             const f = field as FormField
-            if (!f.required) continue
             if (isDisplayOnlyFieldType(f.type)) continue
             const val = vals[f.id] || ""
             if (f.type === "checkbox") {
-                if (!(checked[f.id] || []).length) { newErrors[f.id] = "필수 입력 항목이에요."; hasErr = true }
-            } else if (!val.trim()) {
+                if (f.required && !(checked[f.id] || []).length) { newErrors[f.id] = "필수 입력 항목이에요."; hasErr = true }
+            } else if (f.type === "file") {
+                const fs:any = fileObjects[f.id] || []
+                if (f.required && !(Array.isArray(fs) ? fs : [fs]).filter(Boolean).length) { newErrors[f.id] = "필수 입력 항목이에요."; hasErr = true }
+            } else if (f.required && !val.trim()) {
                 newErrors[f.id] = "필수 입력 항목이에요."; hasErr = true
+            } else {
+                const err = validateField(f, val)
+                if (err) { newErrors[f.id] = err; hasErr = true }
             }
         }
         setErrors(newErrors)
@@ -1450,6 +1483,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         // Validate
         let hasErr = false
         const newErrors: Record<string, string> = {}
+        const currentFieldIds = new Set(currentFields.map(field => field.id))
+        let firstInvalidPage: number | null = null
         for (const field of currentFields) {
             if (isDisplayOnlyFieldType(field.type)) continue
             const val = vals[field.id] || ""
@@ -1464,8 +1499,23 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 if (err) { newErrors[field.id] = err; hasErr = true }
             }
         }
+        const allConfiguredFields: any[] = isKdt ? (cfg.kdtFields || []) as any[] : cfg.form.fields as any[]
+        for (const field of allConfiguredFields) {
+            if (isDisplayOnlyFieldType(field.type) || field.type !== "date") continue
+            const val = vals[field.id] || ""
+            const err = dateBirthYearLimitError(field as FormField, val)
+            if (err) {
+                newErrors[field.id] = err
+                hasErr = true
+                const targetPage = Number(field.page || 1)
+                if (!currentFieldIds.has(field.id) && Number.isFinite(targetPage) && targetPage >= 1 && targetPage <= formPages && !firstInvalidPage) firstInvalidPage = targetPage
+            }
+        }
         setErrors(newErrors)
-        if (hasErr) return
+        if (hasErr) {
+            if (firstInvalidPage) setPage(firstInvalidPage)
+            return
+        }
 
         // Check consents
         const enabledConsents = cfg.consents.filter(c => c.enabled)
@@ -1763,7 +1813,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 const open = dpOpen[f.id] || false
                 const displayVal = parsed ? `${parsed.getFullYear()}년 ${parsed.getMonth() + 1}월 ${parsed.getDate()}일` : ""
                 const MONTHS = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
-                const minYear = today.getFullYear() - 80
+                const minYear = today.getFullYear() - (f.birthYearLimitEnabled ? 120 : 80)
                 const maxYear = today.getFullYear() + 40
                 const daysInMonth = new Date(dy, dm + 1, 0).getDate()
                 const selectedDay = Math.min(Math.max(1, dpD[f.id] ?? (parsed ? parsed.getDate() : today.getDate())), daysInMonth)
@@ -1779,8 +1829,11 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     const safeYear = Math.min(maxYear, Math.max(minYear, year))
                     const safeMonth = Math.min(11, Math.max(0, month))
                     const safeDay = Math.min(new Date(safeYear, safeMonth + 1, 0).getDate(), Math.max(1, day))
-                    setVal(f.id, `${safeYear}-${String(safeMonth + 1).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`)
-                    clearErr(f.id)
+                    const nextValue = `${safeYear}-${String(safeMonth + 1).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`
+                    setVal(f.id, nextValue)
+                    const err = dateBirthYearLimitError(f, nextValue)
+                    if (err) setErr(f.id, err)
+                    else clearErr(f.id)
                     setDpOpen(p => ({ ...p, [f.id]: false }))
                 }
                 const openPicker = () => {
@@ -2191,7 +2244,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 {isMultiPage && page < formPages
                     ? <button
                         disabled={!isPageComplete}
-                        onClick={() => { if (formDisabled) { setShowOperationModal(true); return } persistLocalDraft(page + 1); saveRemoteDraft(false, page + 1); setPage(p => p + 1) }}
+                        onClick={() => { if (formDisabled) { setShowOperationModal(true); return } if (!validateCurrentPage()) return; persistLocalDraft(page + 1); saveRemoteDraft(false, page + 1); setPage(p => p + 1) }}
                         style={{ flex: 2, height: seniorFieldHeight(seniorMode, cfg.cta.height), borderRadius: fr, border: "none", background: !formDisabled && isPageComplete ? accentBg : accentBg + "55", color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: fs(14), fontWeight:600, cursor: !formDisabled && isPageComplete ? "pointer" : "not-allowed" }}>
                         다음
                       </button>
