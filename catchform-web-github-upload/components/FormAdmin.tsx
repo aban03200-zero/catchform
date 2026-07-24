@@ -25,7 +25,7 @@ type KdtField = { id:string; label:string; type:KdtFieldType; required?:boolean;
 type AdMode = "image"|"split"
 type FieldType = "text"|"name"|"phone"|"email"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"|"ad"
 type HelperItem = { text:string; callout?:boolean }
-type FormField = { id:string; type:FieldType; label:string; placeholder?:string; helper?:string; helpers?:HelperItem[]; required?:boolean; opts?:Opt[]; etcPh?:string; dupCheck?:boolean; page?:number; cols?:number; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMode?:AdMode; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string; birthYearLimitEnabled?:boolean; birthYearLimitYear?:number|string; birthYearLimitMessage?:string }
+type FormField = { id:string; type:FieldType; label:string; placeholder?:string; helper?:string; helpers?:HelperItem[]; required?:boolean; opts?:Opt[]; etcPh?:string; dupCheck?:boolean; page?:number; cols?:number; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMode?:AdMode; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string; birthYearLimitEnabled?:boolean; birthYearLimitYear?:number|string; birthYearLimitMessage?:string; birthDateRangeEnabled?:boolean; birthDateRangeStart?:string; birthDateRangeEnd?:string; birthDateRangeMessage?:string }
 type FormAdConfig = { enabled:boolean; adMode:AdMode; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string }
 type QrLink = { code:string; url:string; label?:string; type?:string; createdAt?:string }
 type Cfg = {
@@ -115,18 +115,67 @@ function birthYearLimitOf(field:any){
   const year=Number(String(field.birthYearLimitYear??"").replace(/[^\d]/g,""))
   return Number.isFinite(year)&&year>=1000&&year<=9999?year:null
 }
-function selectedBirthYearOf(value:any){
-  const match=String(value||"").match(/^(\d{4})/)
-  const year=match?Number(match[1]):NaN
-  return Number.isFinite(year)?year:null
+function normalizeDateOnly(value:any){
+  const match=String(value||"").trim().match(/^(\d{4})[-.\/](\d{1,2})[-.\/](\d{1,2})/)
+  if(!match)return""
+  const year=Number(match[1]),month=Number(match[2]),day=Number(match[3])
+  if(!Number.isFinite(year)||!Number.isFinite(month)||!Number.isFinite(day))return""
+  if(year<1000||year>9999||month<1||month>12)return""
+  const maxDay=new Date(year,month,0).getDate()
+  if(day<1||day>maxDay)return""
+  return`${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`
+}
+function dateOnlyTime(value:any){
+  const normalized=normalizeDateOnly(value)
+  if(!normalized)return null
+  const [year,month,day]=normalized.split("-").map(Number)
+  return Date.UTC(year,month-1,day)
+}
+function displayBirthDateWithAge(value:any){
+  const normalized=normalizeDateOnly(value)
+  if(!normalized)return""
+  const [year,month,day]=normalized.split("-").map(Number)
+  const age=new Date().getFullYear()-year
+  return`${year}.${String(month).padStart(2,"0")}.${String(day).padStart(2,"0")}(만 ${age}세)`
+}
+function birthDateRangeOf(field:any){
+  if(field?.birthDateRangeEnabled){
+    let start=normalizeDateOnly(field.birthDateRangeStart)
+    let end=normalizeDateOnly(field.birthDateRangeEnd)
+    if(!start&&!end)return null
+    const startTime=dateOnlyTime(start)
+    const endTime=dateOnlyTime(end)
+    if(start&&end&&startTime!==null&&endTime!==null&&startTime>endTime){const nextStart=end;end=start;start=nextStart}
+    return{start,end}
+  }
+  const legacyYear=birthYearLimitOf(field)
+  if(legacyYear)return{start:"",end:`${legacyYear}-12-31`,legacyYear}
+  return null
+}
+function birthDateRangeSummary(field:any){
+  const range=birthDateRangeOf(field)
+  if(!range)return""
+  if(range.legacyYear)return`${range.legacyYear}년생 이하`
+  if(range.start&&range.end)return`${displayBirthDateWithAge(range.start)} ~ ${displayBirthDateWithAge(range.end)}`
+  if(range.start)return`${displayBirthDateWithAge(range.start)} 이후`
+  if(range.end)return`${displayBirthDateWithAge(range.end)} 이전`
+  return""
 }
 function dateBirthYearLimitError(field:any,value:any){
   if(field?.type!=="date"||!value)return""
-  const limitYear=birthYearLimitOf(field)
-  if(!limitYear)return""
-  const selectedYear=selectedBirthYearOf(value)
-  if(!selectedYear)return""
-  return selectedYear>limitYear?(String(field.birthYearLimitMessage||"").trim()||`${limitYear}년생 이하만 응답할 수 있어요.`):""
+  const range=birthDateRangeOf(field)
+  if(!range)return""
+  const selectedTime=dateOnlyTime(value)
+  if(selectedTime===null)return""
+  const startTime=dateOnlyTime(range.start)
+  const endTime=dateOnlyTime(range.end)
+  if((startTime!==null&&selectedTime<startTime)||(endTime!==null&&selectedTime>endTime)){
+    const customMessage=String(field.birthDateRangeMessage||field.birthYearLimitMessage||"").trim()
+    if(customMessage)return customMessage
+    const summary=birthDateRangeSummary(field)
+    return summary?`${summary} 출생자만 응답할 수 있어요.`:"응답 가능한 생년월일 범위를 벗어났어요."
+  }
+  return""
 }
 const CATCHFORM_DIRECT_FORM_BASE_URL = "https://catchform.vercel.app/form"
 const FORM_SUMMARY_SELECT = "id,name,slug,updated_at,brand,config_brand:config->>brand,header_title:config->header->>title,program_id:config->header->>programId,recruitment_period_mode:config->header->>recruitmentPeriodMode,form_type:config->>formType,dashboard_meta:config->dashboard"
@@ -4939,19 +4988,36 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   {(field as any).type==="file"&&
                     <div style={{padding:"10px 12px"}}><F label="버튼 안내 문구" hint={FILE_LIMIT_TEXT} A={A}><TIn value={(field as any).placeholder||"파일 업로드"} onChange={v=>patchActiveField(idx,{placeholder:v})} A={A}/></F></div>}
                   {(field as any).type==="date"&&(()=>{
-                    const enabled=!!(field as any).birthYearLimitEnabled
-                    const fallbackYear=String(new Date().getFullYear()-18)
+                    const nowYear=new Date().getFullYear()
+                    const legacyYear=birthYearLimitOf(field)
+                    const enabled=!!((field as any).birthDateRangeEnabled||(field as any).birthYearLimitEnabled)
+                    const fallbackStart=`${nowYear-65}-01-01`
+                    const fallbackEnd=`${nowYear-55}-12-31`
+                    const startValue=normalizeDateOnly((field as any).birthDateRangeStart)||""
+                    const endValue=normalizeDateOnly((field as any).birthDateRangeEnd)||(legacyYear?`${legacyYear}-12-31`:"")
+                    const summary=birthDateRangeSummary({...field,birthDateRangeEnabled:enabled,birthDateRangeStart:startValue,birthDateRangeEnd:endValue})
+                    const summaryForPlaceholder=summary||birthDateRangeSummary({...field,birthDateRangeEnabled:true,birthDateRangeStart:startValue||fallbackStart,birthDateRangeEnd:endValue||fallbackEnd})
+                    const datePatchBase={birthDateRangeEnabled:true,birthYearLimitEnabled:false}
                     return <div style={{padding:"10px 12px"}}>
-                      <TRow label="출생연도 제한" on={enabled} toggle={()=>patchActiveField(idx,{birthYearLimitEnabled:!enabled,...(!enabled&&!(field as any).birthYearLimitYear?{birthYearLimitYear:fallbackYear}:{})})} A={A}/>
+                      <TRow label="생년월일 범위 제한" on={enabled} toggle={()=>patchActiveField(idx,enabled?{birthDateRangeEnabled:false,birthYearLimitEnabled:false}:{...datePatchBase,birthDateRangeStart:startValue||fallbackStart,birthDateRangeEnd:endValue||fallbackEnd})} A={A}/>
                       {enabled&&<div style={{display:"flex",flexDirection:"column",gap:10,padding:"10px 12px",borderRadius:A.r,background:A.card,border:`1px solid ${A.border}`}}>
-                        <F label="응답 가능 기준" hint="예: 2005 입력 시 2005년생 이하만 제출할 수 있어요." A={A}>
-                          <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:8,alignItems:"center"}}>
-                            <TIn type="number" value={String((field as any).birthYearLimitYear||"")} onChange={v=>patchActiveField(idx,{birthYearLimitYear:v.replace(/[^\d]/g,"").slice(0,4)})} placeholder="예) 2005" A={A}/>
-                            <span style={{fontSize:12.5,fontWeight:600,color:A.t2,fontFamily:FONT,whiteSpace:"nowrap"}}>년생 이하</span>
+                        <F label="응답 가능 생년월일" hint="범위 안에 있는 생년월일만 제출할 수 있어요. 시작일과 종료일은 거꾸로 넣어도 자동으로 정리됩니다." A={A}>
+                          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                            <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:8,alignItems:"center"}}>
+                              <TIn type="date" value={startValue} onChange={v=>patchActiveField(idx,{...datePatchBase,birthDateRangeStart:v})} A={A}/>
+                              <span style={{minWidth:74,fontSize:12.5,fontWeight:700,color:startValue?A.blue:A.t3,fontFamily:FONT,whiteSpace:"nowrap" as const}}>{displayBirthDateWithAge(startValue).match(/\((.*?)\)/)?.[1]||"나이 자동"}</span>
+                            </div>
+                            <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:8,alignItems:"center"}}>
+                              <TIn type="date" value={endValue} onChange={v=>patchActiveField(idx,{...datePatchBase,birthDateRangeEnd:v})} A={A}/>
+                              <span style={{minWidth:74,fontSize:12.5,fontWeight:700,color:endValue?A.blue:A.t3,fontFamily:FONT,whiteSpace:"nowrap" as const}}>{displayBirthDateWithAge(endValue).match(/\((.*?)\)/)?.[1]||"나이 자동"}</span>
+                            </div>
+                            <div style={{fontSize:12.5,fontWeight:700,color:A.t1,lineHeight:1.45,padding:"8px 10px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,wordBreak:"keep-all" as const}}>
+                              {summary||"날짜를 설정하면 예: 1961.01.01(만 65세) ~ 1971.12.31(만 55세)처럼 표시됩니다."}
+                            </div>
                           </div>
                         </F>
                         <F label="오류 문구" hint="비워두면 자동 문구가 표시됩니다." A={A}>
-                          <TIn value={(field as any).birthYearLimitMessage||""} onChange={v=>patchActiveField(idx,{birthYearLimitMessage:v})} placeholder={`${(field as any).birthYearLimitYear||fallbackYear}년생 이하만 응답할 수 있어요.`} A={A}/>
+                          <TIn value={(field as any).birthDateRangeMessage||(field as any).birthYearLimitMessage||""} onChange={v=>patchActiveField(idx,{birthDateRangeMessage:v,birthYearLimitMessage:""})} placeholder={`${summaryForPlaceholder} 출생자만 응답할 수 있어요.`} A={A}/>
                         </F>
                       </div>}
                     </div>
@@ -5677,8 +5743,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               const setDpD=(d:number)=>setPvDpD(p=>({...p,[id]:d}))
               const displayVal=parsed?`${parsed.getFullYear()}년 ${parsed.getMonth()+1}월 ${parsed.getDate()}일`:""
               const MONTHS=["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"]
-              const minYear=today.getFullYear()-((field as any).birthYearLimitEnabled?120:80)
-              const maxYear=today.getFullYear()+40
+              const birthRange=birthDateRangeOf(field)
+              const configuredYears=[birthRange?.start,birthRange?.end].map(date=>date?Number(String(date).slice(0,4)):NaN).filter(Number.isFinite) as number[]
+              const minYear=birthRange?Math.min(today.getFullYear()-120,...configuredYears):today.getFullYear()-80
+              const maxYear=birthRange?Math.max(today.getFullYear(),...configuredYears):today.getFullYear()+40
               const daysInMonth=new Date(dpY,dpM+1,0).getDate()
               const selectedDay=Math.min(Math.max(1,pvDpD[id]??(parsed?parsed.getDate():today.getDate())),daysInMonth)
               const setDraftDate=(year:number,month:number,day:number)=>{

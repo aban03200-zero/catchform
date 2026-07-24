@@ -48,6 +48,7 @@ type FormField = {
     imageCropX?: number; imageCropY?: number; imageCropW?: number; imageCropH?: number; imageNaturalW?: number; imageNaturalH?: number
     adMode?: AdMode; adMainText?: string; adSubText?: string; adElementText?: string; adElementImageUrl?: string; adHref?: string; adBg?: string; adTextColor?: string
     birthYearLimitEnabled?: boolean; birthYearLimitYear?: number | string; birthYearLimitMessage?: string
+    birthDateRangeEnabled?: boolean; birthDateRangeStart?: string; birthDateRangeEnd?: string; birthDateRangeMessage?: string
 }
 type FormAdConfig = {
     enabled: boolean; adMode: AdMode
@@ -1217,22 +1218,74 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         if (!Number.isFinite(year) || year < 1000 || year > 9999) return null
         return year
     }, [])
-    const selectedBirthYearOf = React.useCallback((value: string): number | null => {
-        const match = String(value || "").match(/^(\d{4})/)
-        const year = match ? Number(match[1]) : NaN
-        return Number.isFinite(year) ? year : null
+    const normalizeDateOnly = React.useCallback((value: any): string => {
+        const match = String(value || "").trim().match(/^(\d{4})[-.\/](\d{1,2})[-.\/](\d{1,2})/)
+        if (!match) return ""
+        const year = Number(match[1])
+        const month = Number(match[2])
+        const day = Number(match[3])
+        if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return ""
+        if (year < 1000 || year > 9999 || month < 1 || month > 12) return ""
+        const maxDay = new Date(year, month, 0).getDate()
+        if (day < 1 || day > maxDay) return ""
+        return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`
     }, [])
+    const dateOnlyTime = React.useCallback((value: any): number | null => {
+        const normalized = normalizeDateOnly(value)
+        if (!normalized) return null
+        const [year, month, day] = normalized.split("-").map(Number)
+        return Date.UTC(year, month - 1, day)
+    }, [normalizeDateOnly])
+    const displayBirthDateWithAge = React.useCallback((value: any): string => {
+        const normalized = normalizeDateOnly(value)
+        if (!normalized) return ""
+        const [year, month, day] = normalized.split("-").map(Number)
+        const age = new Date().getFullYear() - year
+        return `${year}.${String(month).padStart(2, "0")}.${String(day).padStart(2, "0")}(만 ${age}세)`
+    }, [normalizeDateOnly])
+    const birthDateRangeOf = React.useCallback((field: FormField): { start: string; end: string; legacyYear?: number } | null => {
+        if (field.birthDateRangeEnabled) {
+            let start = normalizeDateOnly(field.birthDateRangeStart)
+            let end = normalizeDateOnly(field.birthDateRangeEnd)
+            if (!start && !end) return null
+            const startTime = dateOnlyTime(start)
+            const endTime = dateOnlyTime(end)
+            if (start && end && startTime !== null && endTime !== null && startTime > endTime) {
+                const nextStart = end
+                end = start
+                start = nextStart
+            }
+            return { start, end }
+        }
+        const legacyYear = birthYearLimitOf(field)
+        if (legacyYear) return { start: "", end: `${legacyYear}-12-31`, legacyYear }
+        return null
+    }, [birthYearLimitOf, dateOnlyTime, normalizeDateOnly])
+    const birthDateRangeSummary = React.useCallback((field: FormField): string => {
+        const range = birthDateRangeOf(field)
+        if (!range) return ""
+        if (range.legacyYear) return `${range.legacyYear}년생 이하`
+        if (range.start && range.end) return `${displayBirthDateWithAge(range.start)} ~ ${displayBirthDateWithAge(range.end)}`
+        if (range.start) return `${displayBirthDateWithAge(range.start)} 이후`
+        if (range.end) return `${displayBirthDateWithAge(range.end)} 이전`
+        return ""
+    }, [birthDateRangeOf, displayBirthDateWithAge])
     const dateBirthYearLimitError = React.useCallback((field: FormField, value: string): string => {
         if (field.type !== "date" || !value) return ""
-        const limitYear = birthYearLimitOf(field)
-        if (!limitYear) return ""
-        const selectedYear = selectedBirthYearOf(value)
-        if (!selectedYear) return ""
-        if (selectedYear > limitYear) {
-            return String(field.birthYearLimitMessage || "").trim() || `${limitYear}년생 이하만 응답할 수 있어요.`
+        const range = birthDateRangeOf(field)
+        if (!range) return ""
+        const selectedTime = dateOnlyTime(value)
+        if (selectedTime === null) return ""
+        const startTime = dateOnlyTime(range.start)
+        const endTime = dateOnlyTime(range.end)
+        if ((startTime !== null && selectedTime < startTime) || (endTime !== null && selectedTime > endTime)) {
+            const customMessage = String(field.birthDateRangeMessage || field.birthYearLimitMessage || "").trim()
+            if (customMessage) return customMessage
+            const summary = birthDateRangeSummary(field)
+            return summary ? `${summary} 출생자만 응답할 수 있어요.` : "응답 가능한 생년월일 범위를 벗어났어요."
         }
         return ""
-    }, [birthYearLimitOf, selectedBirthYearOf])
+    }, [birthDateRangeOf, dateOnlyTime, birthDateRangeSummary])
 
     // Check if all required fields on current page are filled
     const isPageComplete = React.useMemo(() => {
@@ -1813,8 +1866,10 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 const open = dpOpen[f.id] || false
                 const displayVal = parsed ? `${parsed.getFullYear()}년 ${parsed.getMonth() + 1}월 ${parsed.getDate()}일` : ""
                 const MONTHS = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
-                const minYear = today.getFullYear() - (f.birthYearLimitEnabled ? 120 : 80)
-                const maxYear = today.getFullYear() + 40
+                const birthRange = birthDateRangeOf(f)
+                const configuredYears = [birthRange?.start, birthRange?.end].map(date => date ? Number(date.slice(0, 4)) : NaN).filter(Number.isFinite) as number[]
+                const minYear = birthRange ? Math.min(today.getFullYear() - 120, ...configuredYears) : today.getFullYear() - 80
+                const maxYear = birthRange ? Math.max(today.getFullYear(), ...configuredYears) : today.getFullYear() + 40
                 const daysInMonth = new Date(dy, dm + 1, 0).getDate()
                 const selectedDay = Math.min(Math.max(1, dpD[f.id] ?? (parsed ? parsed.getDate() : today.getDate())), daysInMonth)
                 const setDraftDate = (year: number, month: number, day: number) => {
