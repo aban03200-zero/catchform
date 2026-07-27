@@ -2869,22 +2869,57 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     return ""
   }
 
-  function getAnalyticsFields(){
+  function isMarketingConsentConfig(consent:any){
+    const consentType=consent?.consentType||consentTypeFromTitle(consent?.title)
+    const text=`${consent?.title||""} ${consent?.checkLabel||""}`
+    return consentType==="marketing_consent"||text.includes("마케팅")
+  }
+  function isMarketingConsentAnswerItem(item:any){
+    const answerKey=String(item?.answerKey||"")
+    const question=String(item?.question||"")
+    return answerKey==="marketing_consent"||consentTypeFromTitle(question)==="marketing_consent"||question.includes("마케팅")
+  }
+  function normalizeConsentAnswer(value:any){
+    if(value===true||String(value).toLowerCase()==="true")return"동의"
+    if(value===false||String(value).toLowerCase()==="false")return"미동의"
+    return value
+  }
+  function getAnalyticsFields(options?:{includeConsentFields?:boolean;rows?:any[]}){
     const raw:any[] = isKdt ? (cfg.kdtFields||[]) : (cfg.form.fields||[])
-    return raw.filter(f=>!isDisplayOnlyFieldType(f.type)).map(f=>({
+    const fields=raw.filter(f=>!isDisplayOnlyFieldType(f.type)).map(f=>({
       id:f.id,
       label:f.label||f.id,
       type:f.type,
       page:f.page||1,
       opts:(f.opts&&f.opts.length)?f.opts:(f.options||[]).map((o:any)=>({label:String(o),value:String(o)}))
     }))
+    if(!options?.includeConsentFields)return fields
+    const existingIds=new Set(fields.flatMap((field:any)=>[String(field.id||""),String(field.answerKey||"")].filter(Boolean)))
+    if(existingIds.has("marketing_consent"))return fields
+    const marketingConsent=(Array.isArray(cfg.consents)?cfg.consents:[]).find((consent:any)=>consent?.enabled&&isMarketingConsentConfig(consent))
+    const rowMarketingAnswer=(options.rows||[]).flatMap((row:any)=>Array.isArray(row?.form_data)?row.form_data:[]).find(isMarketingConsentAnswerItem)
+    if(!marketingConsent&&!rowMarketingAnswer)return fields
+    return [...fields,{
+      id:"__marketing_consent",
+      answerKey:"marketing_consent",
+      label:marketingConsent?.title||rowMarketingAnswer?.question||"마케팅 정보 수신 동의",
+      type:"consent",
+      page:9999,
+      opts:[{label:"동의",value:"동의"},{label:"미동의",value:"미동의"}],
+      readOnly:true,
+      consentField:true,
+    }]
   }
   function analyticsRawAnswer(row:any,field:any){
+    const answerKey=String(field.answerKey||field.id||"")
+    const normalize=(value:any)=>field.consentField?normalizeConsentAnswer(value):value
     const direct=row[field.id]
-    if(direct!==undefined&&direct!==null&&direct!=="")return direct
+    if(direct!==undefined&&direct!==null&&direct!=="")return normalize(direct)
+    const directByAnswerKey=answerKey?row[answerKey]:undefined
+    if(directByAnswerKey!==undefined&&directByAnswerKey!==null&&directByAnswerKey!=="")return normalize(directByAnswerKey)
     const fd=Array.isArray(row.form_data)?row.form_data:[]
-    const hit=fd.find((x:any)=>x.answerKey===field.id)||fd.find((x:any)=>(x.question||"")===field.label)
-    return hit?.answer
+    const hit=fd.find((x:any)=>x.answerKey===answerKey)||fd.find((x:any)=>x.answerKey===field.id)||fd.find((x:any)=>(x.question||"")===field.label)
+    return normalize(hit?.answer)
   }
   function analyticsFieldOpts(field:any){
     const raw=(field?.opts&&field.opts.length)?field.opts:(field?.options||[])
@@ -2963,7 +2998,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   function openEditAnalyticsRow(row:any){
     const values:Record<string,string>={}
-    getAnalyticsFields().forEach((field:any)=>{values[field.id]=editableAnalyticsValue(row,field)})
+    getAnalyticsFields({includeConsentFields:true,rows:[row]}).forEach((field:any)=>{values[field.id]=editableAnalyticsValue(row,field)})
     setEditResponse({row,values})
   }
   async function saveEditedAnalyticsRow(fields:any[]){
@@ -2981,6 +3016,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
       const referralIds=["referral","referral_source","referral_route"]
       fields.forEach((field:any)=>{
+        if(field.readOnly)return
         if(field.type==="file")return
         const answer=parseEditedAnalyticsValue(field,editResponse.values[field.id]||"")
         upsertFormAnswer(field,answer)
@@ -3420,7 +3456,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   },[view,loadedId])
   React.useEffect(()=>{setSelectedAnalyticsRowIds([])},[loadedId,analyticsResponseScope])
   function exportAnalyticsCsv(srcRows:any[]=analyticsRows,fileSuffix="responses"){
-    const fields=getAnalyticsFields()
+    const fields=getAnalyticsFields({includeConsentFields:true,rows:srcRows})
     const headers=["날짜","시간",...fields.map(f=>f.label)]
     const csvEscape=(v:any)=>`"${String(v??"").replace(/"/g,'""')}"`
     const lines=[headers.map(csvEscape).join(",")]
@@ -6307,6 +6343,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
     }).filter(Boolean) as any[]
     const responseRows=analyticsResponseScope==="draft"?draftResponseRows:rows
+    const responseFields=getAnalyticsFields({includeConsentFields:true,rows:responseRows})
     const responseRowIds=responseRows.map((row:any)=>analyticsRowKey(row))
     const selectedResponseRows=responseRows.filter((row:any)=>selectedAnalyticsRowIds.includes(analyticsRowKey(row)))
     const canDeleteSelectedResponses=selectedResponseRows.length>0&&!analyticsSelectedDeleteBusy
@@ -6318,7 +6355,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const toggleResponseRow=(id:string)=>setSelectedAnalyticsRowIds(prev=>prev.includes(id)?prev.filter(item=>item!==id):[...prev,id])
     const isResizableAnalyticsField=(field:any)=>field.type==="text"||field.type==="textarea"
     const analyticsDefaultColumnWidth=(field:any,fileCount=0)=>isResizableAnalyticsField(field)?440:fileCount?260:220
-    const analyticsColumnMeta=fields.map((field:any)=>{
+    const analyticsColumnMeta=responseFields.map((field:any)=>{
       const fileCount=analyticsFieldFiles(responseRows,field).length
       const resizable=isResizableAnalyticsField(field)
       const width=Math.max(resizable?300:analyticsDefaultColumnWidth(field,fileCount),analyticsColumnWidths[field.id]||analyticsDefaultColumnWidth(field,fileCount))
@@ -7102,15 +7139,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	              <button onClick={()=>!editResponseSaving&&setEditResponse(null)} disabled={editResponseSaving} style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,cursor:editResponseSaving?"not-allowed":"pointer",fontSize:18,lineHeight:1}}>×</button>
 	            </div>
 	            <div style={{padding:18,overflow:"auto",display:"grid",gridTemplateColumns:width<900?"1fr":"1fr 1fr",gap:14}}>
-	              {fields.map((field:any)=>{
+	              {responseFields.map((field:any)=>{
 	                const fileItems=analyticsFileItems(analyticsRawAnswer(editResponse.row,field))
 	                const isFile=field.type==="file"
 	                return <div key={field.id} style={{gridColumn:field.type==="textarea"||isFile?"1 / -1":undefined}}>
 	                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:7}}>
 	                    <label style={{fontSize:12.5,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{field.label}</label>
-	                    <span style={{fontSize:11,color:A.t3,flexShrink:0}}>{fieldTypeName(field.type)}</span>
+	                    <span style={{fontSize:11,color:A.t3,flexShrink:0}}>{field.consentField?"동의":fieldTypeName(field.type)}</span>
 	                  </div>
-	                  {isFile
+	                  {field.readOnly
+	                    ? <div style={{minHeight:42,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,padding:"10px 11px",fontSize:12.5,color:A.t1,lineHeight:1.55}}>
+	                        {editResponse.values[field.id]||editableAnalyticsValue(editResponse.row,field)||"없음"}
+	                        <div style={{fontSize:11.5,color:A.t3,marginTop:5}}>동의 항목은 제출 당시 기록을 표시합니다.</div>
+	                      </div>
+	                    : isFile
 	                    ? <div style={{minHeight:42,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,padding:"10px 11px",fontSize:12.5,color:A.t2,lineHeight:1.55}}>
 	                        {fileItems.length?fileItems.map((file:any,i:number)=><button key={i} onClick={()=>file.url&&setFilePreview(file)} style={{display:"block",border:"none",background:"transparent",padding:0,margin:"0 0 4px",color:file.url?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:file.url?"pointer":"default",textAlign:"left" as const}}>{file.name}</button>):"첨부파일 없음"}
 	                        <div style={{fontSize:11.5,color:A.t3,marginTop:5}}>첨부파일은 이 화면에서 교체하지 않고, 응답 내용만 수정됩니다.</div>
@@ -7125,7 +7167,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	              <div style={{fontSize:12,color:A.t3,lineHeight:1.5}}>저장하면 응답별 데이터, 질문별 인사이트, CSV 다운로드에 바로 반영됩니다.</div>
 	              <div style={{display:"flex",gap:8,flexShrink:0}}>
 	                <button onClick={()=>setEditResponse(null)} disabled={editResponseSaving} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:editResponseSaving?"not-allowed":"pointer"}}>취소</button>
-	                <button onClick={()=>saveEditedAnalyticsRow(fields)} disabled={editResponseSaving} style={{height:38,padding:"0 15px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:editResponseSaving?"wait":"pointer"}}>{editResponseSaving?"저장 중...":"저장"}</button>
+	                <button onClick={()=>saveEditedAnalyticsRow(responseFields)} disabled={editResponseSaving} style={{height:38,padding:"0 15px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:editResponseSaving?"wait":"pointer"}}>{editResponseSaving?"저장 중...":"저장"}</button>
 	              </div>
 	            </div>
 	          </div>
