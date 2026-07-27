@@ -2869,24 +2869,32 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     return ""
   }
 
-  function isMarketingConsentConfig(consent:any){
-    const consentType=consent?.consentType||consentTypeFromTitle(consent?.title)
-    const text=`${consent?.title||""} ${consent?.checkLabel||""}`
-    return consentType==="marketing_consent"||text.includes("마케팅")
+  function consentConfigAnswerKey(consent:any,index:number){
+    const consentType=String(consent?.consentType||"")
+    const title=String(consent?.title||"")
+    const inferredType=consentTypeFromTitle(title)
+    const isPrivacy=consentType==="privacy_consent"||inferredType==="privacy_consent"||title==="개인정보 수집 및 이용동의"
+    const isMarketing=consentType==="marketing_consent"||inferredType==="marketing_consent"||title.includes("마케팅")
+    return consentType||(isPrivacy?"privacy_consent":isMarketing?"marketing_consent":`consent_${index}`)
   }
-  function isMarketingConsentAnswerItem(item:any){
+  function isConsentAnswerItem(item:any){
     const answerKey=String(item?.answerKey||"")
     const question=String(item?.question||"")
-    return answerKey==="marketing_consent"||consentTypeFromTitle(question)==="marketing_consent"||question.includes("마케팅")
+    const knownConsentKeys=new Set(CONSENT_TYPES.flatMap(type=>[type.key,type.answerKey]))
+    return knownConsentKeys.has(answerKey)||/^consent_\d+$/.test(answerKey)||!!consentTypeFromTitle(question)||question.includes("동의")||question.includes("약관")||question.includes("처리방침")
   }
   function normalizeConsentAnswer(value:any){
     if(value===true||String(value).toLowerCase()==="true")return"동의"
     if(value===false||String(value).toLowerCase()==="false")return"미동의"
     return value
   }
+  function consentVirtualFieldId(answerKey:string,label:string){
+    const safe=String(answerKey||label||"custom").replace(/[^A-Za-z0-9_-]+/g,"_").replace(/^_+|_+$/g,"").slice(0,60)
+    return `__consent_${safe||"custom"}`
+  }
   function getAnalyticsFields(options?:{includeConsentFields?:boolean;rows?:any[]}){
     const raw:any[] = isKdt ? (cfg.kdtFields||[]) : (cfg.form.fields||[])
-    const fields=raw.filter(f=>!isDisplayOnlyFieldType(f.type)).map(f=>({
+    const fields:any[]=raw.filter(f=>!isDisplayOnlyFieldType(f.type)).map(f=>({
       id:f.id,
       label:f.label||f.id,
       type:f.type,
@@ -2895,30 +2903,61 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     }))
     if(!options?.includeConsentFields)return fields
     const existingIds=new Set(fields.flatMap((field:any)=>[String(field.id||""),String(field.answerKey||"")].filter(Boolean)))
-    if(existingIds.has("marketing_consent"))return fields
-    const marketingConsent=(Array.isArray(cfg.consents)?cfg.consents:[]).find((consent:any)=>consent?.enabled&&isMarketingConsentConfig(consent))
-    const rowMarketingAnswer=(options.rows||[]).flatMap((row:any)=>Array.isArray(row?.form_data)?row.form_data:[]).find(isMarketingConsentAnswerItem)
-    if(!marketingConsent&&!rowMarketingAnswer)return fields
-    return [...fields,{
-      id:"__marketing_consent",
-      answerKey:"marketing_consent",
-      label:marketingConsent?.title||rowMarketingAnswer?.question||"마케팅 정보 수신 동의",
-      type:"consent",
-      page:9999,
-      opts:[{label:"동의",value:"동의"},{label:"미동의",value:"미동의"}],
-      readOnly:true,
-      consentField:true,
-    }]
+    const consentFields:any[]=[]
+    const usedAnswerKeys=new Set<string>()
+    const usedLabels=new Set<string>()
+    const addConsentField=(label:string,answerKeys:any[])=>{
+      const keys=Array.from(new Set(answerKeys.map(key=>String(key||"")).filter(Boolean)))
+      if(keys.some(key=>existingIds.has(key)||usedAnswerKeys.has(key)))return
+      const cleanLabel=String(label||"동의 항목").trim()||"동의 항목"
+      if(!keys.length&&usedLabels.has(cleanLabel))return
+      keys.forEach(key=>usedAnswerKeys.add(key))
+      usedLabels.add(cleanLabel)
+      const baseId=consentVirtualFieldId(keys[0]||"",cleanLabel)
+      let id=baseId
+      let suffix=2
+      while(existingIds.has(id)||consentFields.some(field=>field.id===id)){
+        id=`${baseId}_${suffix}`
+        suffix+=1
+      }
+      consentFields.push({
+        id,
+        answerKey:keys[0]||id,
+        answerKeys:keys,
+        label:cleanLabel,
+        type:"consent",
+        page:9999,
+        opts:[{label:"동의",value:"동의"},{label:"미동의",value:"미동의"}],
+        readOnly:true,
+        consentField:true,
+      })
+    }
+    ;(Array.isArray(cfg.consents)?cfg.consents:[]).forEach((consent:any,index:number)=>{
+      if(!consent?.enabled)return
+      const type=String(consent?.consentType||consentTypeFromTitle(consent?.title)||"")
+      const known=CONSENT_TYPES.find(item=>item.key===type)
+      addConsentField(consent.title||consent.checkLabel||known?.label||`동의 항목 ${index+1}`,[consentConfigAnswerKey(consent,index),type,known?.answerKey,`consent_${index}`])
+    })
+    ;(options.rows||[]).forEach((row:any)=>{
+      ;(Array.isArray(row?.form_data)?row.form_data:[]).forEach((item:any)=>{
+        if(!isConsentAnswerItem(item))return
+        const question=String(item?.question||"")
+        const type=consentTypeFromTitle(question)
+        const known=CONSENT_TYPES.find(consent=>consent.key===type)
+        addConsentField(question||known?.label||String(item?.answerKey||"동의 항목"),[item?.answerKey,type,known?.answerKey])
+      })
+    })
+    return consentFields.length?[...fields,...consentFields]:fields
   }
   function analyticsRawAnswer(row:any,field:any){
-    const answerKey=String(field.answerKey||field.id||"")
+    const answerKeys=Array.from(new Set([field.answerKey,field.id,...(Array.isArray(field.answerKeys)?field.answerKeys:[])].map(key=>String(key||"")).filter(Boolean)))
     const normalize=(value:any)=>field.consentField?normalizeConsentAnswer(value):value
     const direct=row[field.id]
     if(direct!==undefined&&direct!==null&&direct!=="")return normalize(direct)
-    const directByAnswerKey=answerKey?row[answerKey]:undefined
+    const directByAnswerKey=answerKeys.map(key=>row[key]).find(value=>value!==undefined&&value!==null&&value!=="")
     if(directByAnswerKey!==undefined&&directByAnswerKey!==null&&directByAnswerKey!=="")return normalize(directByAnswerKey)
     const fd=Array.isArray(row.form_data)?row.form_data:[]
-    const hit=fd.find((x:any)=>x.answerKey===answerKey)||fd.find((x:any)=>x.answerKey===field.id)||fd.find((x:any)=>(x.question||"")===field.label)
+    const hit=fd.find((x:any)=>answerKeys.includes(String(x.answerKey||"")))||fd.find((x:any)=>(x.question||"")===field.label)
     return normalize(hit?.answer)
   }
   function analyticsFieldOpts(field:any){
