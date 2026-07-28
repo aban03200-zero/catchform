@@ -179,6 +179,8 @@ function dateBirthYearLimitError(field:any,value:any){
 }
 const CATCHFORM_DIRECT_FORM_BASE_URL = "https://catchform.vercel.app/form"
 const FORM_SUMMARY_SELECT = "id,name,slug,updated_at,brand,config_brand:config->>brand,header_title:config->header->>title,program_id:config->header->>programId,recruitment_period_mode:config->header->>recruitmentPeriodMode,form_type:config->>formType,dashboard_meta:config->dashboard"
+const FULL_FORM_PREFETCH_LIMIT = 8
+const FULL_FORM_PREFETCH_CONCURRENCY = 2
 const DEFAULT_GOOGLE_SHEETS = {enabled:false,mode:"existing" as const,accountEmail:"",sheetUrl:"",sheetName:"",webhookUrl:"",lastSyncStatus:"idle" as const,lastSyncAt:"",lastSyncMessage:""}
 const DEFAULT_FORM_AD:FormAdConfig = {
   enabled:false,
@@ -1703,6 +1705,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [saveName,setSaveName]=React.useState("")
   const [ctxMenu,setCtxMenu]=React.useState<{x:number;y:number;item:any;source?:string}|null>(null)
   const fullFormCache=React.useRef<Record<string,{updatedAt?:string;data:any}>>({})
+  const fullFormRequests=React.useRef<Record<string,Promise<any>>>({})
+  const fullFormPrefetchQueue=React.useRef<any[]>([])
+  const fullFormPrefetchActive=React.useRef(0)
   const [saveSlug,setSaveSlug]=React.useState("")
   const [saveErr,setSaveErr]=React.useState("")
   const [showUpdateModal,setShowUpdateModal]=React.useState(false)
@@ -1910,16 +1915,46 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(!supa||!item?.id)throw new Error("폼 정보를 불러올 수 없어요.")
     const cached=fullFormCache.current[item.id]
     if(cached&&(!item.updated_at||cached.updatedAt===item.updated_at))return cached.data
-    const{data,error}=await supa.from("form_configs").select("config,slug,name,brand").eq("id",item.id).single()
-    if(error)throw error
-    fullFormCache.current[item.id]={updatedAt:item.updated_at,data}
-    return data
+    if(fullFormRequests.current[item.id])return fullFormRequests.current[item.id]
+    const request=supa.from("form_configs").select("config,slug,name,brand").eq("id",item.id).single()
+      .then(({data,error}:any)=>{
+        if(error)throw error
+        fullFormCache.current[item.id]={updatedAt:item.updated_at,data}
+        return data
+      })
+      .finally(()=>{delete fullFormRequests.current[item.id]})
+    fullFormRequests.current[item.id]=request
+    return request
   }
-  function prefetchFullFormRow(item:any){
-    if(!supa||!item?.id)return
-    if(fullFormCache.current[item.id])return
-    supa.from("form_configs").select("config,slug,name,brand").eq("id",item.id).single()
-      .then(({data,error})=>{if(!error&&data)fullFormCache.current[item.id]={updatedAt:item.updated_at,data}})
+  function hasFreshFullFormRow(item:any){
+    if(item?.config&&!item.__summary&&(item.config.form||item.config.kdtFields))return true
+    if(!item?.id)return false
+    const cached=fullFormCache.current[item.id]
+    return !!cached&&(!item.updated_at||cached.updatedAt===item.updated_at)
+  }
+  function drainFullFormPrefetchQueue(){
+    if(!supa)return
+    while(fullFormPrefetchActive.current<FULL_FORM_PREFETCH_CONCURRENCY&&fullFormPrefetchQueue.current.length){
+      const next=fullFormPrefetchQueue.current.shift()
+      if(!next?.id||hasFreshFullFormRow(next)||fullFormRequests.current[next.id])continue
+      fullFormPrefetchActive.current+=1
+      getFullFormRow(next).catch(()=>{}).finally(()=>{
+        fullFormPrefetchActive.current=Math.max(0,fullFormPrefetchActive.current-1)
+        drainFullFormPrefetchQueue()
+      })
+    }
+  }
+  function prefetchFullFormRow(item:any,priority=true){
+    if(!supa||!item?.id||hasFreshFullFormRow(item)||fullFormRequests.current[item.id])return
+    const queue=fullFormPrefetchQueue.current
+    const existing=queue.findIndex((queued:any)=>queued?.id===item.id)
+    if(existing>=0)queue.splice(existing,1)
+    if(priority)queue.unshift(item)
+    else queue.push(item)
+    drainFullFormPrefetchQueue()
+  }
+  function prefetchFullFormRows(items:any[],limit=FULL_FORM_PREFETCH_LIMIT){
+    items.slice(0,limit).forEach(item=>prefetchFullFormRow(item,false))
   }
   async function loadProgramCatalog(sb:any=supa,opts:{silent?:boolean}={}){
     if(!sb)return
@@ -2083,8 +2118,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       setIoList(active.filter((x:any)=>(x.config?.brand||x.brand)==="INSIDEOUT"))
       setSfacList(active.filter((x:any)=>(x.config?.brand||x.brand)==="SFACSPACE"))
       setSaved(active)
-      loadDashboardResponseCounts(sb,active)
-      const warm=()=>active.slice(0,16).forEach((item:any)=>prefetchFullFormRow(item))
+      const warm=()=>{loadDashboardResponseCounts(sb,active);prefetchFullFormRows(active)}
       if(typeof window!=="undefined"&&"requestIdleCallback" in window)(window as any).requestIdleCallback(warm,{timeout:1200})
       else setTimeout(warm,350)
     } catch(e){if(!silent)showToast((e as any)?.message||"폼 목록을 불러오지 못했어요.",false)}
@@ -2117,8 +2151,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       setSnList(prev=>mergeFormRows(prev,active.filter((x:any)=>(x.config?.brand||x.brand)==="SNIPERFACTORY")))
       setIoList(prev=>mergeFormRows(prev,active.filter((x:any)=>(x.config?.brand||x.brand)==="INSIDEOUT")))
       setSfacList(prev=>mergeFormRows(prev,active.filter((x:any)=>(x.config?.brand||x.brand)==="SFACSPACE")))
-      loadDashboardResponseCounts(supa,active,true)
-      const warm=()=>active.slice(0,8).forEach((item:any)=>prefetchFullFormRow(item))
+      const warm=()=>{loadDashboardResponseCounts(supa,active,true);prefetchFullFormRows(active,4)}
       if(typeof window!=="undefined"&&"requestIdleCallback" in window)(window as any).requestIdleCallback(warm,{timeout:1200})
       else setTimeout(warm,350)
     }catch(e){showToast((e as any)?.message||"추가 폼 목록을 불러오지 못했어요.",false)}
@@ -2194,7 +2227,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     finally{setActionLoading("")}
   }
   async function openFormForEdit(item:any){
-    setActionLoading("폼을 불러오는 중이에요.")
+    const shouldBlock=!hasFreshFullFormRow(item)
+    if(shouldBlock)setActionLoading("폼을 불러오는 중이에요.")
     try{
       const full=await getFullFormRow(item)
       const merged=mergeCfg(full.config||{})
@@ -2209,7 +2243,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       setSec("header");setPvTab("form")
       setView("builder")
     } catch(e){showToast("폼 불러오기 실패",false)}
-    finally{setActionLoading("")}
+    finally{if(shouldBlock)setActionLoading("")}
   }
   function requestOpenFormForEdit(item:any){
     const passwordHash=item.config?.dashboard?.editPasswordHash||""
@@ -2224,8 +2258,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(!editPasswordPrompt.password){setEditPasswordPrompt(prev=>prev&&({...prev,error:"비밀번호를 입력해주세요."}));return}
     setEditPasswordPrompt(prev=>prev&&({...prev,checking:true,error:""}))
     try{
-      const full=await getFullFormRow(editPasswordPrompt.item)
-      const expected=full.config?.dashboard?.editPasswordHash||""
+      const summaryHash=editPasswordPrompt.item.config?.dashboard?.editPasswordHash||""
+      const expected=summaryHash||((await getFullFormRow(editPasswordPrompt.item)).config?.dashboard?.editPasswordHash||"")
       if(expected&&await sha256Text(editPasswordPrompt.password)!==expected){
         setEditPasswordPrompt(prev=>prev&&({...prev,checking:false,error:"비밀번호가 맞지 않아요."}))
         return
@@ -2572,16 +2606,18 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   async function loadCfgById(id:string,name:string,item?:any){
     if(!supa)return
-    setActionLoading("폼을 불러오는 중이에요.")
+    const target=item||{id,name}
+    const shouldBlock=!hasFreshFullFormRow(target)
+    if(shouldBlock)setActionLoading("폼을 불러오는 중이에요.")
     try{
-      const full=await getFullFormRow(item||{id,name})
+      const full=await getFullFormRow(target)
       const merged=mergeCfg(full.config)
       setCfg(merged)
       setLoadedId(id);setLoadedName(name)
       if(full.slug)setSavedSlug(full.slug)
       resetQrEditorState(merged)
       showToast(`"${name}" 불러옴`)
-    } finally{setActionLoading("")}
+    } finally{if(shouldBlock)setActionLoading("")}
   }
   async function confirmEditPasswordForDelete(passwordHash:string,name:string){
     if(!passwordHash)return true
@@ -4010,7 +4046,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       <div style={{display:"flex",justifyContent:"flex-end",gap:4}}>
                         <button onClick={()=>openFormAnalytics(item)} title="응답 및 분석" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg></button>
                         <button onClick={()=>openDashboardSettings(item)} title="폼 설정" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><GearIcon size={15}/></button>
-                        <button onClick={()=>requestOpenFormForEdit(item)} title="편집" style={{height:30,padding:"0 9px",borderRadius:6,border:`1px solid ${A.border}`,background:A.card,color:A.t1,cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:600}}>편집</button>
+                        <button onPointerDown={()=>prefetchFullFormRow(item,true)} onFocus={()=>prefetchFullFormRow(item,true)} onClick={()=>requestOpenFormForEdit(item)} title="편집" style={{height:30,padding:"0 9px",borderRadius:6,border:`1px solid ${A.border}`,background:A.card,color:A.t1,cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:600}}>편집</button>
                       </div>
                     </div>
                   })}
@@ -7344,7 +7380,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {(()=>{const filteredSaved=saved.filter((item:any)=>(item.config?.brand||item.brand)===currentBrand).slice(0,20);return filteredSaved.length===0
               ?<div style={{fontSize:12,color:A.t3,padding:"6px 4px",lineHeight:1.5}}>{supa?"저장된 폼 없음":"Supabase 연결 필요"}</div>
               :filteredSaved.map((item:any)=>(
-	                <div key={item.id} onClick={()=>loadCfgById(item.id,item.name,item)}
+	                <div key={item.id} onPointerDown={()=>prefetchFullFormRow(item,true)} onClick={()=>loadCfgById(item.id,item.name,item)}
 	                  onContextMenu={e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,item})}}
 	                  style={{display:"flex",alignItems:"center",gap:6,padding:"7px 8px",borderRadius:A.r,border:`1px solid transparent`,marginBottom:2,cursor:"pointer",transition:"all .1s",background:loadedId===item.id?A.blue2:"transparent",borderColor:loadedId===item.id?A.blue+"44":"transparent"}}
 	                  onMouseEnter={e=>{prefetchFullFormRow(item);if(loadedId!==item.id){(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.borderColor=A.border}}}
