@@ -1778,6 +1778,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [pvShowModal,setPvShowModal]=React.useState(false)
   const [pvDd,setPvDd]=React.useState(false)
   const [pvPage,setPvPage]=React.useState(1)
+  const [pvPageHistory,setPvPageHistory]=React.useState<number[]>([])
   const [rightPanelW,setRightPanelW]=React.useState(320)
   const isResizingRef=React.useRef(false)
   const [pvFieldVals,setPvFieldVals]=React.useState<Record<string,string>>({})
@@ -2531,6 +2532,49 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   function getPageLabel(p:number):string{
     if(isKdt){const kdtDef=["기본 정보","상세 정보","자격 요건 및 동의"];return(cfg.form.pageLabels||[])[p-1]||kdtDef[p-1]||`섹션${p}`}
     return(cfg.form.pageLabels||[])[p-1]||`섹션${p}`
+  }
+  function previewFieldOptions(field:any):Opt[]{
+    const raw=(field.opts&&field.opts.length)?field.opts:(field.options||[])
+    return raw.map((opt:any)=>{
+      const label=String(opt?.label??opt?.value??opt)
+      const value=String(opt?.value??opt?.label??opt)
+      const key=value.trim().toLowerCase()
+      return {...(typeof opt==="object"?opt:{}),label,value,isEtc:!!opt?.isEtc||label.trim()==="기타"||value.trim()==="기타"||key==="etc"||key==="other"}
+    })
+  }
+  function previewBranchTarget(){
+    if(isKdt)return 0
+    const fields=(cfg.form.fields||[]).filter((field:any)=>(field.page||1)===pvPage)
+    for(const field of fields){
+      if(field.type!=="button_select"&&field.type!=="dropdown")continue
+      const selectedValue=pvFieldVals[field.id]||""
+      if(!selectedValue)continue
+      const selectedOpt=previewFieldOptions(field).find(opt=>opt.value===selectedValue)
+      const target=Number(selectedOpt?.nextPage)
+      if(Number.isFinite(target))return target
+    }
+    return 0
+  }
+  function pushPreviewPage(nextPage:number){
+    const target=Math.min(formPages,Math.max(1,nextPage))
+    if(target===pvPage)return
+    setPvPageHistory(prev=>[...prev,pvPage])
+    setPvPage(target)
+  }
+  function goPreviewPrevious(){
+    const last=pvPageHistory[pvPageHistory.length-1]
+    if(Number.isFinite(last)&&last>=1&&last<=formPages){
+      setPvPageHistory(prev=>prev.slice(0,-1))
+      setPvPage(last)
+      return
+    }
+    setPvPage(p=>Math.max(1,p-1))
+  }
+  function goPreviewNext(){
+    const branchTarget=previewBranchTarget()
+    if(branchTarget===9999){setPvShowModal(true);return}
+    const target=branchTarget>=1&&branchTarget<=formPages&&branchTarget!==pvPage?branchTarget:pvPage+1
+    pushPreviewPage(target)
   }
   function pageLabelFromConfig(source:Cfg,p:number):string{
     const kdt=source.formType==="kdt"&&!!source.kdtFields
@@ -6067,7 +6111,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               return <div>
               <div style={{display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:optionGridGap}}>
                 {opts.map((opt:any)=>{const s=opt.value===val;return(
-                  <button key={opt.value} onClick={()=>{setVal(s?"":opt.value);if(!s&&opt.nextPage){if(opt.nextPage===9999){setTimeout(()=>setPvShowModal(true),300)}else{setTimeout(()=>setPvPage(opt.nextPage),300)}}}}
+                  <button key={opt.value} onClick={()=>setVal(s?"":opt.value)}
                     style={{padding:seniorMode?"12px 10px":"10px 8px",borderRadius:fr2,border:`1px solid ${s?accentC:FC.fieldBorder}`,background:s?accentC+"14":"transparent",color:s?accentC:FC.t2,fontFamily:FONT,fontSize:fs(13),cursor:"pointer",fontWeight:s?600:400,transition:"all .12s",textAlign:"center" as const,whiteSpace:"pre-wrap" as const,wordBreak:"keep-all" as const}}>
                     {opt.label}
                   </button>
@@ -6115,10 +6159,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         {previewConsentPosition==="end"&&previewPageShowsConsents&&renderPreviewConsents()}
         {/* CTA — first: next only, middle: prev+next, last: submit */}
         <div style={{display:"flex",gap:10}}>
-          {isMultiPage&&pvPage>1&&<button onClick={()=>setPvPage(p=>p-1)}
+          {isMultiPage&&pvPage>1&&<button onClick={goPreviewPrevious}
             style={{flex:1,height:seniorFieldHeight(seniorMode,cfg.cta.height),borderRadius:fr2,border:"none",background:FC.fieldBg||"#F2F4F6",color:FC.t2,fontFamily:FONT,fontSize:fs(14),fontWeight:600,cursor:"pointer"}}>이전</button>}
           {isMultiPage&&pvPage<formPages
-            ?<button onClick={()=>setPvPage(p=>p+1)}
+            ?<button onClick={goPreviewNext}
                 style={{flex:2,height:seniorFieldHeight(seniorMode,cfg.cta.height),borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color,fontFamily:FONT,fontSize:fs(14),fontWeight:600,cursor:"pointer"}}>다음</button>
             :<button style={{flex:2,height:seniorFieldHeight(seniorMode,cfg.cta.height),borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color,fontFamily:FONT,fontSize:fs(14),fontWeight:600,cursor:"pointer"}}>{cfg.cta.label}</button>}
         </div>

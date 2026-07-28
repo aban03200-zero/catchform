@@ -672,6 +672,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
     // State
     const [page, setPage] = React.useState(1)
+    const [pageHistory, setPageHistory] = React.useState<number[]>([])
     const [vals, setVals] = React.useState<Record<string, string>>({})
     const [checked, setChecked] = React.useState<Record<string, string[]>>({})
     const [errors, setErrors] = React.useState<Record<string, string>>({})
@@ -1338,6 +1339,42 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             const isEtc = !!o?.isEtc || label.trim() === "기타" || value.trim() === "기타" || key === "etc" || key === "other"
             return { ...(typeof o === "object" ? o : {}), label, value, isEtc }
         })
+    }
+    const selectedBranchTarget = () => {
+        for (const field of currentFields as any[]) {
+            if (field.type !== "button_select" && field.type !== "dropdown") continue
+            const selectedValue = vals[field.id] || ""
+            if (!selectedValue) continue
+            const selectedOpt = getFieldOpts(field).find(opt => opt.value === selectedValue)
+            const target = Number(selectedOpt?.nextPage)
+            if (Number.isFinite(target)) return target
+        }
+        return 0
+    }
+    const pushPage = (nextPage: number) => {
+        const target = Math.min(formPages, Math.max(1, nextPage))
+        if (target === page) return
+        setPageHistory(prev => [...prev, page])
+        setPage(target)
+    }
+    const goPreviousPage = () => {
+        const last = pageHistory[pageHistory.length - 1]
+        if (Number.isFinite(last) && last >= 1 && last <= formPages) {
+            setPageHistory(prev => prev.slice(0, -1))
+            setPage(last)
+            return
+        }
+        setPage(p => Math.max(1, p - 1))
+    }
+    const goNextPage = () => {
+        if (formDisabled) { setShowOperationModal(true); return }
+        if (!validateCurrentPage()) return
+        const branchTarget = selectedBranchTarget()
+        if (branchTarget === 9999) { handleSubmit(); return }
+        const target = branchTarget >= 1 && branchTarget <= formPages && branchTarget !== page ? branchTarget : page + 1
+        persistLocalDraft(target)
+        saveRemoteDraft(false, target)
+        pushPage(target)
     }
 
     const getFieldAnswer = (field: any): any => {
@@ -2035,10 +2072,6 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                                 trackFieldTouch(f)
                                 setVal(f.id, s ? "" : opt.value)
                                 clearErr(f.id)
-                                if (!s && opt.nextPage) {
-                                    if (opt.nextPage === 9999) setTimeout(() => { setShareCopied(false); setShowModal(true) }, 300)
-                                    else setTimeout(() => setPage(opt.nextPage!), 300)
-                                }
                             }} style={{ padding: seniorMode ? "12px 10px" : "10px 8px", borderRadius: fr, border: `1px solid ${s ? accentBg : FC.fieldBorder}`, background: s ? accentBg + "14" : "transparent", color: s ? accentText : FC.t2, fontFamily: FONT, fontSize: fs(13), cursor: "pointer", fontWeight: s ? 600 : 400, textAlign: "center", whiteSpace: "pre-wrap", wordBreak: "keep-all" }}>
                                 {opt.label}
                             </button>
@@ -2295,11 +2328,11 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
             {/* Navigation buttons */}
             <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-                {isMultiPage && page > 1 && <button onClick={() => setPage(p => p - 1)} style={{ flex: 1, height: seniorFieldHeight(seniorMode, cfg.cta.height), borderRadius: fr, border: "none", background: FC.fieldBg || "#F2F4F6", color: FC.t2, fontFamily: FONT, fontSize: fs(14), fontWeight: 600, cursor: "pointer" }}>이전</button>}
+                {isMultiPage && page > 1 && <button onClick={goPreviousPage} style={{ flex: 1, height: seniorFieldHeight(seniorMode, cfg.cta.height), borderRadius: fr, border: "none", background: FC.fieldBg || "#F2F4F6", color: FC.t2, fontFamily: FONT, fontSize: fs(14), fontWeight: 600, cursor: "pointer" }}>이전</button>}
                 {isMultiPage && page < formPages
                     ? <button
                         disabled={!isPageComplete}
-                        onClick={() => { if (formDisabled) { setShowOperationModal(true); return } if (!validateCurrentPage()) return; persistLocalDraft(page + 1); saveRemoteDraft(false, page + 1); setPage(p => p + 1) }}
+                        onClick={goNextPage}
                         style={{ flex: 2, height: seniorFieldHeight(seniorMode, cfg.cta.height), borderRadius: fr, border: "none", background: !formDisabled && isPageComplete ? accentBg : accentBg + "55", color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: fs(14), fontWeight:600, cursor: !formDisabled && isPageComplete ? "pointer" : "not-allowed" }}>
                         다음
                       </button>
