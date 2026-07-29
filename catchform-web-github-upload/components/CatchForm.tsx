@@ -992,6 +992,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const shareButtonStyle: React.CSSProperties = { width: seniorMode ? "clamp(48px, 11vw, 64px)" : "clamp(42px, 10vw, 58px)", aspectRatio: "1 / 1", borderRadius: "50%", border: "none", background: "#F2F4F7", color: "#000", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontWeight:600, fontSize: fs(13), flexShrink: 0 }
     const modalShareButtons = { ...DEFAULT_MODAL_SHARE_BUTTONS, ...(cfg.modal.shareButtons || {}) }
     const showModalShareButtons = Object.values(modalShareButtons).some(Boolean)
+    const modalTitleMarginBottom = cfg.modal.body ? 8 : (showModalShareButtons ? 16 : 28)
+    const modalBodyMarginBottom = showModalShareButtons ? 16 : 28
     const shareMenuButtonStyle: React.CSSProperties = { width: "100%", height: seniorMode ? 44 : 38, border: "none", background: "transparent", color: FC.t1, display: "flex", alignItems: "center", gap: 10, padding: "0 10px", borderRadius: 10, cursor: "pointer", fontFamily: FONT, fontSize: fs(13), fontWeight:600, textAlign: "left" as const }
     const ShareIcon = ({type,size=18}:{type:"kakao"|"instagram"|"threads"|"x"|"link";size?:number}) => {
         if(type==="kakao")return <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
@@ -2385,8 +2387,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     <div style={{ width: 48, height: 48, borderRadius: "50%", background: accentBg + "22", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke={accentBg} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </div>
-                    <div style={{ fontSize: fs(18), fontWeight:600, color: FC.t1, marginBottom: 8, letterSpacing: seniorMode ? 0 : "-0.3px" }}>{cfg.modal.title}</div>
-                    {cfg.modal.body && <div style={{ fontSize: fs(13.5), color: FC.t2, lineHeight: 1.6, marginBottom: 16 }}>{cfg.modal.body}</div>}
+                    <div style={{ fontSize: fs(18), fontWeight:600, color: FC.t1, marginBottom: modalTitleMarginBottom, letterSpacing: seniorMode ? 0 : "-0.3px" }}>{cfg.modal.title}</div>
+                    {cfg.modal.body && <div style={{ fontSize: fs(13.5), color: FC.t2, lineHeight: 1.6, marginBottom: modalBodyMarginBottom }}>{cfg.modal.body}</div>}
                     {showModalShareButtons && <div style={{ display: "flex", justifyContent: "center", gap: "clamp(8px, 2.2vw, 18px)", marginBottom: 22 }}>
                         {modalShareButtons.kakao && <button onClick={shareKakao} title="카카오톡 공유" style={shareButtonStyle}>
                             <ShareIcon type="kakao" size={28} />
