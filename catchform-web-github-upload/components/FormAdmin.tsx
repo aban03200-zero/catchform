@@ -1753,6 +1753,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [qrAnalyticsScope,setQrAnalyticsScope]=React.useState<"form"|"detail">("form")
   const [analyticsRows,setAnalyticsRows]=React.useState<any[]>([])
   const [selectedAnalyticsRowIds,setSelectedAnalyticsRowIds]=React.useState<string[]>([])
+  const [expandedDuplicateResponseGroups,setExpandedDuplicateResponseGroups]=React.useState<string[]>([])
   const [analyticsEvents,setAnalyticsEvents]=React.useState<any[]>([])
   const [analyticsTrashEvents,setAnalyticsTrashEvents]=React.useState<any[]>([])
   const [showAnalyticsTrash,setShowAnalyticsTrash]=React.useState(false)
@@ -3573,7 +3574,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   React.useEffect(()=>{
     if(view==="analytics")loadAnalytics()
   },[view,loadedId])
-  React.useEffect(()=>{setSelectedAnalyticsRowIds([])},[loadedId,analyticsResponseScope])
+  React.useEffect(()=>{
+    setSelectedAnalyticsRowIds([])
+    setExpandedDuplicateResponseGroups([])
+  },[loadedId,analyticsResponseScope])
   function exportAnalyticsCsv(srcRows:any[]=analyticsRows,fileSuffix="responses"){
     const fields=getAnalyticsFields({includeConsentFields:true,rows:srcRows})
     const headers=["날짜","시간",...fields.map(f=>f.label)]
@@ -6472,6 +6476,43 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       return Array.from(new Set([...prev,...responseRowIds]))
     })
     const toggleResponseRow=(id:string)=>setSelectedAnalyticsRowIds(prev=>prev.includes(id)?prev.filter(item=>item!==id):[...prev,id])
+    const duplicateLookupValue=(row:any,keys:string[],labels:string[])=>{
+      const direct=keys.map(key=>row?.[key]).find(value=>value!==undefined&&value!==null&&String(value).trim()!=="")
+      if(direct!==undefined&&direct!==null&&String(direct).trim()!=="")return String(direct)
+      const labelSet=new Set(labels.map(label=>label.replace(/\s+/g,"").toLowerCase()))
+      const fd=Array.isArray(row?.form_data)?row.form_data:[]
+      const hit=fd.find((item:any)=>keys.includes(String(item?.answerKey||"")))||fd.find((item:any)=>labelSet.has(String(item?.question||"").replace(/\s+/g,"").toLowerCase()))
+      const answer=hit?.answer
+      return answer===undefined||answer===null?"":Array.isArray(answer)?answer.join(" / "):String(answer)
+    }
+    const duplicateResponseKey=(row:any)=>{
+      if(analyticsResponseScope!=="submitted"||row?.__draft||row?.user_id)return""
+      const name=duplicateLookupValue(row,["name","applicant_name","manager_name","full_name"],["이름","성함","성명","지원자명","담당자명"]).replace(/\s+/g,"").trim().toLowerCase()
+      const phone=duplicateLookupValue(row,["phone","contact_phone","mobile","tel"],["전화번호","휴대폰번호","연락처","휴대폰"]).replace(/\D/g,"")
+      const email=duplicateLookupValue(row,["email","contact_email"],["이메일","메일","이메일주소"]).trim().toLowerCase()
+      return name&&phone&&email?`${name}::${phone}::${email}`:""
+    }
+    const responseRowGroups=(()=>{
+      const groups:any[]=[]
+      const byKey=new Map<string,any>()
+      responseRows.forEach((row:any)=>{
+        const duplicateKey=duplicateResponseKey(row)
+        if(!duplicateKey){
+          groups.push({key:analyticsRowKey(row),duplicateKey:"",rows:[row]})
+          return
+        }
+        const existing=byKey.get(duplicateKey)
+        if(existing)existing.rows.push(row)
+        else{
+          const group={key:`duplicate:${duplicateKey}`,duplicateKey,rows:[row]}
+          byKey.set(duplicateKey,group)
+          groups.push(group)
+        }
+      })
+      return groups
+    })()
+    const duplicateFoldedCount=responseRows.length-responseRowGroups.length
+    const toggleDuplicateResponseGroup=(key:string)=>setExpandedDuplicateResponseGroups(prev=>prev.includes(key)?prev.filter(item=>item!==key):[...prev,key])
     const isResizableAnalyticsField=(field:any)=>field.type==="text"||field.type==="textarea"
     const analyticsDefaultColumnWidth=(field:any,fileCount=0)=>isResizableAnalyticsField(field)?440:fileCount?260:220
     const analyticsColumnMeta=responseFields.map((field:any)=>{
@@ -6480,7 +6521,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const width=Math.max(resizable?300:analyticsDefaultColumnWidth(field,fileCount),analyticsColumnWidths[field.id]||analyticsDefaultColumnWidth(field,fileCount))
       return{field,fileCount,resizable,width}
     })
-    const analyticsTableMinWidth=Math.max(1100,308+analyticsColumnMeta.reduce((sum:number,item:any)=>sum+item.width,0))
+    const analyticsControlColumnWidth=150
+    const analyticsDateColumnWidth=190
+    const analyticsTableMinWidth=Math.max(1100,analyticsControlColumnWidth+analyticsDateColumnWidth+analyticsColumnMeta.reduce((sum:number,item:any)=>sum+item.width,0))
     const startAnalyticsColumnResize=(event:React.MouseEvent,field:any,currentWidth:number)=>{
       event.preventDefault()
       event.stopPropagation()
@@ -6860,6 +6903,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <div style={{display:"flex",alignItems:"center",gap:10}}>
                 <div style={{fontSize:22,fontWeight:600,color:A.t1}}>응답별 데이터</div>
                 <div style={{height:26,padding:"0 12px",borderRadius:999,background:A.card2,border:`1px solid ${A.border}`,color:A.t2,display:"flex",alignItems:"center",fontSize:12.5,fontWeight:600}}>{responseRows.length}개</div>
+                {duplicateFoldedCount>0&&<div style={{height:26,padding:"0 10px",borderRadius:999,background:A.blue2,border:`1px solid ${A.blue}33`,color:A.blue,display:"flex",alignItems:"center",fontSize:12,fontWeight:600}}>중복 {duplicateFoldedCount}개 접힘</div>}
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <button onClick={()=>exportAnalyticsCsv(selectedResponseRows,"selected-responses")} disabled={selectedResponseRows.length===0}
@@ -6881,10 +6925,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               </div>
             </div>
             {analyticsResponseScope==="draft"&&<div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,margin:"-5px 0 14px"}}>작성 중 데이터는 제출 완료 전 자동 저장된 임시 기록입니다. 파일 첨부 내용은 브라우저 보안상 제출 전에는 저장되지 않습니다.</div>}
+            {analyticsResponseScope==="submitted"&&duplicateFoldedCount>0&&<div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,margin:"-5px 0 14px"}}>로그인 없이 제출된 응답 중 이름·전화번호·이메일이 모두 같은 응답은 대표 1개로 묶었어요. `중복` 버튼을 누르면 같은 사람이 더 제출한 응답을 펼쳐볼 수 있습니다.</div>}
             {responseRows.length===0?emptyState(analyticsResponseScope==="draft"?"아직 작성 중인 응답이 없습니다.":"아직 제출 완료된 응답이 없습니다."):<div className="catchform-analytics-table-scroll" style={{flex:1,minHeight:0,background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,overflow:"auto",boxShadow:A.shadow}}>
               <style>{`.catchform-analytics-table-scroll::-webkit-scrollbar{height:7px;width:7px}.catchform-analytics-table-scroll::-webkit-scrollbar-thumb{background:${A.border2};border-radius:999px}.catchform-analytics-table-scroll::-webkit-scrollbar-track{background:transparent}`}</style>
               <table style={{borderCollapse:"collapse",minWidth:analyticsTableMinWidth,width:"100%",fontSize:13,tableLayout:"fixed" as const}}>
-                <thead><tr><th style={{position:"sticky" as const,top:0,zIndex:4,width:118,minWidth:118,padding:"13px 10px",textAlign:"center" as const,borderBottom:`1px solid ${A.border}`,color:A.t2,background:A.card2}}><label style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7,cursor:"pointer"}}><input type="checkbox" checked={allResponseRowsSelected} onChange={toggleAllResponseRows} style={{width:15,height:15,accentColor:A.blue,cursor:"pointer"}}/>전체</label></th><th style={{position:"sticky" as const,top:0,zIndex:4,width:190,minWidth:190,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t2,background:A.card2}}>날짜</th>{analyticsColumnMeta.map(({field:f,fileCount,resizable,width:colWidth}:any)=>{return <th key={f.id} style={{position:"sticky" as const,top:0,zIndex:4,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,width:colWidth,minWidth:colWidth,maxWidth:colWidth,background:A.card2}}>
+                <thead><tr><th style={{position:"sticky" as const,top:0,zIndex:4,width:analyticsControlColumnWidth,minWidth:analyticsControlColumnWidth,padding:"13px 10px",textAlign:"center" as const,borderBottom:`1px solid ${A.border}`,color:A.t2,background:A.card2}}><label style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7,cursor:"pointer"}}><input type="checkbox" checked={allResponseRowsSelected} onChange={toggleAllResponseRows} style={{width:15,height:15,accentColor:A.blue,cursor:"pointer"}}/>전체</label></th><th style={{position:"sticky" as const,top:0,zIndex:4,width:analyticsDateColumnWidth,minWidth:analyticsDateColumnWidth,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t2,background:A.card2}}>날짜</th>{analyticsColumnMeta.map(({field:f,fileCount,resizable,width:colWidth}:any)=>{return <th key={f.id} style={{position:"sticky" as const,top:0,zIndex:4,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,width:colWidth,minWidth:colWidth,maxWidth:colWidth,background:A.card2}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
                     <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{f.label}</span>
                     {fileCount>0&&<button onClick={()=>downloadAnalyticsFilesZip(f,responseRows)} title={`첨부파일 ${fileCount}개 일괄 다운로드`} style={{height:28,padding:"0 9px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,flexShrink:0,fontFamily:FONT,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const}}>
@@ -6896,13 +6941,45 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     </span>}
                   </div>
                 </th>})}</tr></thead>
-                <tbody>{responseRows.map(row=>{const dt=fmtAnalyticsDate(row.created_at);const rowKey=analyticsRowKey(row);const selected=selectedAnalyticsRowIds.includes(rowKey);return <tr key={rowKey} style={{background:selected?A.blue2:"transparent",verticalAlign:"top" as const}}><td style={{width:118,minWidth:118,padding:"13px 10px",borderBottom:`1px solid ${A.border}`,textAlign:"center" as const}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-                  <input type="checkbox" checked={selected} onChange={()=>toggleResponseRow(rowKey)} aria-label="응답 선택" style={{width:15,height:15,accentColor:A.blue,cursor:"pointer",flexShrink:0}}/>
-                  {!row.__draft&&<button onClick={()=>openEditAnalyticsRow(row)} title="응답 수정" style={{width:28,height:28,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 11.5V13h1.5L12 5.5 10.5 4 3 11.5zM9.8 4.7l1.5 1.5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
-                </div></td><td style={{width:190,minWidth:190,padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}><div style={{whiteSpace:"nowrap" as const,fontWeight:400}}>{dt[0]}</div><div style={{fontSize:12,color:A.t3,marginTop:4,whiteSpace:"nowrap" as const}}>{dt[1]}</div>{row.__draft&&<div style={{display:"inline-flex",alignItems:"center",height:20,padding:"0 7px",borderRadius:999,background:chartOrange+"16",color:chartOrange,fontSize:11,fontWeight:600,marginTop:7}}>작성 중 · 섹션 {row.__page}</div>}</td>{analyticsColumnMeta.map(({field:f,width:colWidth,resizable}:any)=>{
-                  const isLongText=f.type==="textarea"
-                  return <td key={f.id} style={{padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,verticalAlign:"top" as const,width:colWidth,minWidth:colWidth,maxWidth:colWidth}}><div style={{padding:"8px 10px",border:`1px solid ${A.border}`,borderRadius:A.r,background:A.card2,color:A.t1,fontWeight:400,width:"100%",maxWidth:resizable?Math.max(260,colWidth-32):360,minWidth:0,maxHeight:isLongText?180:undefined,overflowY:isLongText?"auto" as const:"visible" as const,boxSizing:"border-box" as const,whiteSpace:"normal" as const,wordBreak:"break-word" as const,overflowWrap:"anywhere" as const}}>{renderAnalyticsAnswer(row,f)}</div></td>
-                })}</tr>})}</tbody>
+                <tbody>{responseRowGroups.map((group:any)=>{
+                  const primary=group.rows[0]
+                  const duplicateRows=group.rows.slice(1)
+                  const isOpen=!!group.duplicateKey&&expandedDuplicateResponseGroups.includes(group.duplicateKey)
+                  const renderResponseRow=(row:any,opts:any={})=>{
+                    const dt=fmtAnalyticsDate(row.created_at)
+                    const rowKey=analyticsRowKey(row)
+                    const selected=selectedAnalyticsRowIds.includes(rowKey)
+                    const duplicateChild=!!opts.duplicateChild
+                    const duplicateCount=Number(opts.duplicateCount||0)
+                    const rowBg=selected?A.blue2:duplicateChild?A.card2:"transparent"
+                    return <tr key={opts.key||rowKey} style={{background:rowBg,verticalAlign:"top" as const}}>
+                      <td style={{width:analyticsControlColumnWidth,minWidth:analyticsControlColumnWidth,padding:"13px 10px",borderBottom:`1px solid ${A.border}`,textAlign:"center" as const}}>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,flexWrap:"wrap" as const}}>
+                          <input type="checkbox" checked={selected} onChange={()=>toggleResponseRow(rowKey)} aria-label="응답 선택" style={{width:15,height:15,accentColor:A.blue,cursor:"pointer",flexShrink:0}}/>
+                          {!row.__draft&&<button onClick={()=>openEditAnalyticsRow(row)} title="응답 수정" style={{width:28,height:28,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 11.5V13h1.5L12 5.5 10.5 4 3 11.5zM9.8 4.7l1.5 1.5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
+                          {duplicateCount>0&&<button onClick={()=>toggleDuplicateResponseGroup(group.duplicateKey)} title="중복 응답 펼치기" style={{height:26,padding:"0 8px",borderRadius:999,border:`1px solid ${A.blue}44`,background:isOpen?A.blue:A.blue2,color:isOpen?"#fff":A.blue,fontFamily:FONT,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>
+                            중복 {duplicateCount+1}
+                            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{transform:isOpen?"rotate(180deg)":"rotate(0deg)",transition:"transform .15s ease"}}><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          </button>}
+                          {duplicateChild&&<span style={{height:22,padding:"0 7px",borderRadius:999,background:A.card,border:`1px solid ${A.border}`,color:A.t3,fontSize:11,fontWeight:700}}>중복 {opts.duplicateIndex}/{opts.duplicateTotal}</span>}
+                        </div>
+                      </td>
+                      <td style={{width:analyticsDateColumnWidth,minWidth:analyticsDateColumnWidth,padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}>
+                        <div style={{whiteSpace:"nowrap" as const,fontWeight:400}}>{dt[0]}</div>
+                        <div style={{fontSize:12,color:A.t3,marginTop:4,whiteSpace:"nowrap" as const}}>{dt[1]}</div>
+                        {row.__draft&&<div style={{display:"inline-flex",alignItems:"center",height:20,padding:"0 7px",borderRadius:999,background:chartOrange+"16",color:chartOrange,fontSize:11,fontWeight:600,marginTop:7}}>작성 중 · 섹션 {row.__page}</div>}
+                      </td>
+                      {analyticsColumnMeta.map(({field:f,width:colWidth,resizable}:any)=>{
+                        const isLongText=f.type==="textarea"
+                        return <td key={f.id} style={{padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,verticalAlign:"top" as const,width:colWidth,minWidth:colWidth,maxWidth:colWidth}}><div style={{padding:"8px 10px",border:`1px solid ${A.border}`,borderRadius:A.r,background:duplicateChild?A.card:A.card2,color:A.t1,fontWeight:400,width:"100%",maxWidth:resizable?Math.max(260,colWidth-32):360,minWidth:0,maxHeight:isLongText?180:undefined,overflowY:isLongText?"auto" as const:"visible" as const,boxSizing:"border-box" as const,whiteSpace:"normal" as const,wordBreak:"break-word" as const,overflowWrap:"anywhere" as const}}>{renderAnalyticsAnswer(row,f)}</div></td>
+                      })}
+                    </tr>
+                  }
+                  return <React.Fragment key={group.key}>
+                    {renderResponseRow(primary,{duplicateCount:duplicateRows.length,key:`${group.key}:primary`})}
+                    {isOpen&&duplicateRows.map((row:any,idx:number)=>renderResponseRow(row,{duplicateChild:true,duplicateIndex:idx+2,duplicateTotal:group.rows.length,key:`${group.key}:duplicate:${analyticsRowKey(row)}`}))}
+                  </React.Fragment>
+                })}</tbody>
               </table>
             </div>}
           </div>}
