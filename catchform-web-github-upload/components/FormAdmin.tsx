@@ -23,6 +23,8 @@ type KdtFieldType = FieldType|"section_desc"
 type ConsentDocMode = "brand"|"custom"
 type KdtField = { id:string; label:string; type:KdtFieldType; required?:boolean; page?:number; options?:string[]; placeholder?:string; desc?:string; [key:string]:any }
 type AdMode = "image"|"split"
+type ModalShareKey = "kakao"|"instagram"|"threads"|"x"|"link"
+type ModalShareButtons = Record<ModalShareKey,boolean>
 type FieldType = "text"|"name"|"phone"|"email"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"|"ad"
 type HelperItem = { text:string; callout?:boolean }
 type FormField = { id:string; type:FieldType; label:string; placeholder?:string; helper?:string; helpers?:HelperItem[]; required?:boolean; opts?:Opt[]; etcPh?:string; dupCheck?:boolean; page?:number; cols?:number; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMode?:AdMode; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string; birthYearLimitEnabled?:boolean; birthYearLimitYear?:number|string; birthYearLimitMessage?:string; birthDateRangeEnabled?:boolean; birthDateRangeStart?:string; birthDateRangeEnd?:string; birthDateRangeMessage?:string }
@@ -34,7 +36,7 @@ type Cfg = {
   form: { fields:FormField[]; showNum:boolean; dupText:string; pages:number; pageLabels?:string[]; consentPosition?:ConsentPosition }
   consents: { enabled:boolean; required:boolean; title:string; consentType?:string; body:string; checkLabel:string; policyUrl:string; policyMode?:ConsentDocMode; customPolicyTitle?:string; customPolicyBody?:string }[]
   cta: { label:string; loadLabel:string; height:number; bg:string; color:string }
-  modal: { title:string; body:string; btnLabel:string; btnUrl:string; btnReplace:boolean }
+  modal: { title:string; body:string; btnLabel:string; btnUrl:string; btnReplace:boolean; shareButtons?:Partial<ModalShareButtons> }
   styles: { theme:Theme; fieldH:number; qGap:number; maxW:number; labelGap?:number; seniorMode?:boolean }
   auth: { enabled:boolean; loginUrl:string; errText:string }
   integrations?: { googleSheets?: { enabled:boolean; mode:"existing"|"new"; accountEmail:string; sheetUrl:string; sheetName:string; webhookUrl:string; lastSyncStatus?:"idle"|"sent"|"error"; lastSyncAt?:string; lastSyncMessage?:string }; qrLinks?:QrLink[] }
@@ -182,6 +184,7 @@ const FORM_SUMMARY_SELECT = "id,name,slug,updated_at,brand,config_brand:config->
 const FULL_FORM_PREFETCH_LIMIT = 8
 const FULL_FORM_PREFETCH_CONCURRENCY = 2
 const DEFAULT_GOOGLE_SHEETS = {enabled:false,mode:"existing" as const,accountEmail:"",sheetUrl:"",sheetName:"",webhookUrl:"",lastSyncStatus:"idle" as const,lastSyncAt:"",lastSyncMessage:""}
+const DEFAULT_MODAL_SHARE_BUTTONS:ModalShareButtons = {kakao:true,instagram:true,threads:true,x:true,link:true}
 const DEFAULT_FORM_AD:FormAdConfig = {
   enabled:false,
   adMode:"image",
@@ -1058,7 +1061,7 @@ function mergeCfg(raw:any):Cfg {
     })(),
     consents:Array.isArray(raw.consents)&&raw.consents.length>0?raw.consents.map((c:any)=>({...d.consents[0],...c})):(raw.consent?[{...d.consents[0],...raw.consent}]:dc(d.consents)),
     cta:{...d.cta,...(raw.cta||{})},
-    modal:{...d.modal,...(raw.modal||{})},
+    modal:{...d.modal,...(raw.modal||{}),shareButtons:{...DEFAULT_MODAL_SHARE_BUTTONS,...(d.modal.shareButtons||{}),...(raw.modal?.shareButtons||{})}},
     styles:{...d.styles,...(raw.styles||{})},
     auth:{...d.auth,...(raw.auth||{})},
     integrations:{
@@ -2637,6 +2640,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   function removeConsent(idx:number){setCfg(p=>({...p,consents:p.consents.filter((_,i)=>i!==idx)}))}
   function ut<K extends keyof Cfg["cta"]>(k:K,v:Cfg["cta"][K]){setCfg(p=>({...p,cta:{...p.cta,[k]:v}}))}
   function um<K extends keyof Cfg["modal"]>(k:K,v:Cfg["modal"][K]){setCfg(p=>({...p,modal:{...p.modal,[k]:v}}))}
+  function umShare(k:ModalShareKey,v:boolean){setCfg(p=>({...p,modal:{...p.modal,shareButtons:{...DEFAULT_MODAL_SHARE_BUTTONS,...(p.modal.shareButtons||{}),[k]:v}}}))}
   function us<K extends keyof Cfg["styles"]>(k:K,v:Cfg["styles"][K]){setCfg(p=>({...p,styles:{...p.styles,[k]:v}}))}
   function ua<K extends keyof Cfg["auth"]>(k:K,v:Cfg["auth"][K]){setCfg(p=>({...p,auth:{...p.auth,[k]:v}}))}
   function ug<K extends keyof NonNullable<NonNullable<Cfg["integrations"]>["googleSheets"]>>(k:K,v:NonNullable<NonNullable<Cfg["integrations"]>["googleSheets"]>[K]){
@@ -5649,14 +5653,32 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </FG>
       </div>
 
-      case "modal": return <div style={pd}>
-        <FG A={A} last>
+      case "modal": {
+        const shareButtons={...DEFAULT_MODAL_SHARE_BUTTONS,...(cfg.modal.shareButtons||{})}
+        const shareOptions:{key:ModalShareKey;label:string}[]=[
+          {key:"kakao",label:"카카오톡"},
+          {key:"instagram",label:"인스타그램"},
+          {key:"threads",label:"스레드"},
+          {key:"x",label:"X"},
+          {key:"link",label:"URL 복사"},
+        ]
+        return <div style={pd}>
+        <FG A={A}>
           <F label="제목" A={A}><TIn value={cfg.modal.title} onChange={v=>um("title",v)} A={A}/></F>
           <F label="본문" A={A}><TArea value={cfg.modal.body} onChange={v=>um("body",v)} A={A}/></F>
           <F label="버튼 텍스트" A={A}><TIn value={cfg.modal.btnLabel} onChange={v=>um("btnLabel",v)} A={A}/></F>
           <F label="버튼 클릭 후 URL" A={A}><TIn value={cfg.modal.btnUrl} onChange={v=>um("btnUrl",v)} placeholder="https://..." A={A}/></F>
         </FG>
+        <FG title="공유 버튼" A={A} last>
+          <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginBottom:8}}>
+            완료 모달에 표시할 공유 버튼을 선택합니다.
+          </div>
+          {shareOptions.map(({key,label})=>(
+            <TRow key={key} label={label} on={!!shareButtons[key]} toggle={()=>umShare(key,!shareButtons[key])} A={A}/>
+          ))}
+        </FG>
       </div>
+      }
 
       case "styles": return <div style={pd}>
         <FG title="시니어 모드" A={A}>

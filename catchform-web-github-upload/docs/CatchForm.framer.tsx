@@ -37,6 +37,8 @@ type Opt = { label: string; value: string; isEtc: boolean; nextPage?: number }
 type HelperItem = { text: string; callout?: boolean }
 type RecruitmentPeriodMode = "pre"|"formal"
 type ConsentPosition = "start"|"end"
+type ModalShareKey = "kakao"|"instagram"|"threads"|"x"|"link"
+type ModalShareButtons = Record<ModalShareKey,boolean>
 type FieldType = "text"|"name"|"email"|"phone"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"
 type FormField = {
     id: string; type: FieldType; label: string; placeholder?: string
@@ -64,7 +66,7 @@ type Cfg = {
     form: { fields: FormField[]; showNum: boolean; dupText: string; pages: number; pageLabels?: string[]; consentPosition?: ConsentPosition }
     consents: { enabled: boolean; required: boolean; title: string; consentType?: string; body: string; checkLabel: string; policyUrl: string }[]
     cta: { label: string; loadLabel: string; height: number; bg: string; color: string }
-    modal: { title: string; body: string; btnLabel: string; btnUrl: string; btnReplace: boolean }
+    modal: { title: string; body: string; btnLabel: string; btnUrl: string; btnReplace: boolean; shareButtons?: Partial<ModalShareButtons> }
     styles: { theme: "dark"|"light"; fieldH: number; qGap: number; maxW: number; labelGap?: number }
     auth: { enabled: boolean; loginUrl: string; errText: string }
     integrations?: { googleSheets?: { enabled: boolean; mode: "existing"|"new"; accountEmail: string; sheetUrl: string; sheetName: string; webhookUrl: string; lastSyncStatus?: "idle"|"sent"|"error"; lastSyncAt?: string; lastSyncMessage?: string } }
@@ -98,6 +100,7 @@ const consentTypeFromTitle = (title:string) => {
     return""
 }
 const policyUrlForConsent = (type:string,brand?:string) => CONSENT_POLICY_URLS[consentPolicyBrandKey(brand||"")][type] || ""
+const DEFAULT_MODAL_SHARE_BUTTONS: ModalShareButtons = { kakao: true, instagram: true, threads: true, x: true, link: true }
 
 // ─── Supabase ─────────────────────────────────────────────────────────────
 let _sb: SupabaseClient | null = null
@@ -174,13 +177,23 @@ function kdtFieldsToFormFields(fields: any[] = []): any[] {
 }
 
 function normalizeRuntimeConfig(config: Cfg): Cfg {
-    if (config.formType !== "kdt") return config
+    const rawModal = (config.modal || {}) as Partial<Cfg["modal"]>
+    const modal: Cfg["modal"] = {
+        title: rawModal.title ?? "신청이 완료되었어요!",
+        body: rawModal.body ?? "",
+        btnLabel: rawModal.btnLabel ?? "확인",
+        btnUrl: rawModal.btnUrl ?? "",
+        btnReplace: rawModal.btnReplace ?? false,
+        shareButtons: { ...DEFAULT_MODAL_SHARE_BUTTONS, ...(rawModal.shareButtons || {}) },
+    }
+    if (config.formType !== "kdt") return { ...config, modal }
     const legacyFields = Array.isArray(config.kdtFields) && config.kdtFields.length
         ? kdtFieldsToFormFields(config.kdtFields)
         : (config.form?.fields || [])
     const pages = Math.max(config.form?.pages || 1, legacyFields.length ? Math.max(...legacyFields.map((field: any) => field.page || 1)) : 1)
     return {
         ...config,
+        modal,
         header: { ...config.header, applicationType: config.header?.applicationType || "formal" },
         form: {
             ...(config.form || {}),
@@ -776,6 +789,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     }
 
     const shareButtonStyle: React.CSSProperties = { width: "clamp(42px, 10vw, 58px)", aspectRatio: "1 / 1", borderRadius: "50%", border: "none", background: "#F2F4F7", color: "#000", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontWeight:600, fontSize: 13, flexShrink: 0 }
+    const modalShareButtons = { ...DEFAULT_MODAL_SHARE_BUTTONS, ...(cfg.modal.shareButtons || {}) }
+    const showModalShareButtons = Object.values(modalShareButtons).some(Boolean)
     const shareMenuButtonStyle: React.CSSProperties = { width: "100%", height: 38, border: "none", background: "transparent", color: FC.t1, display: "flex", alignItems: "center", gap: 10, padding: "0 10px", borderRadius: 10, cursor: "pointer", fontFamily: FONT, fontSize: 13, fontWeight:600, textAlign: "left" as const }
     const ShareIcon = ({type,size=18}:{type:"kakao"|"instagram"|"threads"|"x"|"link";size?:number}) => {
         if(type==="kakao")return <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
@@ -2043,23 +2058,23 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     </div>
                     <div style={{ fontSize: 18, fontWeight:600, color: FC.t1, marginBottom: 8, letterSpacing: "-0.3px" }}>{cfg.modal.title}</div>
                     {cfg.modal.body && <div style={{ fontSize: 13.5, color: FC.t2, lineHeight: 1.6, marginBottom: 16 }}>{cfg.modal.body}</div>}
-                    <div style={{ display: "flex", justifyContent: "center", gap: "clamp(8px, 2.2vw, 18px)", marginBottom: 22 }}>
-                        <button onClick={shareKakao} title="카카오톡 공유" style={shareButtonStyle}>
+                    {showModalShareButtons && <div style={{ display: "flex", justifyContent: "center", gap: "clamp(8px, 2.2vw, 18px)", marginBottom: 22 }}>
+                        {modalShareButtons.kakao && <button onClick={shareKakao} title="카카오톡 공유" style={shareButtonStyle}>
                             <ShareIcon type="kakao" size={28} />
-                        </button>
-                        <button onClick={shareInstagramStory} title="인스타그램 스토리로 이동" style={shareButtonStyle}>
+                        </button>}
+                        {modalShareButtons.instagram && <button onClick={shareInstagramStory} title="인스타그램 스토리로 이동" style={shareButtonStyle}>
                             <ShareIcon type="instagram" size={28} />
-                        </button>
-                        <button onClick={shareThreads} title="스레드 공유" style={shareButtonStyle}>
+                        </button>}
+                        {modalShareButtons.threads && <button onClick={shareThreads} title="스레드 공유" style={shareButtonStyle}>
                             <ShareIcon type="threads" size={29} />
-                        </button>
-                        <button onClick={shareToX} title="X 공유" style={shareButtonStyle}>
+                        </button>}
+                        {modalShareButtons.x && <button onClick={shareToX} title="X 공유" style={shareButtonStyle}>
                             <ShareIcon type="x" size={27} />
-                        </button>
-                        <button onClick={() => copyShareUrl(false)} title="URL 복사" style={shareButtonStyle}>
+                        </button>}
+                        {modalShareButtons.link && <button onClick={() => copyShareUrl(false)} title="URL 복사" style={shareButtonStyle}>
                             <ShareIcon type="link" size={28} />
-                        </button>
-                    </div>
+                        </button>}
+                    </div>}
                     {shareCopied && <div style={{fontSize:12,color:accentBg,fontWeight:600,marginTop:-10,marginBottom:12}}>URL이 복사됐어요.</div>}
                     <button onClick={() => { if (cfg.modal.btnUrl) { if (cfg.modal.btnReplace) window.location.replace(cfg.modal.btnUrl); else window.location.href = cfg.modal.btnUrl } else setShowModal(false) }}
                         style={{ width: "100%", height: 44, borderRadius: 8, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 14, fontWeight:600, cursor: "pointer" }}>
