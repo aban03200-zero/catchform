@@ -3934,12 +3934,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           const typeOf=(item:any):DashboardFormType=>item.config?.dashboard?.formTypeTag||legacyDashboardFormType(item.config?.formType)
           const statusOf=(item:any):DashboardManualStatus=>{
             const dashboard=item.config?.dashboard||{}
-            if(dashboard.isPublished===false)return"draft"
             const dbPeriod=recruitmentPeriodOf(programOf(item),recruitmentPeriodModeOf(item.config))
-            const hasDbPeriod=!!(dbPeriod.start||dbPeriod.end)
             const start=dashboard.operationStart||dbPeriod.start||""
             const end=dashboard.operationEnd||dbPeriod.end||""
-            if(!hasDbPeriod&&dashboard.alwaysOpen)return"active"
+            const hasOperationPeriod=!!(start||end)
+            if(dashboard.alwaysOpen)return"active"
+            if(dashboard.isPublished===false&&!hasOperationPeriod)return"draft"
             const startAt=operationTimeMs(start,"start")
             const endAt=operationTimeMs(end,"end")
             const now=Date.now()
