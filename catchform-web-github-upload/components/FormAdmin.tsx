@@ -1917,7 +1917,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const cached=fullFormCache.current[item.id]
     if(cached&&(!item.updated_at||cached.updatedAt===item.updated_at))return cached.data
     if(fullFormRequests.current[item.id])return fullFormRequests.current[item.id]
-    const request=supa.from("form_configs").select("config,slug,name,brand").eq("id",item.id).single()
+    const request=Promise.resolve(supa.from("form_configs").select("config,slug,name,brand").eq("id",item.id).single())
       .then(({data,error}:any)=>{
         if(error)throw error
         fullFormCache.current[item.id]={updatedAt:item.updated_at,data}
