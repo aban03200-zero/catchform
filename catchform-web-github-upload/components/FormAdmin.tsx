@@ -3913,43 +3913,46 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     return `${fmtDateKo(s)} ~ ${fmtDateKo(e)}  ·  ${fmtDuration(days)}`
   }
   function renderEditorTabsStrip(){
-    const stripBg=adminDark?"#15171D":"#ECEDEF"
-    const idleBg=adminDark?"#1B1E25":"#E7E8EA"
+    const stripBg=adminDark?"#121419":"#F1F2F4"
+    const idleBg=adminDark?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.56)"
     const activeBg=A.card
-    const edge=adminDark?"rgba(255,255,255,0.08)":"#D7D9DD"
+    const edge=adminDark?"rgba(255,255,255,0.08)":"#D8DBE0"
     const homeActive=view==="dashboard"
     const iconColor=(active:boolean)=>active?A.blue:A.t3
-    const tabIcon=(active:boolean)=><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,color:iconColor(active)}}>
-      <path d="M6.4 2.2h3.2l3.2 3.2v5.2l-3.2 3.2H6.4l-3.2-3.2V5.4l3.2-3.2z" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round"/>
-      <path d="M6 6.4h4M6 9.2h3" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round"/>
+    const tabIcon=(active:boolean)=><svg width="15" height="15" viewBox="0 0 32 32" fill="none" style={{flexShrink:0,color:iconColor(active)}}>
+      <path d="M10.2 9.2V6.8c0-1 .8-1.8 1.8-1.8h8c1 0 1.8.8 1.8 1.8v2.4" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M6.5 8.8h19c.8 0 1.5.7 1.5 1.5v15.2c0 .8-.7 1.5-1.5 1.5h-19c-.8 0-1.5-.7-1.5-1.5V10.3c0-.8.7-1.5 1.5-1.5z" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"/>
+      <path d="M11 17h10M11 21h7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
     </svg>
-    return <div style={{height:38,background:stripBg,borderBottom:`1px solid ${edge}`,display:"flex",alignItems:"stretch",flexShrink:0,overflow:"hidden"}}>
+    return <div style={{height:44,background:stripBg,borderBottom:`1px solid ${edge}`,display:"flex",alignItems:"center",gap:6,padding:"5px 8px",boxSizing:"border-box" as const,flexShrink:0,overflow:"hidden"}}>
       <button onClick={()=>{rememberActiveEditorTab();setView("dashboard")}} title="폼 리스트"
-        style={{width:48,height:38,border:"none",borderRight:`1px solid ${edge}`,borderBottom:homeActive?`2px solid ${A.blue}`:"2px solid transparent",background:homeActive?activeBg:"transparent",color:iconColor(homeActive),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>
+        style={{width:34,height:32,border:`1px solid ${homeActive?A.blue+"55":edge}`,borderRadius:10,background:homeActive?activeBg:"transparent",boxShadow:homeActive?A.shadow:"none",color:iconColor(homeActive),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2.4 7.3 8 2.7l5.6 4.6v5.4a.8.8 0 0 1-.8.8h-3.1V9.4H6.3v4.1H3.2a.8.8 0 0 1-.8-.8V7.3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg>
       </button>
-      <div style={{display:"flex",alignItems:"stretch",overflowX:"auto" as const,overflowY:"hidden" as const,scrollbarWidth:"none" as any,flex:1,minWidth:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,overflowX:"auto" as const,overflowY:"hidden" as const,scrollbarWidth:"none" as any,flex:1,minWidth:0}}>
         {editorTabs.map(tab=>{
           const active=view==="builder"&&tab.key===activeEditorTabKey
           const label=editorTabLabel(tab)
           return <div key={tab.key} role="button" tabIndex={0} onClick={()=>activateEditorTab(tab.key)} onKeyDown={e=>{if(e.key==="Enter"||e.key===" ")activateEditorTab(tab.key)}}
             title={label}
-            style={{height:38,width:174,maxWidth:174,minWidth:132,padding:"0 8px 0 12px",borderRight:`1px solid ${edge}`,borderBottom:active?`2px solid ${A.blue}`:"2px solid transparent",background:active?activeBg:idleBg,color:active?A.t1:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:active?600:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,flexShrink:0,position:"relative" as const,outline:"none"}}>
+            style={{height:32,width:178,maxWidth:178,minWidth:138,padding:"0 7px 0 11px",border:`1px solid ${active?A.blue+"55":edge}`,borderRadius:11,background:active?activeBg:idleBg,boxShadow:active?A.shadow:"none",color:active?A.t1:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,flexShrink:0,position:"relative" as const,outline:"none",transition:"background .12s,border-color .12s,box-shadow .12s"}}>
             {tabIcon(active)}
             <span style={{minWidth:0,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
               {label}
             </span>
             {!tab.id&&<span title="저장 전" style={{width:6,height:6,borderRadius:"50%",background:active?A.blue:A.t3,flexShrink:0}}/>}
             <button type="button" onClick={e=>{e.stopPropagation();closeEditorTab(tab.key)}} title="편집창 닫기" aria-label="편집창 닫기"
-              style={{width:20,height:20,borderRadius:5,border:"none",background:"transparent",color:active?A.t2:A.t3,fontSize:17,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,flexShrink:0}}
+              style={{width:20,height:20,borderRadius:6,border:"none",background:"transparent",color:active?A.t2:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,flexShrink:0}}
               onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=adminDark?"rgba(255,255,255,0.08)":"rgba(0,0,0,0.06)";(e.currentTarget as HTMLElement).style.color=A.red}}
               onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=active?A.t2:A.t3}}>
-              ×
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                <path d="M3.2 3.2 8.8 8.8M8.8 3.2 3.2 8.8" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round"/>
+              </svg>
             </button>
           </div>
         })}
         <button type="button" onClick={()=>setShowBrandModal(true)} title="새 폼 만들기"
-          style={{width:40,height:38,border:"none",borderRight:`1px solid ${edge}`,background:"transparent",color:A.t3,fontSize:20,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          style={{width:32,height:32,border:`1px dashed ${edge}`,borderRadius:10,background:"transparent",color:A.t3,fontSize:18,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
           +
         </button>
       </div>
