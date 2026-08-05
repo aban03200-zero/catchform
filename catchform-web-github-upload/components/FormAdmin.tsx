@@ -3917,6 +3917,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const idleBg=adminDark?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.56)"
     const activeBg=A.card
     const edge=adminDark?"rgba(255,255,255,0.08)":"#D8DBE0"
+    const inactiveTabBorder=adminDark?"rgba(255,255,255,0.025)":"rgba(25,25,25,0.025)"
     const homeActive=view==="dashboard"
     const iconColor=(active:boolean)=>active?A.blue:A.t3
     const tabIcon=(active:boolean)=><svg width="15" height="15" viewBox="0 0 32 32" fill="none" style={{flexShrink:0,color:iconColor(active)}}>
@@ -3926,7 +3927,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     </svg>
     return <div style={{height:44,background:stripBg,borderBottom:`1px solid ${edge}`,display:"flex",alignItems:"center",gap:6,padding:"5px 8px",boxSizing:"border-box" as const,flexShrink:0,overflow:"hidden"}}>
       <button onClick={()=>{rememberActiveEditorTab();setView("dashboard")}} title="폼 리스트"
-        style={{width:34,height:32,border:`1px solid ${homeActive?A.blue+"55":edge}`,borderRadius:10,background:homeActive?activeBg:"transparent",boxShadow:homeActive?A.shadow:"none",color:iconColor(homeActive),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>
+        style={{width:34,height:32,border:`1px solid ${homeActive?A.blue+"55":inactiveTabBorder}`,borderRadius:10,background:homeActive?activeBg:"transparent",boxShadow:homeActive?A.shadow:"none",color:iconColor(homeActive),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2.4 7.3 8 2.7l5.6 4.6v5.4a.8.8 0 0 1-.8.8h-3.1V9.4H6.3v4.1H3.2a.8.8 0 0 1-.8-.8V7.3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg>
       </button>
       <div style={{display:"flex",alignItems:"center",gap:6,overflowX:"auto" as const,overflowY:"hidden" as const,scrollbarWidth:"none" as any,flex:1,minWidth:0}}>
@@ -3935,7 +3936,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           const label=editorTabLabel(tab)
           return <div key={tab.key} role="button" tabIndex={0} onClick={()=>activateEditorTab(tab.key)} onKeyDown={e=>{if(e.key==="Enter"||e.key===" ")activateEditorTab(tab.key)}}
             title={label}
-            style={{height:32,width:178,maxWidth:178,minWidth:138,padding:"0 7px 0 11px",border:`1px solid ${active?A.blue+"55":edge}`,borderRadius:11,background:active?activeBg:idleBg,boxShadow:active?A.shadow:"none",color:active?A.t1:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,flexShrink:0,position:"relative" as const,outline:"none",transition:"background .12s,border-color .12s,box-shadow .12s"}}>
+            style={{height:32,width:178,maxWidth:178,minWidth:138,padding:"0 7px 0 11px",border:`1px solid ${active?A.blue+"55":inactiveTabBorder}`,borderRadius:11,background:active?activeBg:idleBg,boxShadow:active?A.shadow:"none",color:active?A.t1:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,flexShrink:0,position:"relative" as const,outline:"none",transition:"background .12s,border-color .12s,box-shadow .12s"}}>
             {tabIcon(active)}
             <span style={{minWidth:0,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
               {label}
