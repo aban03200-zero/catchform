@@ -1915,14 +1915,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setEditorTabs(next)
     if(activeEditorTabKey!==key)return
     const fallback=next[Math.min(idx,next.length-1)]||next[idx-1]
-    if(fallback)applyEditorTab(fallback)
-    else{
+    if(view==="builder"&&fallback)applyEditorTab(fallback)
+    else if(view==="builder"){
       setActiveEditorTabKey("")
       setLoadedId("")
       setLoadedName("")
       setSavedSlug("")
       setView("dashboard")
-    }
+    }else setActiveEditorTabKey(fallback?.key||"")
   }
   React.useEffect(()=>{
     if(!activeEditorTabKey||view!=="builder")return
@@ -3912,6 +3912,49 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const days=Math.round((new Date(e+"T00:00:00").getTime()-new Date(s+"T00:00:00").getTime())/(1000*60*60*24))+1
     return `${fmtDateKo(s)} ~ ${fmtDateKo(e)}  ·  ${fmtDuration(days)}`
   }
+  function renderEditorTabsStrip(){
+    const stripBg=adminDark?"#15171D":"#ECEDEF"
+    const idleBg=adminDark?"#1B1E25":"#E7E8EA"
+    const activeBg=A.card
+    const edge=adminDark?"rgba(255,255,255,0.08)":"#D7D9DD"
+    const homeActive=view==="dashboard"
+    const iconColor=(active:boolean)=>active?A.blue:A.t3
+    const tabIcon=(active:boolean)=><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,color:iconColor(active)}}>
+      <path d="M6.4 2.2h3.2l3.2 3.2v5.2l-3.2 3.2H6.4l-3.2-3.2V5.4l3.2-3.2z" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round"/>
+      <path d="M6 6.4h4M6 9.2h3" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round"/>
+    </svg>
+    return <div style={{height:38,background:stripBg,borderBottom:`1px solid ${edge}`,display:"flex",alignItems:"stretch",flexShrink:0,overflow:"hidden"}}>
+      <button onClick={()=>{rememberActiveEditorTab();setView("dashboard")}} title="폼 리스트"
+        style={{width:48,height:38,border:"none",borderRight:`1px solid ${edge}`,borderBottom:homeActive?`2px solid ${A.blue}`:"2px solid transparent",background:homeActive?activeBg:"transparent",color:iconColor(homeActive),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2.4 7.3 8 2.7l5.6 4.6v5.4a.8.8 0 0 1-.8.8h-3.1V9.4H6.3v4.1H3.2a.8.8 0 0 1-.8-.8V7.3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg>
+      </button>
+      <div style={{display:"flex",alignItems:"stretch",overflowX:"auto" as const,overflowY:"hidden" as const,scrollbarWidth:"none" as any,flex:1,minWidth:0}}>
+        {editorTabs.map(tab=>{
+          const active=view==="builder"&&tab.key===activeEditorTabKey
+          const label=editorTabLabel(tab)
+          return <div key={tab.key} role="button" tabIndex={0} onClick={()=>activateEditorTab(tab.key)} onKeyDown={e=>{if(e.key==="Enter"||e.key===" ")activateEditorTab(tab.key)}}
+            title={label}
+            style={{height:38,width:174,maxWidth:174,minWidth:132,padding:"0 8px 0 12px",borderRight:`1px solid ${edge}`,borderBottom:active?`2px solid ${A.blue}`:"2px solid transparent",background:active?activeBg:idleBg,color:active?A.t1:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:active?600:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,flexShrink:0,position:"relative" as const,outline:"none"}}>
+            {tabIcon(active)}
+            <span style={{minWidth:0,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
+              {label}
+            </span>
+            {!tab.id&&<span title="저장 전" style={{width:6,height:6,borderRadius:"50%",background:active?A.blue:A.t3,flexShrink:0}}/>}
+            <button type="button" onClick={e=>{e.stopPropagation();closeEditorTab(tab.key)}} title="편집창 닫기" aria-label="편집창 닫기"
+              style={{width:20,height:20,borderRadius:5,border:"none",background:"transparent",color:active?A.t2:A.t3,fontSize:17,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,flexShrink:0}}
+              onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=adminDark?"rgba(255,255,255,0.08)":"rgba(0,0,0,0.06)";(e.currentTarget as HTMLElement).style.color=A.red}}
+              onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=active?A.t2:A.t3}}>
+              ×
+            </button>
+          </div>
+        })}
+        <button type="button" onClick={()=>setShowBrandModal(true)} title="새 폼 만들기"
+          style={{width:40,height:38,border:"none",borderRight:`1px solid ${edge}`,background:"transparent",color:A.t3,fontSize:20,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          +
+        </button>
+      </div>
+    </div>
+  }
 
   // ─────────────────────────────────────────────────────────────────────
   // ── VIEW: LOGIN ──────────────────────────────────────────────────────
@@ -3970,6 +4013,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     ]
     return (
       <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,fontFamily:FONT,overflow:"hidden",position:"relative" as const}}>
+        {renderEditorTabsStrip()}
         {/* Topbar */}
         <div style={{height:56,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 24px",gap:12,flexShrink:0,boxShadow:A.shadow}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -7507,6 +7551,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
   return (
     <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,color:A.t1,fontFamily:FONT,overflow:"hidden",position:"relative" as const}}>
+      {renderEditorTabsStrip()}
 
       {/* TOPBAR */}
       <div style={{height:52,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 16px",gap:10,flexShrink:0,boxShadow:A.shadow}}>
@@ -7567,29 +7612,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           폼 열기
         </Btn>
       </div>
-
-      {editorTabs.length>0&&<div style={{height:42,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",gap:8,padding:"0 14px",flexShrink:0,overflow:"hidden"}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,overflowX:"auto" as const,overflowY:"hidden" as const,scrollbarWidth:"none" as any,flex:1,minWidth:0}}>
-          {editorTabs.map(tab=>{
-            const active=tab.key===activeEditorTabKey
-            const label=editorTabLabel(tab)
-            return <button key={tab.key} onClick={()=>activateEditorTab(tab.key)}
-              title={label}
-              style={{height:30,maxWidth:220,minWidth:96,padding:"0 5px 0 10px",borderRadius:A.r,border:`1px solid ${active?A.blue+"66":A.border}`,background:active?A.blue2:A.card2,color:active?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:active?600:500,cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-              <span style={{minWidth:0,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,textAlign:"left" as const}}>
-                {label}
-              </span>
-              {!tab.id&&<span style={{width:6,height:6,borderRadius:"50%",background:active?A.blue:A.t3,flexShrink:0}}/>}
-              <span onClick={e=>{e.stopPropagation();closeEditorTab(tab.key)}} title="편집창 닫기" aria-label="편집창 닫기"
-                style={{width:20,height:20,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:active?A.blue:A.t3,fontSize:16,lineHeight:1,flexShrink:0}}
-                onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=active?"rgba(49,130,246,0.12)":A.card;(e.currentTarget as HTMLElement).style.color=A.red}}
-                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=active?A.blue:A.t3}}>
-                ×
-              </span>
-            </button>
-          })}
-        </div>
-      </div>}
 
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
 
