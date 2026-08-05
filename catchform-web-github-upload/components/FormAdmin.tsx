@@ -45,6 +45,7 @@ type Cfg = {
   formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"
   kdtFields?: KdtField[]
 }
+type EditorTab = { key:string; id:string; name:string; slug:string; brand:string; cfg:Cfg; isDraft?:boolean }
 
 // ─── Admin UI theme (Toss-style) ─────────────────────────────────────────
 type AT = { bg:string; card:string; card2:string; border:string; border2:string; blue:string; blue2:string; t1:string; t2:string; t3:string; t4:string; green:string; red:string; shadow:string; r:string; r2:string }
@@ -1700,6 +1701,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [sec,setSec]=React.useState("header")
   const [pvTab,setPvTab]=React.useState<"form"|"link">("form")
   const [saved,setSaved]=React.useState<any[]>([])
+  const [editorTabs,setEditorTabs]=React.useState<EditorTab[]>([])
+  const [activeEditorTabKey,setActiveEditorTabKey]=React.useState("")
   const [saving,setSaving]=React.useState(false)
   const [autoSaving,setAutoSaving]=React.useState(false)
   const [autoSaved,setAutoSaved]=React.useState(false)
@@ -1860,6 +1863,79 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setQrGeneratedMatrix(null)
     setQrGeneratedError("")
   }
+  const editorTabKeyFor=(id:string)=>id?`form:${id}`:""
+  const draftEditorTabKey=()=>`draft:${Date.now()}-${Math.random().toString(36).slice(2,7)}`
+  const editorTabLabel=(tab:EditorTab)=>String(tab.name||tab.cfg?.header?.title||(!tab.id?"새 폼":"이름 없는 폼")).trim()
+  const currentEditorTabSnapshot=(tab?:EditorTab):EditorTab=>({
+    key:activeEditorTabKey||tab?.key||draftEditorTabKey(),
+    id:loadedId,
+    name:loadedName||tab?.name||(!loadedId?"새 폼":"이름 없는 폼"),
+    slug:savedSlug,
+    brand:currentBrand||tab?.brand||canonicalBrand(cfg.brand||"SNIPERFACTORY"),
+    cfg:dc(cfg),
+    isDraft:!loadedId,
+  })
+  function rememberActiveEditorTab(){
+    if(!activeEditorTabKey)return
+    setEditorTabs(prev=>prev.map(tab=>tab.key===activeEditorTabKey?currentEditorTabSnapshot(tab):tab))
+  }
+  function applyEditorTab(tab:EditorTab,opts:{resetPanel?:boolean}={}){
+    rememberActiveEditorTab()
+    setActiveEditorTabKey(tab.key)
+    setCfg(dc(tab.cfg))
+    setLoadedId(tab.id||"")
+    setLoadedName(tab.id?editorTabLabel(tab):"")
+    setSavedSlug(tab.slug||"")
+    setCurrentBrand(canonicalBrand(tab.brand||tab.cfg?.brand||"SNIPERFACTORY"))
+    resetQrEditorState(tab.cfg)
+    if(opts.resetPanel){setSec("header");setPvTab("form")}
+    setView("builder")
+  }
+  function upsertEditorTab(tab:EditorTab,opts:{resetPanel?:boolean}={}){
+    const nextTab={...tab,brand:canonicalBrand(tab.brand||tab.cfg?.brand||"SNIPERFACTORY"),cfg:dc(tab.cfg)}
+    setEditorTabs(prev=>{
+      const idx=prev.findIndex(existing=>(nextTab.id&&existing.id===nextTab.id)||existing.key===nextTab.key)
+      if(idx<0)return[...prev,nextTab]
+      const next=[...prev]
+      next[idx]={...next[idx],...nextTab}
+      return next
+    })
+    applyEditorTab(nextTab,opts)
+  }
+  function activateEditorTab(key:string){
+    const tab=editorTabs.find(item=>item.key===key)
+    if(tab)applyEditorTab(tab)
+  }
+  function closeEditorTab(key:string){
+    const tab=editorTabs.find(item=>item.key===key)
+    if(!tab)return
+    if(!tab.id&&!confirm("저장하지 않은 새 폼 탭을 닫을까요?"))return
+    const idx=editorTabs.findIndex(item=>item.key===key)
+    const next=editorTabs.filter(item=>item.key!==key)
+    setEditorTabs(next)
+    if(activeEditorTabKey!==key)return
+    const fallback=next[Math.min(idx,next.length-1)]||next[idx-1]
+    if(fallback)applyEditorTab(fallback)
+    else{
+      setActiveEditorTabKey("")
+      setLoadedId("")
+      setLoadedName("")
+      setSavedSlug("")
+      setView("dashboard")
+    }
+  }
+  React.useEffect(()=>{
+    if(!activeEditorTabKey||view!=="builder")return
+    setEditorTabs(prev=>{
+      let touched=false
+      const next=prev.map(tab=>{
+        if(tab.key!==activeEditorTabKey)return tab
+        touched=true
+        return currentEditorTabSnapshot(tab)
+      })
+      return touched?next:prev
+    })
+  },[activeEditorTabKey,view,cfg,loadedId,loadedName,savedSlug,currentBrand])
 
   function renderActionLoading(){
     if(!actionLoading)return null
@@ -2206,10 +2282,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(tpl==="kdt")base.dashboard={...(base.dashboard||{}),formTypeTag:"application"}
     const branded=applyBrandDefaults(base,brand)
     setShowTemplateModal(false);setPendingBrand(null)
-    setCfg(branded);setLoadedId("");setLoadedName("");setSavedSlug("");setCurrentBrand(brand)
-    resetQrEditorState(branded)
-    setSec("header");setPvTab("form")
-    setView("builder")
+    upsertEditorTab({key:draftEditorTabKey(),id:"",name:"새 폼",slug:"",brand,cfg:branded,isDraft:true},{resetPanel:true})
   }
 
   async function copyForm(item:any){
@@ -2232,6 +2305,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     finally{setActionLoading("")}
   }
   async function openFormForEdit(item:any){
+    const alreadyOpen=editorTabs.find(tab=>item?.id&&tab.id===item.id)
+    if(alreadyOpen){
+      applyEditorTab(alreadyOpen,{resetPanel:false})
+      return
+    }
     const shouldBlock=!hasFreshFullFormRow(item)
     if(shouldBlock)setActionLoading("폼을 불러오는 중이에요.")
     try{
@@ -2239,14 +2317,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const merged=mergeCfg(full.config||{})
       const brand=canonicalBrand(merged.brand||full.brand||item.brand||"")
       const branded=applyBrandDefaults(merged,brand)
-      setCfg(branded)
-      setLoadedId(item.id||"")
-      setLoadedName(full.name||item.name||"")
-      setSavedSlug(full.slug||item.slug||"")
-      setCurrentBrand(brand)
-      resetQrEditorState(branded)
-      setSec("header");setPvTab("form")
-      setView("builder")
+      const id=item.id||""
+      upsertEditorTab({key:editorTabKeyFor(id)||draftEditorTabKey(),id,name:full.name||item.name||"",slug:full.slug||item.slug||"",brand,cfg:branded,isDraft:!id},{resetPanel:true})
     } catch(e){showToast("폼 불러오기 실패",false)}
     finally{if(shouldBlock)setActionLoading("")}
   }
@@ -2308,6 +2380,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setView("builder")
   }
   async function openFormAnalytics(item:any){
+    if(activeEditorTabKey&&item?.id!==loadedId){
+      rememberActiveEditorTab()
+      setActiveEditorTabKey("")
+    }
     setActionLoading("응답 데이터를 준비하는 중이에요.")
     try{
       const full=await getFullFormRow(item)
@@ -2389,6 +2465,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         setLoadedName(nextName)
         setCurrentBrand(dashboardSettings.brand)
       }
+      setEditorTabs(prev=>prev.map(tab=>tab.id===dashboardSettings.item.id?{...tab,name:nextName,brand:dashboardSettings.brand,cfg:tab.key===activeEditorTabKey?next:{...tab.cfg,dashboard:next.dashboard,brand:dashboardSettings.brand}}:tab))
       setDashboardSettings(null)
       await loadDashboard(supa)
       showToast("폼 설정을 저장했어요.")
@@ -2653,21 +2730,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const list=await fetchFormSummaries(supa,20)
     setSaved(list.filter((item:any)=>!isFormTrashed(item)))
   }
-  async function loadCfgById(id:string,name:string,item?:any){
-    if(!supa)return
-    const target=item||{id,name}
-    const shouldBlock=!hasFreshFullFormRow(target)
-    if(shouldBlock)setActionLoading("폼을 불러오는 중이에요.")
-    try{
-      const full=await getFullFormRow(target)
-      const merged=mergeCfg(full.config)
-      setCfg(merged)
-      setLoadedId(id);setLoadedName(name)
-      if(full.slug)setSavedSlug(full.slug)
-      resetQrEditorState(merged)
-      showToast(`"${name}" 불러옴`)
-    } finally{if(shouldBlock)setActionLoading("")}
-  }
   async function confirmEditPasswordForDelete(passwordHash:string,name:string){
     if(!passwordHash)return true
     const password=window.prompt(`"${name}"을 삭제하려면 편집 비밀번호를 입력해주세요.`)
@@ -2689,7 +2751,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       if(error)throw error
       if(!data||data.length===0){showToast("휴지통으로 이동할 폼을 찾지 못했거나 권한이 없어요.",false);return}
       delete fullFormCache.current[id]
-      if(loadedId===id){setLoadedId("");setLoadedName("");setSavedSlug("")}
+      setEditorTabs(prev=>prev.filter(tab=>tab.id!==id))
+      if(loadedId===id){setLoadedId("");setLoadedName("");setSavedSlug("");setActiveEditorTabKey("");setView("dashboard")}
       showToast(`"${name}"을 폼 휴지통으로 이동했어요.`)
       loadList();loadDashboard(supa)
     }catch(error){
@@ -2737,7 +2800,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const {error}=await supa.from("form_configs").delete().eq("id",id)
       if(error)throw error
       delete fullFormCache.current[id]
-      if(loadedId===id){setLoadedId("");setLoadedName("");setSavedSlug("")}
+      setEditorTabs(prev=>prev.filter(tab=>tab.id!==id))
+      if(loadedId===id){setLoadedId("");setLoadedName("");setSavedSlug("");setActiveEditorTabKey("");setView("dashboard")}
       setFormTrashItems(prev=>prev.filter(form=>form.id!==id))
       showToast(`"${name}"을 영구 삭제했어요.`)
       loadList();loadDashboard(supa)
@@ -2752,6 +2816,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const{error}=await supa.from("form_configs").update({name:newName.trim()}).eq("id",id)
     if(error){showToast("이름 변경 실패",false);return}
     if(loadedId===id)setLoadedName(newName.trim())
+    setEditorTabs(prev=>prev.map(tab=>tab.id===id?{...tab,name:newName.trim()}:tab))
     showToast(`이름이 "${newName.trim()}"으로 변경됐어요!`)
     loadList();loadDashboard(supa)
     setRenameModal(null)
@@ -2797,11 +2862,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     try{
       const slug=saveSlug.trim()||makeAutoSlug()
       const cfgFinal=applyBrandDefaults({...cfg,brand:currentBrand,dashboard:{...(cfg.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft" as DashboardManualStatus}},currentBrand)
+      const nextName=saveName.trim()
       const{data:ins,error}=await supa.from("form_configs").insert({name:saveName.trim(),slug,config:cfgFinal,brand:dbBrandValue(currentBrand)}).select("id,slug").single()
       if(error)throw error
+      const nextId=ins?.id||""
+      const nextSlug=ins?.slug||slug
+      const nextKey=editorTabKeyFor(nextId)||activeEditorTabKey||draftEditorTabKey()
       setShowSave(false);setSaveName("");setSaveSlug("")
-      setSavedSlug(ins?.slug||slug);setLoadedId(ins?.id||"");setLoadedName(saveName.trim())
-      showToast(`"${saveName.trim()}" 저장 완료!`);loadList();loadDashboard(supa)
+      setSavedSlug(nextSlug);setLoadedId(nextId);setLoadedName(nextName);setActiveEditorTabKey(nextKey)
+      setEditorTabs(prev=>{
+        const nextTab:EditorTab={key:nextKey,id:nextId,name:nextName,slug:nextSlug,brand:currentBrand,cfg:cfgFinal,isDraft:false}
+        const withoutDuplicate=prev.filter(tab=>tab.key!==activeEditorTabKey&&(!nextId||tab.id!==nextId))
+        return[...withoutDuplicate,nextTab]
+      })
+      showToast(`"${nextName}" 저장 완료!`);loadList();loadDashboard(supa)
     } catch(e){
       const err=(e as any);const msg=err.message||"오류"
       setSaveErr("저장 실패: "+msg+(msg.includes("security")||msg.includes("RLS")?" — form_configs 테이블의 RLS를 비활성화해주세요.":""))
@@ -3624,7 +3698,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         })
     },2000)
     return ()=>{if(autoSaveTimer.current)clearTimeout(autoSaveTimer.current)}
-  },[cfg,currentBrand])
+  },[cfg,currentBrand,loadedId,view,supa])
 
   // ── Image upload ──────────────────────────────────────────────────────
   function setImageNaturalSize(target:"header"|"field"|"ad",url:string,fieldId?:string){
@@ -7449,7 +7523,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <BrandLogo brand={currentBrand} height={currentBrand==="SNIPERFACTORY"?20:15} dark={adminDark}/>
           </div>
         </>}
-        {loadedName&&<span style={{fontSize:12.5,fontWeight:600,color:A.t1}}>{loadedName}</span>}
+        {loadedName&&editorTabs.length===0&&<span style={{fontSize:12.5,fontWeight:600,color:A.t1}}>{loadedName}</span>}
         {loadedId&&<span style={{fontSize:11.5,color:autoSaving?A.t3:autoSaved?A.green:A.t4,display:"flex",alignItems:"center",gap:4,transition:"color .3s"}}>
           {autoSaving
             ? <><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{animation:"spin 1s linear infinite"}}><path d="M8 2a6 6 0 1 0 6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>저장 중</>
@@ -7494,9 +7568,32 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </Btn>
       </div>
 
+      {editorTabs.length>0&&<div style={{height:42,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",gap:8,padding:"0 14px",flexShrink:0,overflow:"hidden"}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,overflowX:"auto" as const,overflowY:"hidden" as const,scrollbarWidth:"none" as any,flex:1,minWidth:0}}>
+          {editorTabs.map(tab=>{
+            const active=tab.key===activeEditorTabKey
+            const label=editorTabLabel(tab)
+            return <button key={tab.key} onClick={()=>activateEditorTab(tab.key)}
+              title={label}
+              style={{height:30,maxWidth:220,minWidth:96,padding:"0 5px 0 10px",borderRadius:A.r,border:`1px solid ${active?A.blue+"66":A.border}`,background:active?A.blue2:A.card2,color:active?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:active?600:500,cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+              <span style={{minWidth:0,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,textAlign:"left" as const}}>
+                {label}
+              </span>
+              {!tab.id&&<span style={{width:6,height:6,borderRadius:"50%",background:active?A.blue:A.t3,flexShrink:0}}/>}
+              <span onClick={e=>{e.stopPropagation();closeEditorTab(tab.key)}} title="편집창 닫기" aria-label="편집창 닫기"
+                style={{width:20,height:20,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:active?A.blue:A.t3,fontSize:16,lineHeight:1,flexShrink:0}}
+                onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=active?"rgba(49,130,246,0.12)":A.card;(e.currentTarget as HTMLElement).style.color=A.red}}
+                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=active?A.blue:A.t3}}>
+                ×
+              </span>
+            </button>
+          })}
+        </div>
+      </div>}
+
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
 
-        {/* SIDEBAR — Nav 위, 저장된 폼 아래 */}
+        {/* SIDEBAR */}
         <nav ref={sbRef} onMouseMove={e=>{const r=sbRef.current?.getBoundingClientRect();if(r)myPos.current=e.clientY-r.top}} onMouseEnter={()=>setOverSb(true)} onMouseLeave={()=>setOverSb(false)}
           style={{width:SW,background:A.card,borderRight:`1px solid ${A.border}`,overflowY:"auto" as const,flexShrink:0,display:"flex",flexDirection:"column" as const,scrollbarWidth:"none" as any}}>
 
@@ -7514,35 +7611,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </div>
           ))}
 
-          <div style={{height:1,background:A.border,margin:"8px 12px 0",flexShrink:0}}/>
-
-          {/* Saved list — 메뉴 아래 */}
-          <div style={{padding:"10px 12px 8px",flex:1,overflow:"hidden",display:"flex",flexDirection:"column" as const}}>
-            <div style={{fontSize:10.5,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,padding:"0 4px",marginBottom:8}}>저장된 폼</div>
-            <div style={{flex:1,overflowY:"auto" as const,scrollbarWidth:"none" as any}}>
-            {(()=>{const filteredSaved=saved.filter((item:any)=>(item.config?.brand||item.brand)===currentBrand).slice(0,20);return filteredSaved.length===0
-              ?<div style={{fontSize:12,color:A.t3,padding:"6px 4px",lineHeight:1.5}}>{supa?"저장된 폼 없음":"Supabase 연결 필요"}</div>
-              :filteredSaved.map((item:any)=>(
-	                <div key={item.id} onPointerDown={()=>prefetchFullFormRow(item,true)} onClick={()=>loadCfgById(item.id,item.name,item)}
-	                  onContextMenu={e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,item})}}
-	                  style={{display:"flex",alignItems:"center",gap:6,padding:"7px 8px",borderRadius:A.r,border:`1px solid transparent`,marginBottom:2,cursor:"pointer",transition:"all .1s",background:loadedId===item.id?A.blue2:"transparent",borderColor:loadedId===item.id?A.blue+"44":"transparent"}}
-	                  onMouseEnter={e=>{prefetchFullFormRow(item);if(loadedId!==item.id){(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.borderColor=A.border}}}
-                  onMouseLeave={e=>{if(loadedId!==item.id){(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.borderColor="transparent"}}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"center",gap:4,minWidth:0}}>
-                      <span style={{fontSize:12,fontWeight:600,color:loadedId===item.id?A.blue:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name}</span>
-                      {!!item.config?.dashboard?.editPasswordHash&&<span title="편집 비밀번호 설정됨" style={{color:A.t3,display:"inline-flex",alignItems:"center",flexShrink:0}}><LockIcon size={12}/></span>}
-                    </div>
-                    <div style={{fontSize:10.5,color:A.t3}}>{new Date(item.updated_at).toLocaleDateString("ko-KR")}</div>
-                  </div>
-                  <button onClick={e=>{e.stopPropagation();delCfg(item.id,item.name)}} title="휴지통으로 이동" style={{width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center",border:"none",borderRadius:6,background:"none",cursor:"pointer",flexShrink:0,color:A.t4}} onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.color=A.red;(e.currentTarget as HTMLElement).style.background="rgba(232,92,92,0.08)"}} onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.color=A.t4;(e.currentTarget as HTMLElement).style.background="none"}}><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
-                </div>
-              ))
-            })()}
-            </div>
-            <div style={{paddingTop:8,flexShrink:0}}>
-              <Btn onClick={()=>setShowBrandModal(true)} variant="ghost" sm A={A}>+ 새 폼 만들기</Btn>
-            </div>
+          <div style={{flex:1}}/>
+          <div style={{padding:"12px",borderTop:`1px solid ${A.border}`,flexShrink:0}}>
+            <Btn onClick={()=>setShowBrandModal(true)} variant="ghost" sm A={A}>+ 새 폼 만들기</Btn>
           </div>
         </nav>
 
