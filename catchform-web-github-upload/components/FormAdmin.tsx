@@ -3914,10 +3914,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   function renderEditorTabsStrip(){
     const stripBg=adminDark?"#121419":"#F1F2F4"
-    const idleBg=adminDark?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.56)"
     const activeBg=A.card
     const edge=adminDark?"rgba(255,255,255,0.08)":"#D8DBE0"
-    const tabBorder=adminDark?"rgba(255,255,255,0.025)":"rgba(25,25,25,0.025)"
+    const tabBorder="transparent"
+    const inactiveDivider=adminDark?"rgba(255,255,255,0.08)":"rgba(25,25,25,0.08)"
     const homeActive=view==="dashboard"
     const iconColor=(active:boolean)=>active?A.blue:A.t3
     const tabIcon=(active:boolean)=><svg width="15" height="15" viewBox="0 0 32 32" fill="none" style={{flexShrink:0,color:iconColor(active)}}>
@@ -3930,13 +3930,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         style={{width:34,height:32,border:`1px solid ${tabBorder}`,borderRadius:10,background:homeActive?activeBg:"transparent",boxShadow:homeActive?A.shadow:"none",color:iconColor(homeActive),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2.4 7.3 8 2.7l5.6 4.6v5.4a.8.8 0 0 1-.8.8h-3.1V9.4H6.3v4.1H3.2a.8.8 0 0 1-.8-.8V7.3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg>
       </button>
-      <div style={{display:"flex",alignItems:"center",gap:6,overflowX:"auto" as const,overflowY:"hidden" as const,scrollbarWidth:"none" as any,flex:1,minWidth:0}}>
-        {editorTabs.map(tab=>{
+      <div style={{display:"flex",alignItems:"center",gap:0,overflowX:"auto" as const,overflowY:"hidden" as const,scrollbarWidth:"none" as any,flex:1,minWidth:0}}>
+        {editorTabs.map((tab,index)=>{
           const active=view==="builder"&&tab.key===activeEditorTabKey
+          const prevTab=editorTabs[index-1]
+          const prevActive=!!prevTab&&view==="builder"&&prevTab.key===activeEditorTabKey
+          const showInactiveDivider=index>0&&!active&&!prevActive
           const label=editorTabLabel(tab)
           return <div key={tab.key} role="button" tabIndex={0} onClick={()=>activateEditorTab(tab.key)} onKeyDown={e=>{if(e.key==="Enter"||e.key===" ")activateEditorTab(tab.key)}}
             title={label}
-            style={{height:32,width:178,maxWidth:178,minWidth:138,padding:"0 7px 0 11px",border:`1px solid ${tabBorder}`,borderRadius:11,background:active?activeBg:idleBg,boxShadow:active?A.shadow:"none",color:active?A.t1:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,flexShrink:0,position:"relative" as const,outline:"none",transition:"background .12s,box-shadow .12s"}}>
+            style={{height:32,width:178,maxWidth:178,minWidth:138,padding:"0 7px 0 11px",border:`1px solid ${tabBorder}`,borderRadius:11,background:active?activeBg:"transparent",boxShadow:active?A.shadow:"none",color:active?A.t1:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,flexShrink:0,position:"relative" as const,outline:"none",transition:"background .12s,box-shadow .12s"}}>
+            {showInactiveDivider&&<span aria-hidden="true" style={{position:"absolute" as const,left:0,top:8,bottom:8,width:1,background:inactiveDivider,borderRadius:999}}/>}
             {tabIcon(active)}
             <span style={{minWidth:0,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
               {label}
@@ -3953,7 +3957,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
         })}
         <button type="button" onClick={()=>setShowBrandModal(true)} title="새 폼 만들기"
-          style={{width:32,height:32,border:`1px dashed ${edge}`,borderRadius:10,background:"transparent",color:A.t3,fontSize:18,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          style={{width:32,height:32,marginLeft:6,border:`1px dashed ${edge}`,borderRadius:10,background:"transparent",color:A.t3,fontSize:18,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
           +
         </button>
       </div>
