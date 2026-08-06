@@ -16,9 +16,11 @@ type DashboardFormType = "alert"|"application"|"recruit"|"survey"|"evaluation"|"
 type DashboardManualStatus = ""|"draft"|"active"|"closed"
 type RecruitmentPeriodMode = "pre"|"formal"
 type ConsentPosition = "start"|"end"
-type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; alwaysOpen?:boolean; manualStatus?:DashboardManualStatus; isPublished?:boolean; publishedAt?:string; editPasswordHash?:string; formTrashedAt?:string }
+type OperationPeriodType = "range"|"single"
+type OperationPeriod = { id:string; type:OperationPeriodType; label?:string; start?:string; end?:string; date?:string; enabled?:boolean }
+type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; operationPeriods?:OperationPeriod[]; alwaysOpen?:boolean; manualStatus?:DashboardManualStatus; isPublished?:boolean; publishedAt?:string; editPasswordHash?:string; formTrashedAt?:string }
 type AdminRole = ""|"admin"|"master"
-type DashboardSettingsState = {item:any;formName:string;brand:BrandId;formTypeTag:DashboardFormType;operationStart:string;operationEnd:string;alwaysOpen:boolean;manualStatus:DashboardManualStatus;currentEditPasswordDraft:string;editPasswordDraft:string;clearEditPassword:boolean}
+type DashboardSettingsState = {item:any;formName:string;brand:BrandId;formTypeTag:DashboardFormType;operationStart:string;operationEnd:string;operationPeriods:OperationPeriod[];alwaysOpen:boolean;manualStatus:DashboardManualStatus;currentEditPasswordDraft:string;editPasswordDraft:string;clearEditPassword:boolean}
 type KdtFieldType = FieldType|"section_desc"
 type ConsentDocMode = "brand"|"custom"
 type KdtField = { id:string; label:string; type:KdtFieldType; required?:boolean; page?:number; options?:string[]; placeholder?:string; desc?:string; [key:string]:any }
@@ -320,6 +322,125 @@ function operationTimeMs(value:string,edge:"start"|"end"="start"){
   const normalized=/^\d{4}-\d{2}-\d{2}$/.test(raw)?`${raw}T${edge==="end"?"23:59:59":"00:00:00"}`:raw
   const time=new Date(normalized).getTime()
   return Number.isFinite(time)?time:0
+}
+function makeOperationPeriod(type:OperationPeriodType="range",patch:Partial<OperationPeriod>={}):OperationPeriod{
+  const id=patch.id||`period_${Date.now()}_${Math.random().toString(36).slice(2,7)}`
+  return type==="single"
+    ? {id,type,date:"",enabled:true,...patch}
+    : {id,type,start:"",end:"",enabled:true,...patch}
+}
+function normalizeOperationPeriod(raw:any,index=0):OperationPeriod|null{
+  if(!raw||typeof raw!=="object")return null
+  const type:OperationPeriodType=raw.type==="single"?"single":"range"
+  const id=String(raw.id||`period_${index+1}`).trim()
+  const base:OperationPeriod={id,type,enabled:raw.enabled!==false,label:String(raw.label||"").trim()}
+  if(type==="single"){
+    const date=String(raw.date||raw.start||"").trim().slice(0,10)
+    return {...base,date}
+  }
+  return {...base,start:String(raw.start||"").trim(),end:String(raw.end||"").trim()}
+}
+function operationPeriodsFromDashboard(dashboard?:DashboardMeta|null,fallback?:{start?:string;end?:string}):OperationPeriod[]{
+  const raw=Array.isArray(dashboard?.operationPeriods)?dashboard!.operationPeriods:[]
+  const normalized=raw.map((item,index)=>normalizeOperationPeriod(item,index)).filter(Boolean) as OperationPeriod[]
+  if(normalized.length)return normalized
+  const start=String(dashboard?.operationStart||fallback?.start||"").trim()
+  const end=String(dashboard?.operationEnd||fallback?.end||"").trim()
+  return start||end?[makeOperationPeriod("range",{id:"legacy_period",label:"운영 기간",start,end})]:[]
+}
+function operationPeriodRange(period:OperationPeriod){
+  if(period.enabled===false)return null
+  if(period.type==="single"){
+    const date=String(period.date||period.start||"").trim().slice(0,10)
+    const startAt=operationTimeMs(date,"start")
+    const endAt=operationTimeMs(date,"end")
+    return startAt&&endAt?{startAt,endAt,start:date,end:date}:null
+  }
+  const start=String(period.start||"").trim()
+  const end=String(period.end||"").trim()
+  const startAt=operationTimeMs(start,"start")
+  const endAt=operationTimeMs(end,"end")
+  if(!startAt&&!endAt)return null
+  return{startAt,endAt,start,end}
+}
+function validOperationPeriods(periods:OperationPeriod[]){
+  return periods.map(operationPeriodRange).filter(Boolean) as {startAt:number;endAt:number;start:string;end:string}[]
+}
+function operationPeriodsError(periods:OperationPeriod[],requireOne=false){
+  const enabled=periods.filter(period=>period.enabled!==false)
+  if(requireOne&&!enabled.length)return"폼 운영 기간을 1개 이상 추가해주세요."
+  for(const period of enabled){
+    if(period.type==="single"){
+      if(!String(period.date||"").trim())return"단일 날짜의 날짜를 입력해주세요."
+      if(!operationTimeMs(period.date||"","start"))return"단일 날짜 형식이 올바르지 않아요."
+      continue
+    }
+    if(!String(period.start||"").trim()||!String(period.end||"").trim())return"기간 운영은 시작일과 종료일을 모두 입력해주세요."
+    const startAt=operationTimeMs(period.start||"","start")
+    const endAt=operationTimeMs(period.end||"","end")
+    if(!startAt||!endAt)return"폼 운영 기간의 날짜 형식이 올바르지 않아요."
+    if(startAt>endAt)return"폼 운영 기간의 종료일은 시작일보다 빠를 수 없어요."
+  }
+  if(requireOne&&!validOperationPeriods(enabled).length)return"폼 운영 기간을 1개 이상 추가해주세요."
+  return""
+}
+function primaryOperationRange(periods:OperationPeriod[]){
+  const ranges=validOperationPeriods(periods)
+  if(!ranges.length)return{start:"",end:""}
+  const sorted=[...ranges].sort((a,b)=>(a.startAt||0)-(b.startAt||0))
+  return{start:sorted[0].start||"",end:sorted[0].end||""}
+}
+function dashboardWithOperationPeriods(dashboard:DashboardMeta|undefined,periods?:OperationPeriod[]):DashboardMeta{
+  const operationPeriods=periods?periods.map((period,index)=>normalizeOperationPeriod(period,index)).filter(Boolean) as OperationPeriod[]:operationPeriodsFromDashboard(dashboard)
+  const primary=primaryOperationRange(operationPeriods)
+  return{...(dashboard||{}),operationPeriods,operationStart:primary.start,operationEnd:primary.end}
+}
+function operationStatusOfDashboard(dashboard?:DashboardMeta|null,fallback?:{start?:string;end?:string}):{status:DashboardManualStatus;hasOperationPeriod:boolean}{
+  if(dashboard?.alwaysOpen)return{status:"active",hasOperationPeriod:true}
+  const periods=operationPeriodsFromDashboard(dashboard,fallback)
+  const ranges=validOperationPeriods(periods)
+  if(ranges.length){
+    const now=Date.now()
+    if(ranges.some(range=>(!range.startAt||now>=range.startAt)&&(!range.endAt||now<=range.endAt)))return{status:"active",hasOperationPeriod:true}
+    if(ranges.some(range=>range.startAt&&now<range.startAt))return{status:"draft",hasOperationPeriod:true}
+    return{status:"closed",hasOperationPeriod:true}
+  }
+  return{status:dashboard?.manualStatus||"draft",hasOperationPeriod:false}
+}
+function OperationPeriodsEditor({periods,onChange,disabled,A,compact=false}:{periods:OperationPeriod[];onChange:(next:OperationPeriod[])=>void;disabled?:boolean;A:AT;compact?:boolean}){
+  const update=(id:string,patch:Partial<OperationPeriod>)=>onChange(periods.map(period=>period.id===id?{...period,...patch}:period))
+  const remove=(id:string)=>onChange(periods.filter(period=>period.id!==id))
+  const add=(type:OperationPeriodType)=>onChange([...periods,makeOperationPeriod(type)])
+  const inputStyle={minWidth:0,width:"100%",height:compact?32:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:compact?11.5:12,boxSizing:"border-box" as const}
+  return <div style={{display:"flex",flexDirection:"column" as const,gap:8,opacity:disabled?0.55:1}}>
+    {periods.length===0&&<div style={{padding:"10px 11px",borderRadius:A.r,border:`1px dashed ${A.border}`,background:A.card2,color:A.t3,fontSize:12,lineHeight:1.5}}>아직 추가된 운영 기간이 없어요.</div>}
+    {periods.map((period,index)=>(
+      <div key={period.id} style={{padding:compact?9:10,borderRadius:A.r,border:`1px solid ${A.border}`,background:compact?A.card:A.card2}}>
+        <div style={{display:"grid",gridTemplateColumns:"86px 1fr auto",gap:7,alignItems:"center",marginBottom:7}}>
+          <select disabled={disabled} value={period.type} onChange={e=>{
+            const type=e.target.value as OperationPeriodType
+            update(period.id,{type,date:type==="single"?(period.date||String(period.start||"").slice(0,10)):"",start:type==="range"?(period.start||period.date||""):"",end:type==="range"?(period.end||period.date||""):""})
+          }} style={inputStyle}>
+            <option value="range">기간</option>
+            <option value="single">단일 날짜</option>
+          </select>
+          <input disabled={disabled} value={period.label||""} onChange={e=>update(period.id,{label:e.target.value})} placeholder={`운영 기간 ${index+1}`} style={inputStyle}/>
+          <button disabled={disabled} onClick={()=>remove(period.id)} style={{height:compact?32:36,padding:"0 9px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.red,fontFamily:FONT,fontSize:compact?11.5:12,cursor:disabled?"default":"pointer"}}>삭제</button>
+        </div>
+        {period.type==="single"
+          ? <input type="date" disabled={disabled} value={period.date||""} onChange={e=>update(period.id,{date:e.target.value})} style={inputStyle}/>
+          : <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:6}}>
+              <input type="datetime-local" step={60} disabled={disabled} value={operationInputValue(period.start||"","start")} onChange={e=>update(period.id,{start:e.target.value})} style={inputStyle}/>
+              <span style={{fontSize:12,color:A.t3}}>~</span>
+              <input type="datetime-local" step={60} disabled={disabled} value={operationInputValue(period.end||"","end")} onChange={e=>update(period.id,{end:e.target.value})} style={inputStyle}/>
+            </div>}
+      </div>
+    ))}
+    <div style={{display:"flex",gap:7,flexWrap:"wrap" as const}}>
+      <button disabled={disabled} onClick={()=>add("range")} style={{height:compact?30:32,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:compact?11.5:12,cursor:disabled?"default":"pointer"}}>+ 기간 추가</button>
+      <button disabled={disabled} onClick={()=>add("single")} style={{height:compact?30:32,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:compact?11.5:12,cursor:disabled?"default":"pointer"}}>+ 단일 날짜 추가</button>
+    </div>
+  </div>
 }
 function formTrashedAtOf(item:any){
   return item?.config?.dashboard?.formTrashedAt||item?.dashboard_meta?.formTrashedAt||""
@@ -1070,7 +1191,7 @@ function mergeCfg(raw:any):Cfg {
       googleSheets:{...DEFAULT_GOOGLE_SHEETS,...(rawIntegrations.googleSheets||{})},
       qrLinks:Array.isArray(rawIntegrations.qrLinks)?rawIntegrations.qrLinks.filter((item:any)=>item&&item.code&&item.url):[],
     },
-    dashboard:{...(isLegacyKdt?{formTypeTag:"application" as DashboardFormType}:{}),...(raw.dashboard||{})},
+    dashboard:dashboardWithOperationPeriods({...(isLegacyKdt?{formTypeTag:"application" as DashboardFormType}:{}),...(raw.dashboard||{})}),
     brand:raw.brand||d.brand,
     formType:isLegacyKdt?"blank" as const:(raw.formType||d.formType),
     kdtFields:isLegacyKdt?undefined:(raw.kdtFields||d.kdtFields),
@@ -2405,14 +2526,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   function openDashboardSettings(item:any){
     const dashboard=item.config?.dashboard||{}
+    const program=progs.find(p=>p.id===item.config?.header?.programId)
+    const dbPeriod=recruitmentPeriodOf(program,recruitmentPeriodModeOf(item.config))
     const legacyAlwaysOpen=!dashboard.operationStart&&!dashboard.operationEnd&&dashboard.manualStatus==="active"
     setDashboardSettings({
       item,
       formName:String(item.name||item.config?.header?.title||"").trim(),
       brand:canonicalBrand(item.config?.brand||item.brand||"SNIPERFACTORY"),
       formTypeTag:dashboard.formTypeTag||legacyDashboardFormType(item.config?.formType),
-      operationStart:dashboard.operationStart||"",
-      operationEnd:dashboard.operationEnd||"",
+      operationStart:dashboard.operationStart||dbPeriod.start||"",
+      operationEnd:dashboard.operationEnd||dbPeriod.end||"",
+      operationPeriods:operationPeriodsFromDashboard(dashboard,dbPeriod),
       alwaysOpen:!!dashboard.alwaysOpen||legacyAlwaysOpen,
       manualStatus:dashboard.manualStatus||"",
       currentEditPasswordDraft:"",
@@ -2432,9 +2556,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const next=applyBrandDefaults(mergeCfg(full.config||{}),dashboardSettings.brand)
       const nextName=dashboardSettings.formName.trim()
       if(!nextName)throw new Error("폼 제목을 입력해주세요.")
-      const nextOperationStart=dashboardSettings.operationStart
-      const nextOperationEnd=dashboardSettings.operationEnd
-      if(!dashboardSettings.alwaysOpen&&nextOperationStart&&nextOperationEnd&&operationTimeMs(nextOperationStart,"start")>operationTimeMs(nextOperationEnd,"end"))throw new Error("폼 운영 기간의 종료일은 시작일보다 빠를 수 없어요.")
+      const periodError=dashboardSettings.alwaysOpen?"":operationPeriodsError(dashboardSettings.operationPeriods,false)
+      if(periodError)throw new Error(periodError)
+      const nextDashboard=dashboardWithOperationPeriods(next.dashboard,dashboardSettings.operationPeriods)
       const previousEditPasswordHash=next.dashboard?.editPasswordHash||""
       let editPasswordHash=previousEditPasswordHash
       const changingEditPassword=!!dashboardSettings.editPasswordDraft||dashboardSettings.clearEditPassword
@@ -2448,10 +2572,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         editPasswordHash=await sha256Text(dashboardSettings.editPasswordDraft)
       }
       next.dashboard={
-        ...(next.dashboard||{}),
+        ...nextDashboard,
         formTypeTag:dashboardSettings.formTypeTag,
-        operationStart:nextOperationStart,
-        operationEnd:nextOperationEnd,
         alwaysOpen:dashboardSettings.alwaysOpen,
         manualStatus:"",
         editPasswordHash,
@@ -2476,14 +2598,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   // ── Cfg updaters ─────────────────────────────────────────────────────
   function uh<K extends keyof Cfg["header"]>(k:K,v:Cfg["header"][K]){setCfg(p=>({...p,header:{...p.header,[k]:v}}))}
   function uf<K extends keyof Cfg["form"]>(k:K,v:Cfg["form"][K]){setCfg(p=>({...p,form:{...p.form,[k]:v}}))}
-  function setOperationPeriod(k:"operationStart"|"operationEnd",v:string){setCfg(p=>({...p,dashboard:{...(p.dashboard||{}),[k]:v}}))}
+  function setOperationPeriods(periods:OperationPeriod[]){setCfg(p=>({...p,dashboard:dashboardWithOperationPeriods(p.dashboard,periods)}))}
   function unlinkedOperationPeriodError(){
     if(!cfg.header.programUnlinked)return""
     if(cfg.dashboard?.alwaysOpen)return""
-    const start=cfg.dashboard?.operationStart||""
-    const end=cfg.dashboard?.operationEnd||""
-    if(!start||!end)return"교육과정 연동을 하지 않는 폼은 폼 운영 기간을 설정해주세요."
-    if(operationTimeMs(start,"start")>operationTimeMs(end,"end"))return"폼 운영 기간의 종료일은 시작일보다 빠를 수 없어요."
+    const periods=operationPeriodsFromDashboard(cfg.dashboard)
+    if(!validOperationPeriods(periods).length)return"교육과정 연동을 하지 않는 폼은 폼 운영 기간을 설정해주세요."
+    const error=operationPeriodsError(periods,true)
+    if(error)return error
     return""
   }
   function mergeRecruitmentPeriodIntoConfig(source:Cfg){
@@ -2495,8 +2617,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       ...source,
       dashboard:{
         ...(source.dashboard||{}),
-        operationStart:period.start||source.dashboard?.operationStart||"",
-        operationEnd:period.end||source.dashboard?.operationEnd||"",
+        operationPeriods:period.start||period.end?[makeOperationPeriod("range",{id:"linked_program_period",label:recruitmentPeriodLabel(recruitmentPeriodModeOf(source)),start:period.start||"",end:period.end||""})]:source.dashboard?.operationPeriods,
+        operationStart:period.start||"",
+        operationEnd:period.end||"",
       },
     }
   }
@@ -2506,7 +2629,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setCfg(p=>({
       ...p,
       header:{...p.header,programId:program.id,programUnlinked:false,recruitmentPeriodMode:mode,title:program.title||p.header.title},
-      dashboard:{...(p.dashboard||{}),operationStart:period.start||"",operationEnd:period.end||""},
+      dashboard:dashboardWithOperationPeriods({...(p.dashboard||{}),operationStart:period.start||"",operationEnd:period.end||""},period.start||period.end?[makeOperationPeriod("range",{id:"linked_program_period",label:recruitmentPeriodLabel(mode),start:period.start||"",end:period.end||""})]:[]),
     }))
   }
   function setRecruitmentPeriodMode(mode:RecruitmentPeriodMode){
@@ -2519,7 +2642,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setCfg(p=>({
       ...p,
       header:{...p.header,recruitmentPeriodMode:mode},
-      dashboard:{...(p.dashboard||{}),operationStart:period.start||"",operationEnd:period.end||""},
+      dashboard:dashboardWithOperationPeriods({...(p.dashboard||{}),operationStart:period.start||"",operationEnd:period.end||""},period.start||period.end?[makeOperationPeriod("range",{id:"linked_program_period",label:recruitmentPeriodLabel(mode),start:period.start||"",end:period.end||""})]:[]),
     }))
   }
   function uad<K extends keyof FormAdConfig>(k:K,v:FormAdConfig[K]){setCfg(p=>({...p,ad:{...DEFAULT_FORM_AD,...(p.ad||{}),[k]:v}}))}
@@ -2861,7 +2984,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setSaving(true);setSaveErr("")
     try{
       const slug=saveSlug.trim()||makeAutoSlug()
-      const cfgFinal=applyBrandDefaults({...cfg,brand:currentBrand,dashboard:{...(cfg.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft" as DashboardManualStatus}},currentBrand)
+      const cfgFinal=applyBrandDefaults({...cfg,brand:currentBrand,dashboard:dashboardWithOperationPeriods({...(cfg.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft" as DashboardManualStatus})},currentBrand)
       const nextName=saveName.trim()
       const{data:ins,error}=await supa.from("form_configs").insert({name:saveName.trim(),slug,config:cfgFinal,brand:dbBrandValue(currentBrand)}).select("id,slug").single()
       if(error)throw error
@@ -2890,7 +3013,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	    }
 	    setShowUpdateModal(false)
 	    if(!silent)showToast(`"${loadedName}" 수정 완료!`)
-	    const cfgFinal=applyBrandDefaults({...cfg,brand:currentBrand},currentBrand)
+	    const cfgFinal=applyBrandDefaults({...cfg,brand:currentBrand,dashboard:dashboardWithOperationPeriods(cfg.dashboard)},currentBrand)
 	    const updatedAt=new Date().toISOString()
 	    fullFormCache.current[loadedId]={updatedAt,data:{config:cfgFinal,slug:savedSlug,name:loadedName,brand:currentBrand}}
 	    supa.from("form_configs").update({config:cfgFinal,brand:dbBrandValue(currentBrand),updated_at:updatedAt}).eq("id",loadedId)
@@ -2930,7 +3053,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         ...cfg,
         brand:currentBrand,
         dashboard:{
-          ...dashboard,
+          ...dashboardWithOperationPeriods(dashboard),
           isPublished:true,
           publishedAt:dashboard.publishedAt||now,
           manualStatus:!dashboard.manualStatus||dashboard.manualStatus==="draft"?"active":dashboard.manualStatus,
@@ -3690,7 +3813,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setAutoSaving(false)
     autoSaveTimer.current=setTimeout(()=>{
       setAutoSaving(true)
-      const cfgFinal=applyBrandDefaults({...cfg,brand:currentBrand},currentBrand)
+      const cfgFinal=applyBrandDefaults({...cfg,brand:currentBrand,dashboard:dashboardWithOperationPeriods(cfg.dashboard)},currentBrand)
       supa.from("form_configs").update({config:cfgFinal,brand:dbBrandValue(currentBrand),updated_at:new Date().toISOString()}).eq("id",loadedId)
         .then(({error})=>{
           setAutoSaving(false)
@@ -4069,17 +4192,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           const statusOf=(item:any):DashboardManualStatus=>{
             const dashboard=item.config?.dashboard||{}
             const dbPeriod=recruitmentPeriodOf(programOf(item),recruitmentPeriodModeOf(item.config))
-            const start=dashboard.operationStart||dbPeriod.start||""
-            const end=dashboard.operationEnd||dbPeriod.end||""
-            const hasOperationPeriod=!!(start||end)
-            if(dashboard.alwaysOpen)return"active"
-            if(dashboard.isPublished===false&&!hasOperationPeriod)return"draft"
-            const startAt=operationTimeMs(start,"start")
-            const endAt=operationTimeMs(end,"end")
-            const now=Date.now()
-            if(startAt&&now<startAt)return"draft"
-            if(endAt&&now>endAt)return"closed"
-            if(startAt||endAt)return"active"
+            const operation=operationStatusOfDashboard(dashboard,dbPeriod)
+            if(dashboard.isPublished===false&&!operation.hasOperationPeriod)return"draft"
+            if(operation.hasOperationPeriod)return operation.status
             if(dashboard.alwaysOpen===undefined&&dashboard.manualStatus)return dashboard.manualStatus
             return"draft"
           }
@@ -4263,19 +4378,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <input type="password" value={dashboardSettings.editPasswordDraft} disabled={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,editPasswordDraft:e.target.value}))} placeholder={dashboardSettings.item.config?.dashboard?.editPasswordHash?"새 비밀번호 입력 시 변경":"비밀번호 입력 시 편집 보호"} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,opacity:dashboardSettings.clearEditPassword?.55:1}}/>
               <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,margin:"6px 0 9px"}}>{canMasterReset(authRole)&&dashboardSettings.item.config?.dashboard?.editPasswordHash?"master 권한 계정은 현재 비밀번호 없이 편집 비밀번호를 변경하거나 해제할 수 있어요.":"설정하면 대시보드에서 편집을 열 때 비밀번호를 확인합니다. 원문 대신 해시값만 저장됩니다."}</div>
               {!!dashboardSettings.item.config?.dashboard?.editPasswordHash&&<label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:16}}><input type="checkbox" checked={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,clearEditPassword:e.target.checked,editPasswordDraft:e.target.checked?"":prev.editPasswordDraft}))}/>편집 비밀번호 해제</label>}
-              {hasRecruitmentPeriod?<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB의 {recruitmentPeriodLabel(recruitmentMode)}을 기준으로 상태가 자동 표시됩니다.<br/>{recruitmentPeriodText(recruitment,"기간 데이터 없음")}</div>:<>
-                <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
-                <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:8}}>
-                  <input type="checkbox" checked={dashboardSettings.alwaysOpen} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,alwaysOpen:e.target.checked,manualStatus:""}))}/>
-                  상시 운영
-                </label>
-                <div style={{fontSize:11.5,color:A.t3,lineHeight:1.5,marginBottom:9}}>체크하면 시작/종료일 없이 진행중으로 표시됩니다.</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:8,marginBottom:16,opacity:dashboardSettings.alwaysOpen?0.55:1}}>
-                  <input type="datetime-local" step={60} disabled={dashboardSettings.alwaysOpen} value={operationInputValue(dashboardSettings.operationStart,"start")} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,operationStart:e.target.value}))} style={{minWidth:0,width:"100%",height:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12}}/>
-                  <span style={{fontSize:12,color:A.t3}}>~</span>
-                  <input type="datetime-local" step={60} disabled={dashboardSettings.alwaysOpen} value={operationInputValue(dashboardSettings.operationEnd,"end")} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,operationEnd:e.target.value}))} style={{minWidth:0,width:"100%",height:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12}}/>
-                </div>
-              </>}
+              {hasRecruitmentPeriod&&<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB의 {recruitmentPeriodLabel(recruitmentMode)}을 기본 운영 기간으로 불러왔어요.<br/>필요하면 아래에서 기간을 추가하거나 수정할 수 있습니다.<br/>{recruitmentPeriodText(recruitment,"기간 데이터 없음")}</div>}
+              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
+              <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:8}}>
+                <input type="checkbox" checked={dashboardSettings.alwaysOpen} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,alwaysOpen:e.target.checked,manualStatus:""}))}/>
+                상시 운영
+              </label>
+              <div style={{fontSize:11.5,color:A.t3,lineHeight:1.5,marginBottom:9}}>체크하면 기간과 관계없이 진행중으로 표시됩니다. 체크를 꺼도 설정해둔 기간은 유지됩니다.</div>
+              <div style={{marginBottom:16}}>
+                <OperationPeriodsEditor periods={dashboardSettings.operationPeriods} disabled={dashboardSettings.alwaysOpen} A={A} onChange={operationPeriods=>setDashboardSettings(prev=>{
+                  if(!prev)return prev
+                  const primary=primaryOperationRange(operationPeriods)
+                  return{...prev,operationPeriods,operationStart:primary.start,operationEnd:primary.end}
+                })}/>
+              </div>
               <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
                 <button onClick={()=>setDashboardSettings(null)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
                 <button onClick={saveDashboardSettings} disabled={dashboardSettingsSaving} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>{dashboardSettingsSaving?"저장 중...":"저장"}</button>
@@ -7794,19 +7910,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <input type="password" value={dashboardSettings.editPasswordDraft} disabled={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,editPasswordDraft:e.target.value}))} placeholder={settingsConfig?.dashboard?.editPasswordHash?"새 비밀번호 입력 시 변경":"비밀번호 입력 시 편집 보호"} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,opacity:dashboardSettings.clearEditPassword?.55:1}}/>
             <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,margin:"6px 0 9px"}}>{canMasterReset(authRole)&&settingsConfig?.dashboard?.editPasswordHash?"master 권한 계정은 현재 비밀번호 없이 편집 비밀번호를 변경하거나 해제할 수 있어요.":"설정하면 대시보드에서 편집을 열 때 비밀번호를 확인합니다. 원문 대신 해시값만 저장됩니다."}</div>
             {!!settingsConfig?.dashboard?.editPasswordHash&&<label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:16}}><input type="checkbox" checked={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,clearEditPassword:e.target.checked,editPasswordDraft:e.target.checked?"":prev.editPasswordDraft}))}/>편집 비밀번호 해제</label>}
-            {hasRecruitmentPeriod?<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB의 {recruitmentPeriodLabel(recruitmentMode)}을 기준으로 상태가 자동 표시됩니다.<br/>{recruitmentPeriodText(recruitment,"기간 데이터 없음")}</div>:<>
-              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
-              <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:8}}>
-                <input type="checkbox" checked={dashboardSettings.alwaysOpen} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,alwaysOpen:e.target.checked,manualStatus:""}))}/>
-                상시 운영
-              </label>
-              <div style={{fontSize:11.5,color:A.t3,lineHeight:1.5,marginBottom:9}}>체크하면 시작/종료일 없이 진행중으로 표시됩니다.</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:8,marginBottom:16,opacity:dashboardSettings.alwaysOpen?0.55:1}}>
-                <input type="datetime-local" step={60} disabled={dashboardSettings.alwaysOpen} value={operationInputValue(dashboardSettings.operationStart,"start")} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,operationStart:e.target.value}))} style={{minWidth:0,width:"100%",height:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12}}/>
-                <span style={{fontSize:12,color:A.t3}}>~</span>
-                <input type="datetime-local" step={60} disabled={dashboardSettings.alwaysOpen} value={operationInputValue(dashboardSettings.operationEnd,"end")} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,operationEnd:e.target.value}))} style={{minWidth:0,width:"100%",height:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:12}}/>
-              </div>
-            </>}
+            {hasRecruitmentPeriod&&<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB의 {recruitmentPeriodLabel(recruitmentMode)}을 기본 운영 기간으로 불러왔어요.<br/>필요하면 아래에서 기간을 추가하거나 수정할 수 있습니다.<br/>{recruitmentPeriodText(recruitment,"기간 데이터 없음")}</div>}
+            <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
+            <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:8}}>
+              <input type="checkbox" checked={dashboardSettings.alwaysOpen} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,alwaysOpen:e.target.checked,manualStatus:""}))}/>
+              상시 운영
+            </label>
+            <div style={{fontSize:11.5,color:A.t3,lineHeight:1.5,marginBottom:9}}>체크하면 기간과 관계없이 진행중으로 표시됩니다. 체크를 꺼도 설정해둔 기간은 유지됩니다.</div>
+            <div style={{marginBottom:16}}>
+              <OperationPeriodsEditor periods={dashboardSettings.operationPeriods} disabled={dashboardSettings.alwaysOpen} A={A} onChange={operationPeriods=>setDashboardSettings(prev=>{
+                if(!prev)return prev
+                const primary=primaryOperationRange(operationPeriods)
+                return{...prev,operationPeriods,operationStart:primary.start,operationEnd:primary.end}
+              })}/>
+            </div>
             <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
               <button onClick={()=>setDashboardSettings(null)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
               <button onClick={saveDashboardSettings} disabled={dashboardSettingsSaving} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>{dashboardSettingsSaving?"저장 중...":"저장"}</button>
@@ -7818,18 +7935,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       {/* UPDATE MODAL */}
       {showUpdateModal&&(
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setShowUpdateModal(false)}>
-          <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:cfg.header.programUnlinked?440:320,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
+          <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:cfg.header.programUnlinked?500:320,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
             <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:8}}>수정 사항 저장</div>
             <div style={{fontSize:13.5,color:A.t2,marginBottom:6}}><span style={{fontWeight:600,color:A.t1}}>"{loadedName}"</span>에 변경 사항을 덮어쓰시겠어요?</div>
             <div style={{fontSize:12,color:A.t3,marginBottom:22,lineHeight:1.5}}>기존 설정이 수정된 내용으로 교체됩니다.</div>
             {cfg.header.programUnlinked&&<div style={{padding:"12px 12px 11px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`}}>
               <div style={{fontSize:12,fontWeight:600,color:A.blue,marginBottom:5}}>폼 운영 기간</div>
               <div style={{fontSize:11.5,color:A.t2,lineHeight:1.5,marginBottom:8}}>교육과정 연동을 하지 않는 폼은 운영 기간을 설정해야 합니다.</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:6}}>
-                <input type="datetime-local" step={60} value={operationInputValue(cfg.dashboard?.operationStart||"","start")} onChange={e=>setOperationPeriod("operationStart",e.target.value)} style={{minWidth:0,width:"100%",height:34,padding:"0 7px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t1,fontFamily:FONT,fontSize:11.5}}/>
-                <span style={{fontSize:12,color:A.t3}}>~</span>
-                <input type="datetime-local" step={60} value={operationInputValue(cfg.dashboard?.operationEnd||"","end")} onChange={e=>setOperationPeriod("operationEnd",e.target.value)} style={{minWidth:0,width:"100%",height:34,padding:"0 7px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t1,fontFamily:FONT,fontSize:11.5}}/>
-              </div>
+              <OperationPeriodsEditor compact periods={operationPeriodsFromDashboard(cfg.dashboard)} onChange={setOperationPeriods} A={A}/>
             </div>}
             <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
               <Btn onClick={()=>{setShowUpdateModal(false);setShowSave(true)}} sm A={A}>새 이름으로 저장</Btn>
@@ -7843,7 +7956,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       {/* SAVE MODAL */}
       {showSave&&(
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setShowSave(false)}>
-          <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:cfg.header.programUnlinked?440:310,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
+          <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:cfg.header.programUnlinked?500:310,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
             <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:18}}>설정 저장</div>
             <div style={{marginBottom:12}}>
               <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:5}}>설정 이름</div>
@@ -7858,11 +7971,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {cfg.header.programUnlinked&&<div style={{padding:"12px 12px 11px",marginBottom:14,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`}}>
               <div style={{fontSize:12,fontWeight:600,color:A.blue,marginBottom:5}}>폼 운영 기간</div>
               <div style={{fontSize:11.5,color:A.t2,lineHeight:1.5,marginBottom:8}}>교육과정 연동을 하지 않는 폼은 운영 기간을 설정해야 합니다.</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:6}}>
-                <input type="datetime-local" step={60} value={operationInputValue(cfg.dashboard?.operationStart||"","start")} onChange={e=>setOperationPeriod("operationStart",e.target.value)} style={{minWidth:0,width:"100%",height:34,padding:"0 7px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t1,fontFamily:FONT,fontSize:11.5}}/>
-                <span style={{fontSize:12,color:A.t3}}>~</span>
-                <input type="datetime-local" step={60} value={operationInputValue(cfg.dashboard?.operationEnd||"","end")} onChange={e=>setOperationPeriod("operationEnd",e.target.value)} style={{minWidth:0,width:"100%",height:34,padding:"0 7px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t1,fontFamily:FONT,fontSize:11.5}}/>
-              </div>
+              <OperationPeriodsEditor compact periods={operationPeriodsFromDashboard(cfg.dashboard)} onChange={setOperationPeriods} A={A}/>
             </div>}
             {saveErr&&<div style={{fontSize:12,color:A.red,marginBottom:10,padding:"8px 10px",borderRadius:A.r,background:"rgba(232,92,92,0.06)",border:"1px solid rgba(232,92,92,0.18)"}}>{saveErr}</div>}
             <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>

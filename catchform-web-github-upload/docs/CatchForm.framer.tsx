@@ -39,6 +39,8 @@ type RecruitmentPeriodMode = "pre"|"formal"
 type ConsentPosition = "start"|"end"
 type ModalShareKey = "kakao"|"instagram"|"threads"|"x"|"link"
 type ModalShareButtons = Record<ModalShareKey,boolean>
+type OperationPeriodType = "range"|"single"
+type OperationPeriod = { id:string; type:OperationPeriodType; label?:string; start?:string; end?:string; date?:string; enabled?:boolean }
 type FieldType = "text"|"name"|"email"|"phone"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"
 type FormField = {
     id: string; type: FieldType; label: string; placeholder?: string
@@ -70,7 +72,7 @@ type Cfg = {
     styles: { theme: "dark"|"light"; fieldH: number; qGap: number; maxW: number; labelGap?: number }
     auth: { enabled: boolean; loginUrl: string; errText: string }
     integrations?: { googleSheets?: { enabled: boolean; mode: "existing"|"new"; accountEmail: string; sheetUrl: string; sheetName: string; webhookUrl: string; lastSyncStatus?: "idle"|"sent"|"error"; lastSyncAt?: string; lastSyncMessage?: string } }
-    dashboard?: { isPublished?: boolean; publishedAt?: string; operationStart?: string; operationEnd?: string; alwaysOpen?: boolean }
+    dashboard?: { isPublished?: boolean; publishedAt?: string; operationStart?: string; operationEnd?: string; operationPeriods?: OperationPeriod[]; alwaysOpen?: boolean }
     brand: string
     formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"
     kdtFields?: KdtField[]
@@ -359,29 +361,52 @@ function operationTimeMs(value?: string, edge: "start" | "end" = "start") {
     const time = new Date(normalized).getTime()
     return Number.isFinite(time) ? time : 0
 }
+function normalizeOperationPeriod(raw: any, index = 0): OperationPeriod | null {
+    if (!raw || typeof raw !== "object") return null
+    const type: OperationPeriodType = raw.type === "single" ? "single" : "range"
+    const base: OperationPeriod = { id: String(raw.id || `period_${index + 1}`), type, label: String(raw.label || "").trim(), enabled: raw.enabled !== false }
+    if (type === "single") return { ...base, date: String(raw.date || raw.start || "").trim().slice(0, 10) }
+    return { ...base, start: String(raw.start || "").trim(), end: String(raw.end || "").trim() }
+}
+function operationPeriodsFromDashboard(dashboard?: Cfg["dashboard"]): OperationPeriod[] {
+    const raw = Array.isArray(dashboard?.operationPeriods) ? dashboard!.operationPeriods : []
+    const normalized = raw.map((item, index) => normalizeOperationPeriod(item, index)).filter(Boolean) as OperationPeriod[]
+    if (normalized.length) return normalized
+    const start = String(dashboard?.operationStart || "").trim()
+    const end = String(dashboard?.operationEnd || "").trim()
+    return start || end ? [{ id: "legacy_period", type: "range", start, end, enabled: true }] : []
+}
+function operationPeriodRange(period: OperationPeriod) {
+    if (period.enabled === false) return null
+    if (period.type === "single") {
+        const date = String(period.date || period.start || "").trim().slice(0, 10)
+        const startAt = operationTimeMs(date, "start")
+        const endAt = operationTimeMs(date, "end")
+        return startAt && endAt ? { startAt, endAt } : null
+    }
+    const startAt = operationTimeMs(period.start, "start")
+    const endAt = operationTimeMs(period.end, "end")
+    if (!startAt && !endAt) return null
+    return { startAt, endAt }
+}
 function getOperationGate(cfg: Cfg) {
     if (cfg.dashboard?.alwaysOpen) return null
-    const start = cfg.dashboard?.operationStart || ""
-    const end = cfg.dashboard?.operationEnd || ""
-    if (!start && !end) return null
+    const ranges = operationPeriodsFromDashboard(cfg.dashboard).map(operationPeriodRange).filter(Boolean) as { startAt: number; endAt: number }[]
+    if (!ranges.length) return null
     const now = Date.now()
-    const startAt = operationTimeMs(start, "start")
-    const endAt = operationTimeMs(end, "end")
-    if (startAt && now < startAt) {
+    if (ranges.some(range => (!range.startAt || now >= range.startAt) && (!range.endAt || now <= range.endAt))) return null
+    if (ranges.some(range => range.startAt && now < range.startAt)) {
         return {
             kind: "before" as const,
             title: "아직 모집이 시작되지 않았어요.",
-            body: "운영 시작 시간 이후에 신청할 수 있습니다.",
+            body: "운영 기간에만 신청할 수 있습니다.",
         }
     }
-    if (endAt && now > endAt) {
-        return {
-            kind: "ended" as const,
-            title: "모집이 종료되었습니다.",
-            body: "운영 기간이 지나 더 이상 신청을 받을 수 없습니다.",
-        }
+    return {
+        kind: "ended" as const,
+        title: "모집이 종료되었습니다.",
+        body: "운영 기간이 지나 더 이상 신청을 받을 수 없습니다.",
     }
-    return null
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────
@@ -463,6 +488,13 @@ export function CatchForm(props: {
     if (!cfg) return null
     const normalizedCfg = normalizeRuntimeConfig(cfg)
     if (normalizedCfg.dashboard?.isPublished === false) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 240, padding: 24, fontFamily: FONT, fontSize: 14, color: "#9EA8C0", textAlign: "center" }}>아직 공개되지 않은 폼이에요.</div>
+    const operationGate = getOperationGate(normalizedCfg)
+    if (operationGate) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 280, padding: 24, fontFamily: FONT, textAlign: "center", color: "#191919" }}>
+        <div>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>{operationGate.title}</div>
+            <div style={{ fontSize: 14, lineHeight: 1.6, color: "#6B7280" }}>{operationGate.body}</div>
+        </div>
+    </div>
 
     const resolvedSlug = (() => {
         try { const p=new URLSearchParams(window.location.search); return p.get("slug")||propSlug } catch { return propSlug }
@@ -524,7 +556,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const remoteDraftTimerRef = React.useRef<any>(null)
     const statusEventIdsRef = React.useRef<Record<string, string>>({})
     const [draftLastFieldId, setDraftLastFieldId] = React.useState("")
-    const operationGate = React.useMemo(() => getOperationGate(cfg), [cfg.dashboard?.operationStart, cfg.dashboard?.operationEnd, cfg.dashboard?.alwaysOpen])
+    const operationGate = React.useMemo(() => getOperationGate(cfg), [cfg.dashboard?.operationStart, cfg.dashboard?.operationEnd, cfg.dashboard?.operationPeriods, cfg.dashboard?.alwaysOpen])
     const formDisabled = !!operationGate
     const [showOperationModal, setShowOperationModal] = React.useState(!!operationGate)
 
