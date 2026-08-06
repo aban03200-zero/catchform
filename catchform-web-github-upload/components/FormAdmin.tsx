@@ -18,6 +18,8 @@ type RecruitmentPeriodMode = "pre"|"formal"
 type ConsentPosition = "start"|"end"
 type OperationPeriodType = "range"|"single"
 type OperationPeriod = { id:string; type:OperationPeriodType; label?:string; start?:string; end?:string; date?:string; enabled?:boolean }
+type EducationScheduleType = "range"|"single"
+type EducationSchedule = { id:string; type:EducationScheduleType; label?:string; start?:string; end?:string; date?:string }
 type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; operationPeriods?:OperationPeriod[]; alwaysOpen?:boolean; manualStatus?:DashboardManualStatus; isPublished?:boolean; publishedAt?:string; editPasswordHash?:string; formTrashedAt?:string }
 type AdminRole = ""|"admin"|"master"
 type DashboardSettingsState = {item:any;formName:string;brand:BrandId;formTypeTag:DashboardFormType;operationStart:string;operationEnd:string;operationPeriods:OperationPeriod[];alwaysOpen:boolean;manualStatus:DashboardManualStatus;currentEditPasswordDraft:string;editPasswordDraft:string;clearEditPassword:boolean}
@@ -33,7 +35,7 @@ type FormField = { id:string; type:FieldType; label:string; placeholder?:string;
 type FormAdConfig = { enabled:boolean; adMode:AdMode; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string }
 type QrLink = { code:string; url:string; label?:string; type?:string; createdAt?:string }
 type Cfg = {
-  header: { imageUrl:string; programId:string; programUnlinked?:boolean; recruitmentPeriodMode?:RecruitmentPeriodMode; overline:string; title:string; educationStart:string; educationEnd:string; tuitionFree:boolean; tuitionFreeText:string; tuitionAmount:string; stipend:string; noticeEnabled:boolean; noticeIconEnabled:boolean; noticeIconText:string; noticeText:string; noticeShape?:"pill"|"rect"; applicationType?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
+  header: { imageUrl:string; programId:string; programUnlinked?:boolean; recruitmentPeriodMode?:RecruitmentPeriodMode; overline:string; title:string; educationStart:string; educationEnd:string; educationSchedules?:EducationSchedule[]; tuitionFree:boolean; tuitionFreeText:string; tuitionAmount:string; stipend:string; noticeEnabled:boolean; noticeIconEnabled:boolean; noticeIconText:string; noticeText:string; noticeShape?:"pill"|"rect"; applicationType?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
   ad?: FormAdConfig
   form: { fields:FormField[]; showNum:boolean; dupText:string; pages:number; pageLabels?:string[]; consentPosition?:ConsentPosition }
   consents: { enabled:boolean; required:boolean; title:string; consentType?:string; body:string; checkLabel:string; policyUrl:string; policyMode?:ConsentDocMode; customPolicyTitle?:string; customPolicyBody?:string }[]
@@ -1153,6 +1155,111 @@ function getSB(url?:string,key?:string):SupabaseClient|null {
 function dc<T>(v:T):T{return JSON.parse(JSON.stringify(v))}
 function fmtNum(v:string){return v.replace(/\D/g,"").replace(/\B(?=(\d{3})+(?!\d))/g,",")}
 function fmtDateKo(d:string){if(!d)return "";const dt=new Date(d+"T00:00:00");const days=["일","월","화","수","목","금","토"];const y=String(dt.getFullYear()).slice(2);const m=String(dt.getMonth()+1).padStart(2,"0");const day=String(dt.getDate()).padStart(2,"0");return `${y}.${m}.${day}(${days[dt.getDay()]})`}
+function durationText(days:number){
+  if(days<30)return `총 ${days}일`
+  const months=Math.floor(days/30),remD=days%30,weeks=Math.floor(remD/7),remDays=remD%7
+  let text=`총 ${months}개월`
+  if(weeks>0)text+=` ${weeks}주`
+  if(remDays>0)text+=` ${remDays}일`
+  return text
+}
+function dateOnlyMs(value:string){
+  const raw=String(value||"").trim().slice(0,10)
+  if(!raw)return 0
+  const time=new Date(raw+"T00:00:00").getTime()
+  return Number.isFinite(time)?time:0
+}
+function makeEducationSchedule(type:EducationScheduleType="range",patch:Partial<EducationSchedule>={}):EducationSchedule{
+  const id=patch.id||`edu_${Date.now()}_${Math.random().toString(36).slice(2,7)}`
+  return type==="single"?{id,type,date:"",...patch}:{id,type,start:"",end:"",...patch}
+}
+function normalizeEducationSchedule(raw:any,index=0):EducationSchedule|null{
+  if(!raw||typeof raw!=="object")return null
+  const type:EducationScheduleType=raw.type==="single"?"single":"range"
+  const base={id:String(raw.id||`edu_${index+1}`),type,label:String(raw.label||"").trim()}
+  if(type==="single")return{...base,date:String(raw.date||raw.start||"").trim().slice(0,10)}
+  return{...base,start:String(raw.start||"").trim().slice(0,10),end:String(raw.end||"").trim().slice(0,10)}
+}
+function educationSchedulesFromHeader(header?:Cfg["header"]|null):EducationSchedule[]{
+  const raw=Array.isArray(header?.educationSchedules)?header!.educationSchedules:[]
+  const normalized=raw.map((item,index)=>normalizeEducationSchedule(item,index)).filter(Boolean) as EducationSchedule[]
+  if(normalized.length)return normalized
+  const start=String(header?.educationStart||"").trim().slice(0,10)
+  const end=String(header?.educationEnd||"").trim().slice(0,10)
+  return start||end?[makeEducationSchedule("range",{id:"legacy_education_period",label:"교육기간",start,end})]:[]
+}
+function educationScheduleRange(schedule:EducationSchedule){
+  if(schedule.type==="single"){
+    const date=String(schedule.date||schedule.start||"").trim().slice(0,10)
+    const time=dateOnlyMs(date)
+    return time?{start:date,end:date,startAt:time,endAt:time}:null
+  }
+  const start=String(schedule.start||"").trim().slice(0,10)
+  const end=String(schedule.end||"").trim().slice(0,10)
+  const startAt=dateOnlyMs(start)
+  const endAt=dateOnlyMs(end)
+  if(!startAt&&!endAt)return null
+  return{start,end,startAt,endAt}
+}
+function primaryEducationRange(schedules:EducationSchedule[]){
+  const ranges=schedules.map(educationScheduleRange).filter(Boolean) as {start:string;end:string;startAt:number;endAt:number}[]
+  if(!ranges.length)return{start:"",end:""}
+  const sorted=[...ranges].sort((a,b)=>(a.startAt||0)-(b.startAt||0))
+  return{start:sorted[0].start||"",end:sorted[0].end||""}
+}
+function headerWithEducationSchedules(header:Cfg["header"],schedules?:EducationSchedule[]):Cfg["header"]{
+  const educationSchedules=schedules?schedules.map((item,index)=>normalizeEducationSchedule(item,index)).filter(Boolean) as EducationSchedule[]:educationSchedulesFromHeader(header)
+  const primary=primaryEducationRange(educationSchedules)
+  return{...header,educationSchedules,educationStart:primary.start,educationEnd:primary.end}
+}
+function educationScheduleText(schedule:EducationSchedule){
+  const range=educationScheduleRange(schedule)
+  if(!range)return""
+  if(schedule.type==="single"||range.start===range.end)return`${fmtDateKo(range.start)} · 하루`
+  const days=Math.round((range.endAt-range.startAt)/(1000*60*60*24))+1
+  if(days<1)return`${fmtDateKo(range.start)} ~ ${fmtDateKo(range.end)} · 날짜 확인 필요`
+  return`${fmtDateKo(range.start)} ~ ${fmtDateKo(range.end)} · ${durationText(days)}`
+}
+function educationScheduleSummaries(header?:Cfg["header"]|null){
+  return educationSchedulesFromHeader(header).map(educationScheduleText).filter(Boolean)
+}
+function EducationSchedulesEditor({schedules,onChange,A}:{schedules:EducationSchedule[];onChange:(next:EducationSchedule[])=>void;A:AT}){
+  const update=(id:string,patch:Partial<EducationSchedule>)=>onChange(schedules.map(schedule=>schedule.id===id?{...schedule,...patch}:schedule))
+  const remove=(id:string)=>onChange(schedules.filter(schedule=>schedule.id!==id))
+  const add=(type:EducationScheduleType)=>onChange([...schedules,makeEducationSchedule(type)])
+  const inputStyle={minWidth:0,width:"100%",height:42,padding:"0 12px",borderRadius:A.r,border:`1.5px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const}
+  return <div style={{display:"flex",flexDirection:"column" as const,gap:9}}>
+    {schedules.length===0&&<div style={{padding:"10px 12px",borderRadius:A.r,border:`1px dashed ${A.border}`,background:A.card2,color:A.t3,fontSize:12.5,lineHeight:1.5}}>아직 추가된 교육 일정이 없어요.</div>}
+    {schedules.map((schedule,index)=>{
+      const summary=educationScheduleText(schedule)
+      return <div key={schedule.id} style={{padding:10,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card}}>
+        <div style={{display:"grid",gridTemplateColumns:"88px 1fr auto",gap:7,alignItems:"center",marginBottom:8}}>
+          <select value={schedule.type} onChange={e=>{
+            const type=e.target.value as EducationScheduleType
+            update(schedule.id,{type,date:type==="single"?(schedule.date||schedule.start||""):"",start:type==="range"?(schedule.start||schedule.date||""):"",end:type==="range"?(schedule.end||schedule.date||""):""})
+          }} style={inputStyle}>
+            <option value="range">기간</option>
+            <option value="single">단일 날짜</option>
+          </select>
+          <input value={schedule.label||""} onChange={e=>update(schedule.id,{label:e.target.value})} placeholder={`일정 ${index+1}`} style={inputStyle}/>
+          <button onClick={()=>remove(schedule.id)} style={{height:42,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.red,fontFamily:FONT,fontSize:12.5,cursor:"pointer"}}>삭제</button>
+        </div>
+        {schedule.type==="single"
+          ? <input type="date" value={schedule.date||""} onChange={e=>update(schedule.id,{date:e.target.value})} style={inputStyle}/>
+          : <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:8}}>
+              <input type="date" value={schedule.start||""} onChange={e=>update(schedule.id,{start:e.target.value})} style={inputStyle}/>
+              <span style={{color:A.t3,fontSize:12,flexShrink:0}}>~</span>
+              <input type="date" value={schedule.end||""} onChange={e=>update(schedule.id,{end:e.target.value})} style={inputStyle}/>
+            </div>}
+        {summary&&<div style={{marginTop:8,padding:"8px 10px",borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,fontWeight:600,color:A.blue,lineHeight:1.45}}>{summary}</div>}
+      </div>
+    })}
+    <div style={{display:"flex",gap:8,flexWrap:"wrap" as const}}>
+      <button onClick={()=>add("range")} style={{height:34,padding:"0 12px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,cursor:"pointer"}}>+ 기간 추가</button>
+      <button onClick={()=>add("single")} style={{height:34,padding:"0 12px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,cursor:"pointer"}}>+ 단일 날짜 추가</button>
+    </div>
+  </div>
+}
 function mergeCfg(raw:any):Cfg {
   const d=dc(DEF)
   if(!raw)return d
@@ -1161,7 +1268,7 @@ function mergeCfg(raw:any):Cfg {
   const legacyKdtFields=isLegacyKdt&&Array.isArray(raw.kdtFields)&&raw.kdtFields.length?kdtFieldsToFormFields(raw.kdtFields):null
   const legacyKdtPages=legacyKdtFields?Math.max(3,...legacyKdtFields.map((f:any)=>f.page||1)):0
   return {
-    header:{...d.header,...(raw.header||{}),...(isLegacyKdt&&!(raw.header||{}).applicationType?{applicationType:"formal"}:{})},
+    header:headerWithEducationSchedules({...d.header,...(raw.header||{}),...(isLegacyKdt&&!(raw.header||{}).applicationType?{applicationType:"formal"}:{})}),
     ad:{...DEFAULT_FORM_AD,...(raw.ad||{})},
     form:(()=>{
       const rf=raw.form||{}
@@ -2597,6 +2704,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
   // ── Cfg updaters ─────────────────────────────────────────────────────
   function uh<K extends keyof Cfg["header"]>(k:K,v:Cfg["header"][K]){setCfg(p=>({...p,header:{...p.header,[k]:v}}))}
+  function setEducationSchedules(schedules:EducationSchedule[]){setCfg(p=>({...p,header:headerWithEducationSchedules(p.header,schedules)}))}
   function uf<K extends keyof Cfg["form"]>(k:K,v:Cfg["form"][K]){setCfg(p=>({...p,form:{...p.form,[k]:v}}))}
   function setOperationPeriods(periods:OperationPeriod[]){setCfg(p=>({...p,dashboard:dashboardWithOperationPeriods(p.dashboard,periods)}))}
   function unlinkedOperationPeriodError(){
@@ -4020,21 +4128,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   // ── Copy ─────────────────────────────────────────────────────────────
   function copyJSON(){navigator.clipboard.writeText(JSON.stringify(cfg,null,2));showToast("JSON 복사 완료!")}
 
-  // ── Edu display ───────────────────────────────────────────────────────
-  function fmtDuration(days:number):string{
-    if(days<30)return `총 ${days}일`
-    const months=Math.floor(days/30),remD=days%30,weeks=Math.floor(remD/7),remDays=remD%7
-    let r=`총 ${months}개월`
-    if(weeks>0)r+=` ${weeks}주`
-    if(remDays>0)r+=` ${remDays}일`
-    return r
-  }
-  function eduDisp(){
-    const s=cfg.header.educationStart,e=cfg.header.educationEnd
-    if(!s||!e)return s?fmtDateKo(s):e?fmtDateKo(e):""
-    const days=Math.round((new Date(e+"T00:00:00").getTime()-new Date(s+"T00:00:00").getTime())/(1000*60*60*24))+1
-    return `${fmtDateKo(s)} ~ ${fmtDateKo(e)}  ·  ${fmtDuration(days)}`
-  }
   function renderEditorTabsStrip(){
     const stripBg=adminDark?"#121419":"#F1F2F4"
     const activeBg=A.card
@@ -4828,7 +4921,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     ]},
   ]
 
-  const dateS:React.CSSProperties={flex:1,background:A.card2,border:`1.5px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:12.5,padding:"7px 9px",outline:"none",colorScheme:adminDark?"dark" as any:"light" as any,boxSizing:"border-box" as const}
   const selS:React.CSSProperties={width:"100%",background:A.card2,border:`1.5px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:13,padding:"7px 26px 7px 10px",outline:"none",cursor:"pointer",boxSizing:"border-box" as const,colorScheme:adminDark?"dark" as any:"light" as any}
 
   // ── Panel content ─────────────────────────────────────────────────────
@@ -4928,19 +5020,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </FG>
         <FG title="상세 정보" A={A} last>
           <F label="교육기간" A={A}>
-            <div style={{display:"flex",gap:8,alignItems:"center"}}>
-              <input type="date" value={cfg.header.educationStart} onChange={e=>uh("educationStart",e.target.value)} style={dateS}/>
-              <span style={{color:A.t3,fontSize:12,flexShrink:0}}>~</span>
-              <input type="date" value={cfg.header.educationEnd} onChange={e=>uh("educationEnd",e.target.value)} style={dateS}/>
-            </div>
-            {cfg.header.educationStart&&cfg.header.educationEnd&&(()=>{
-              const s=cfg.header.educationStart,e=cfg.header.educationEnd
-              const days=Math.round((new Date(e+"T00:00:00").getTime()-new Date(s+"T00:00:00").getTime())/(1000*60*60*24))+1
-              return <div style={{marginTop:8,padding:"8px 14px",borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,fontWeight:600,color:A.blue,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                <span>{fmtDateKo(s)} ~ {fmtDateKo(e)}</span>
-                <span>{(()=>{if(days<30)return `총 ${days}일`;const m=Math.floor(days/30),rD=days%30,w=Math.floor(rD/7),d2=rD%7;let r=`총 ${m}개월`;if(w>0)r+=` ${w}주`;if(d2>0)r+=` ${d2}일`;return r})()}</span>
-              </div>
-            })()}
+            <EducationSchedulesEditor schedules={educationSchedulesFromHeader(cfg.header)} onChange={setEducationSchedules} A={A}/>
           </F>
           <F label="수강료" A={A}>
             <TRow label={cfg.header.tuitionFree?"무료 ✓":"유료 ✓"} on={cfg.header.tuitionFree} toggle={()=>uh("tuitionFree",!cfg.header.tuitionFree)} A={A}/>
@@ -6006,9 +6086,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           {cfg.header.overline&&<div style={{fontSize:fs(12),fontWeight:600,color:accentText,marginBottom:8}}>{cfg.header.overline}</div>}
           <div style={{fontSize:fs(22),fontWeight:600,color:FC.t1,lineHeight:1.25,letterSpacing:seniorMode?0:"-0.5px",marginBottom:10,whiteSpace:"pre-line" as const}}>{cfg.header.title}</div>
           <div style={{display:"flex",justifyContent:"center",gap:8,fontSize:fs(12.5),color:FC.t2,flexWrap:"wrap" as const}}>
-            {(()=>{const s=cfg.header.educationStart,e=cfg.header.educationEnd;if(!s&&!e)return null;const days=s&&e?Math.round((new Date(e+"T00:00:00").getTime()-new Date(s+"T00:00:00").getTime())/(1000*60*60*24))+1:0;return <span>{s&&e?`${fmtDateKo(s)} ~ ${fmtDateKo(e)} · ${days<30?"총 "+days+"일":days%7>0?"총 "+Math.floor(days/7)+"주 "+days%7+"일":"총 "+Math.floor(days/7)+"주"}`:s?fmtDateKo(s):fmtDateKo(e)}</span>})()}
-            {cfg.header.tuitionFree?<><span style={{opacity:.3}}>|</span><span>{cfg.header.tuitionFreeText||"수강료 전액 무료"}</span></>:cfg.header.tuitionAmount?<><span style={{opacity:.3}}>|</span><span>{cfg.header.tuitionAmount}원</span></>:null}
-            {cfg.header.stipend&&<><span style={{opacity:.3}}>|</span><span>지급 수당 {cfg.header.stipend}</span></>}
+            {(()=>{
+              const schedules=educationScheduleSummaries(cfg.header)
+              const hasTuition=cfg.header.tuitionFree||!!cfg.header.tuitionAmount
+              return <>
+                {schedules.map((text,index)=><span key={`${text}_${index}`}>{text}</span>)}
+                {hasTuition&&schedules.length>0&&<span style={{opacity:.3}}>|</span>}
+                {cfg.header.tuitionFree?<span>{cfg.header.tuitionFreeText||"수강료 전액 무료"}</span>:cfg.header.tuitionAmount?<span>{cfg.header.tuitionAmount}원</span>:null}
+                {cfg.header.stipend&&<><span style={{opacity:.3}}>|</span><span>지급 수당 {cfg.header.stipend}</span></>}
+              </>
+            })()}
           </div>
         </div>
         {cfg.ad?.enabled&&<div onClick={()=>setSec("ad")} style={{marginBottom:24,cursor:"pointer",outline:sec==="ad"?`2px solid ${accentBg}`:"none",outlineOffset:4,borderRadius:14}}>

@@ -41,6 +41,8 @@ type ModalShareKey = "kakao"|"instagram"|"threads"|"x"|"link"
 type ModalShareButtons = Record<ModalShareKey,boolean>
 type OperationPeriodType = "range"|"single"
 type OperationPeriod = { id:string; type:OperationPeriodType; label?:string; start?:string; end?:string; date?:string; enabled?:boolean }
+type EducationScheduleType = "range"|"single"
+type EducationSchedule = { id:string; type:EducationScheduleType; label?:string; start?:string; end?:string; date?:string }
 type FieldType = "text"|"name"|"email"|"phone"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"
 type FormField = {
     id: string; type: FieldType; label: string; placeholder?: string
@@ -57,7 +59,7 @@ type KdtField = {
 type Cfg = {
     header: {
         imageUrl: string; programId?: string; recruitmentPeriodMode?: RecruitmentPeriodMode; overline: string; title: string
-        educationStart: string; educationEnd: string
+        educationStart: string; educationEnd: string; educationSchedules?: EducationSchedule[]
         tuitionFree: boolean; tuitionFreeText: string; tuitionAmount: string; stipend: string
         noticeEnabled: boolean; noticeIconEnabled: boolean; noticeIconText: string; noticeText: string
         noticeShape?: "pill"|"rect"
@@ -343,6 +345,56 @@ function fmtDateKo(d: string) {
     const dt = new Date(d + "T00:00:00")
     const days = ["일", "월", "화", "수", "목", "금", "토"]
     return `${String(dt.getFullYear()).slice(2)}.${String(dt.getMonth() + 1).padStart(2, "0")}.${String(dt.getDate()).padStart(2, "0")}(${days[dt.getDay()]})`
+}
+function durationText(days: number) {
+    if (days < 30) return `총 ${days}일`
+    const months = Math.floor(days / 30)
+    const remD = days % 30
+    const weeks = Math.floor(remD / 7)
+    const remDays = remD % 7
+    let text = `총 ${months}개월`
+    if (weeks > 0) text += ` ${weeks}주`
+    if (remDays > 0) text += ` ${remDays}일`
+    return text
+}
+function dateOnlyMs(value: string) {
+    const raw = String(value || "").trim().slice(0, 10)
+    if (!raw) return 0
+    const time = new Date(raw + "T00:00:00").getTime()
+    return Number.isFinite(time) ? time : 0
+}
+function normalizeEducationSchedule(raw: any, index = 0): EducationSchedule | null {
+    if (!raw || typeof raw !== "object") return null
+    const type: EducationScheduleType = raw.type === "single" ? "single" : "range"
+    const base = { id: String(raw.id || `edu_${index + 1}`), type, label: String(raw.label || "").trim() }
+    if (type === "single") return { ...base, date: String(raw.date || raw.start || "").trim().slice(0, 10) }
+    return { ...base, start: String(raw.start || "").trim().slice(0, 10), end: String(raw.end || "").trim().slice(0, 10) }
+}
+function educationSchedulesFromHeader(header?: Cfg["header"] | null): EducationSchedule[] {
+    const raw = Array.isArray(header?.educationSchedules) ? header!.educationSchedules : []
+    const normalized = raw.map((item, index) => normalizeEducationSchedule(item, index)).filter(Boolean) as EducationSchedule[]
+    if (normalized.length) return normalized
+    const start = String(header?.educationStart || "").trim().slice(0, 10)
+    const end = String(header?.educationEnd || "").trim().slice(0, 10)
+    return start || end ? [{ id: "legacy_education_period", type: "range", start, end }] : []
+}
+function educationScheduleText(schedule: EducationSchedule) {
+    if (schedule.type === "single") {
+        const date = String(schedule.date || schedule.start || "").trim().slice(0, 10)
+        return dateOnlyMs(date) ? `${fmtDateKo(date)} · 하루` : ""
+    }
+    const start = String(schedule.start || "").trim().slice(0, 10)
+    const end = String(schedule.end || "").trim().slice(0, 10)
+    const startAt = dateOnlyMs(start)
+    const endAt = dateOnlyMs(end)
+    if (!startAt && !endAt) return ""
+    if (!startAt || !endAt) return start ? fmtDateKo(start) : fmtDateKo(end)
+    const days = Math.round((endAt - startAt) / (1000 * 60 * 60 * 24)) + 1
+    if (days < 1) return `${fmtDateKo(start)} ~ ${fmtDateKo(end)}`
+    return `${fmtDateKo(start)} ~ ${fmtDateKo(end)} · ${durationText(days)}`
+}
+function educationScheduleSummaries(header?: Cfg["header"] | null) {
+    return educationSchedulesFromHeader(header).map(educationScheduleText).filter(Boolean)
 }
 function isValidEmail(v: string) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) }
 function isValidPhone(v: string) { return /^01[0-9]-\d{3,4}-\d{4}$/.test(v) }
@@ -2007,12 +2059,17 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             {(cfg.header.overline || cfg.header.title) && <div style={{ marginBottom: 24, textAlign: "center" as const }}>
                 {cfg.header.overline && <div style={{ fontSize: 12, fontWeight: 600, color: accentBg, marginBottom: 6, letterSpacing: "0.5px" }}>{cfg.header.overline}</div>}
                 {cfg.header.title && <div style={{ fontSize: 22, fontWeight: 600, color: FC.t1, lineHeight: 1.3, letterSpacing: "-0.5px" }}>{cfg.header.title}</div>}
-                {(cfg.header.educationStart || cfg.header.educationEnd) && <div style={{ fontSize: 13, color: FC.t2, marginTop: 8 }}>
-                    {fmtDateKo(cfg.header.educationStart)}{cfg.header.educationStart && cfg.header.educationEnd && " ~ "}{fmtDateKo(cfg.header.educationEnd)}
-                    {(cfg.header.tuitionFree || cfg.header.tuitionAmount) && <span style={{ margin: "0 8px", color: FC.t3 }}>|</span>}
-                    {cfg.header.tuitionFree ? cfg.header.tuitionFreeText || "수강료 전액 무료" : cfg.header.tuitionAmount ? `${cfg.header.tuitionAmount}원` : ""}
-                    {cfg.header.stipend && <><span style={{ margin: "0 8px", color: FC.t3 }}>|</span>{cfg.header.stipend}</>}
-                </div>}
+                {(()=>{
+                    const schedules = educationScheduleSummaries(cfg.header)
+                    const hasTuition = cfg.header.tuitionFree || !!cfg.header.tuitionAmount
+                    if (!schedules.length && !hasTuition && !cfg.header.stipend) return null
+                    return <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" as const, fontSize: 13, color: FC.t2, marginTop: 8 }}>
+                        {schedules.map((text, index) => <span key={`${text}_${index}`}>{text}</span>)}
+                        {hasTuition && schedules.length > 0 && <span style={{ color: FC.t3 }}>|</span>}
+                        {cfg.header.tuitionFree ? <span>{cfg.header.tuitionFreeText || "수강료 전액 무료"}</span> : cfg.header.tuitionAmount ? <span>{cfg.header.tuitionAmount}원</span> : null}
+                        {cfg.header.stipend && <><span style={{ color: FC.t3 }}>|</span><span>{cfg.header.stipend}</span></>}
+                    </div>
+                })()}
             </div>}
 
             {/* Notice */}
