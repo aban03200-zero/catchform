@@ -498,7 +498,10 @@ function educationScheduleText(schedule: EducationSchedule) {
     return `${fmtDateKo(start)} ~ ${fmtDateKo(end)} · ${durationText(days)}`
 }
 function educationScheduleSummaries(header?: Cfg["header"] | null) {
-    return educationSchedulesFromHeader(header).map(educationScheduleText).filter(Boolean)
+    return educationSchedulesFromHeader(header).map(schedule => ({
+        label: String(schedule.label || "").trim(),
+        text: educationScheduleText(schedule),
+    })).filter(item => item.text)
 }
 function isValidEmail(v: string) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) }
 function isValidPhone(v: string) { return /^01[0-9]-\d{3,4}-\d{4}$/.test(v) }
@@ -2390,7 +2393,10 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     const hasTuition = cfg.header.tuitionFree || !!cfg.header.tuitionAmount
                     if (!schedules.length && !hasTuition && !cfg.header.stipend) return null
                     return <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" as const, fontSize: fs(13), color: FC.t2, marginTop: 8 }}>
-                        {schedules.map((text, index) => <span key={`${text}_${index}`}>{text}</span>)}
+                        {schedules.map((item, index) => <span key={`${item.label}_${item.text}_${index}`} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                            {item.label && <span style={{ fontWeight: 500, color: FC.t1 }}>{item.label}</span>}
+                            <span>{item.text}</span>
+                        </span>)}
                         {hasTuition && schedules.length > 0 && <span style={{ color: FC.t3 }}>|</span>}
                         {cfg.header.tuitionFree ? <span>{cfg.header.tuitionFreeText || "수강료 전액 무료"}</span> : cfg.header.tuitionAmount ? <span>{cfg.header.tuitionAmount}원</span> : null}
                         {cfg.header.stipend && <><span style={{ color: FC.t3 }}>|</span><span>{cfg.header.stipend}</span></>}

@@ -1221,7 +1221,10 @@ function educationScheduleText(schedule:EducationSchedule){
   return`${fmtDateKo(range.start)} ~ ${fmtDateKo(range.end)} · ${durationText(days)}`
 }
 function educationScheduleSummaries(header?:Cfg["header"]|null){
-  return educationSchedulesFromHeader(header).map(educationScheduleText).filter(Boolean)
+  return educationSchedulesFromHeader(header).map(schedule=>({
+    label:String(schedule.label||"").trim(),
+    text:educationScheduleText(schedule),
+  })).filter(item=>item.text)
 }
 function EducationSchedulesEditor({schedules,onChange,A}:{schedules:EducationSchedule[];onChange:(next:EducationSchedule[])=>void;A:AT}){
   const update=(id:string,patch:Partial<EducationSchedule>)=>onChange(schedules.map(schedule=>schedule.id===id?{...schedule,...patch}:schedule))
@@ -6090,7 +6093,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               const schedules=educationScheduleSummaries(cfg.header)
               const hasTuition=cfg.header.tuitionFree||!!cfg.header.tuitionAmount
               return <>
-                {schedules.map((text,index)=><span key={`${text}_${index}`}>{text}</span>)}
+                {schedules.map((item,index)=><span key={`${item.label}_${item.text}_${index}`} style={{display:"inline-flex",alignItems:"center",gap:5}}>
+                  {item.label&&<span style={{fontWeight:500,color:FC.t1}}>{item.label}</span>}
+                  <span>{item.text}</span>
+                </span>)}
                 {hasTuition&&schedules.length>0&&<span style={{opacity:.3}}>|</span>}
                 {cfg.header.tuitionFree?<span>{cfg.header.tuitionFreeText||"수강료 전액 무료"}</span>:cfg.header.tuitionAmount?<span>{cfg.header.tuitionAmount}원</span>:null}
                 {cfg.header.stipend&&<><span style={{opacity:.3}}>|</span><span>지급 수당 {cfg.header.stipend}</span></>}
