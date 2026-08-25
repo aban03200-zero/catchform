@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 
-export const dynamic = "force-dynamic"
-export const revalidate = 0
+export const revalidate = 60
+
+const VERSION_CACHE_CONTROL = "public, s-maxage=60, stale-while-revalidate=300"
 
 export async function GET() {
   const version =
@@ -13,6 +14,6 @@ export async function GET() {
 
   return NextResponse.json(
     { version, checkedAt: new Date().toISOString() },
-    { headers: { "cache-control": "no-store, max-age=0" } },
+    { headers: { "cache-control": VERSION_CACHE_CONTROL } },
   )
 }

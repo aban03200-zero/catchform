@@ -72,6 +72,57 @@ const ADK: AT = {
   r:"8px", r2:"12px",
 }
 
+const IMAGE_UPLOAD_MAX_WIDTH = 1600
+const IMAGE_UPLOAD_MAX_HEIGHT = 1200
+const IMAGE_UPLOAD_QUALITY = 0.78
+const COMPRESSIBLE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"])
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = event => resolve(String(event.target?.result || ""))
+    reader.onerror = () => reject(reader.error || new Error("이미지를 읽지 못했어요."))
+    reader.readAsDataURL(file)
+  })
+}
+
+function loadImageElement(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error("이미지를 불러오지 못했어요."))
+    img.src = src
+  })
+}
+
+async function readCompressedImageFile(file: File) {
+  const original = await readFileAsDataUrl(file)
+  if (!COMPRESSIBLE_IMAGE_TYPES.has(file.type)) return original
+
+  try {
+    const img = await loadImageElement(original)
+    const naturalW = img.naturalWidth || img.width
+    const naturalH = img.naturalHeight || img.height
+    if (!naturalW || !naturalH) return original
+
+    const scale = Math.min(1, IMAGE_UPLOAD_MAX_WIDTH / naturalW, IMAGE_UPLOAD_MAX_HEIGHT / naturalH)
+    const canvas = document.createElement("canvas")
+    canvas.width = Math.max(1, Math.round(naturalW * scale))
+    canvas.height = Math.max(1, Math.round(naturalH * scale))
+
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return original
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+    const targetType = file.type === "image/png" || file.type === "image/webp" ? "image/webp" : "image/jpeg"
+    const compressed = canvas.toDataURL(targetType, IMAGE_UPLOAD_QUALITY)
+    if (!compressed.startsWith(`data:${targetType}`)) return original
+    return compressed.length < original.length ? compressed : original
+  } catch {
+    return original
+  }
+}
+
 // ─── Form preview colors ──────────────────────────────────────────────────
 type FCS = { bg:string; fieldBg:string; fieldBorder:string; t1:string; t2:string; t3:string; red:string }
 const FD: FCS = { bg:"#0B0C0E", fieldBg:"rgba(255,255,255,0.04)", fieldBorder:"rgba(255,255,255,0.10)", t1:"rgba(255,255,255,0.92)", t2:"rgba(255,255,255,0.62)", t3:"rgba(255,255,255,0.32)", red:"#FF4B4B" }
@@ -2338,7 +2389,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     let stopped=false
     const checkVersion=async()=>{
       try{
-        const res=await fetch(`/api/version?ts=${Date.now()}`,{cache:"no-store"})
+        const res=await fetch("/api/version")
         if(!res.ok)return
         const data=await res.json().catch(()=>null)
         const version=String(data?.version||"")
@@ -3945,15 +3996,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     }
     img.src=url
   }
-  function onImg(e:React.ChangeEvent<HTMLInputElement>){
+  async function onImg(e:React.ChangeEvent<HTMLInputElement>){
     const f=e.target.files?.[0];if(!f)return
-    const r=new FileReader()
-    r.onload=ev=>{
-      const url=ev.target?.result as string||""
+    try {
+      const url=await readCompressedImageFile(f)
       setCfg(p=>({...p,header:{...p.header,imageUrl:url,imageFit:"contain",imagePosX:50,imagePosY:50,imageCropX:0,imageCropY:0,imageCropW:100,imageCropH:100}}))
       if(url)setImageNaturalSize("header",url)
+    } catch {
+      showToast("이미지 업로드에 실패했어요.", false)
+    } finally {
+      e.target.value=""
     }
-    r.readAsDataURL(f);e.target.value=""
   }
   const imageFit=(img:any)=>img?.imageFit==="cover"?"cover":"contain"
   const imagePos=(img:any)=>`${img?.imagePosX??50}% ${img?.imagePosY??50}%`
@@ -5103,19 +5156,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                           <span style={{fontSize:11,fontWeight:500}}>{AD_IMAGE_SIZE_TEXT}</span>
                         </label>
                         <input id="form_ad_image_upload" type="file" accept="image/*" style={{display:"none"}}
-                          onChange={e=>{
+                          onChange={async e=>{
                             const file=e.target.files?.[0]
                             if(!file)return
-                            const reader=new FileReader()
-                            reader.onload=ev=>{
-                              const result=ev.target?.result as string
+                            try {
+                              const result=await readCompressedImageFile(file)
                               if(result){
                                 setCfg(p=>({...p,ad:{...DEFAULT_FORM_AD,...(p.ad||{}),imageUrl:result,imageFit:"cover",imagePosX:50,imagePosY:50,imageCropX:0,imageCropY:0,imageCropW:100,imageCropH:100}}))
                                 setImageNaturalSize("ad",result)
                               }
+                            } catch {
+                              showToast("이미지 업로드에 실패했어요.", false)
+                            } finally {
+                              e.target.value=""
                             }
-                            reader.readAsDataURL(file)
-                            e.target.value=""
                           }}/>
                       </div>}
                 </F>
@@ -5132,16 +5186,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       : <div>
                           <label htmlFor="form_ad_element_upload" style={{display:"flex",alignItems:"center",justifyContent:"center",height:36,borderRadius:A.r,border:`1.5px dashed ${A.border}`,background:A.card2,cursor:"pointer",fontSize:12.5,color:A.t3,fontFamily:FONT,fontWeight:600}}>이미지 업로드</label>
                           <input id="form_ad_element_upload" type="file" accept="image/*" style={{display:"none"}}
-                            onChange={e=>{
+                            onChange={async e=>{
                               const file=e.target.files?.[0]
                               if(!file)return
-                              const reader=new FileReader()
-                              reader.onload=ev=>{
-                                const result=ev.target?.result as string
+                              try {
+                                const result=await readCompressedImageFile(file)
                                 if(result)uad("adElementImageUrl",result)
+                              } catch {
+                                showToast("이미지 업로드에 실패했어요.", false)
+                              } finally {
+                                e.target.value=""
                               }
-                              reader.readAsDataURL(file)
-                              e.target.value=""
                             }}/>
                         </div>}
                   </F>
@@ -5369,19 +5424,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                               이미지 파일 업로드
                             </label>
                             <input id={`img_upload_${field.id}`} type="file" accept="image/*" style={{display:"none"}}
-                              onChange={e=>{
+                              onChange={async e=>{
                                 const file=e.target.files?.[0]
                                 if(!file)return
-                                const reader=new FileReader()
-                                reader.onload=ev=>{
-                                  const result=ev.target?.result as string
+                                try {
+                                  const result=await readCompressedImageFile(file)
                                   if(result){
                                     patchActiveField(idx,{imageUrl:result,imageFit:"contain",imagePosX:50,imagePosY:50,imageCropX:0,imageCropY:0,imageCropW:100,imageCropH:100})
                                     setImageNaturalSize("field",result,(field as any).id)
                                   }
+                                } catch {
+                                  showToast("이미지 업로드에 실패했어요.", false)
+                                } finally {
+                                  e.target.value=""
                                 }
-                                reader.readAsDataURL(file)
-                                e.target.value=""
                               }}/>
                           </div>
                       }
@@ -5419,19 +5475,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                                   <span style={{fontSize:11,fontWeight:500}}>{AD_IMAGE_SIZE_TEXT}</span>
                                 </label>
                                 <input id={`ad_image_upload_${field.id}`} type="file" accept="image/*" style={{display:"none"}}
-                                  onChange={e=>{
+                                  onChange={async e=>{
                                     const file=e.target.files?.[0]
                                     if(!file)return
-                                    const reader=new FileReader()
-                                    reader.onload=ev=>{
-                                      const result=ev.target?.result as string
+                                    try {
+                                      const result=await readCompressedImageFile(file)
                                       if(result){
                                         patchActiveField(idx,{imageUrl:result,imageFit:"cover",imagePosX:50,imagePosY:50,imageCropX:0,imageCropY:0,imageCropW:100,imageCropH:100})
                                         setImageNaturalSize("field",result,(field as any).id)
                                       }
+                                    } catch {
+                                      showToast("이미지 업로드에 실패했어요.", false)
+                                    } finally {
+                                      e.target.value=""
                                     }
-                                    reader.readAsDataURL(file)
-                                    e.target.value=""
                                   }}/>
                               </div>}
                         </F>
@@ -5448,16 +5505,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                               : <div>
                                   <label htmlFor={`ad_element_upload_${field.id}`} style={{display:"flex",alignItems:"center",justifyContent:"center",height:36,borderRadius:A.r,border:`1.5px dashed ${A.border}`,background:A.card2,cursor:"pointer",fontSize:12.5,color:A.t3,fontFamily:FONT,fontWeight:600}}>이미지 업로드</label>
                                   <input id={`ad_element_upload_${field.id}`} type="file" accept="image/*" style={{display:"none"}}
-                                    onChange={e=>{
+                                    onChange={async e=>{
                                       const file=e.target.files?.[0]
                                       if(!file)return
-                                      const reader=new FileReader()
-                                      reader.onload=ev=>{
-                                        const result=ev.target?.result as string
+                                      try {
+                                        const result=await readCompressedImageFile(file)
                                         if(result)patchActiveField(idx,{adElementImageUrl:result})
+                                      } catch {
+                                        showToast("이미지 업로드에 실패했어요.", false)
+                                      } finally {
+                                        e.target.value=""
                                       }
-                                      reader.readAsDataURL(file)
-                                      e.target.value=""
                                     }}/>
                                 </div>}
                           </F>

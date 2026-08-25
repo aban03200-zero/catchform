@@ -1,6 +1,9 @@
 import { CatchFormClient } from "@/components/CatchFormClient"
 import { publicEnv } from "@/lib/env"
 
+export const dynamic = "force-static"
+export const revalidate = 60
+
 function firstDateValue(source: any, keys: string[]) {
   for (const key of keys) {
     const value = source?.[key]
@@ -80,7 +83,7 @@ async function getProgram(baseUrl: string, programId: string) {
       apikey: publicEnv.supabaseAnonKey,
       authorization: `Bearer ${publicEnv.supabaseAnonKey}`,
     },
-    cache: "no-store",
+    next: { revalidate: 60 },
   })
   if (!res.ok) return null
   const rows = (await res.json()) as any[]
@@ -99,7 +102,7 @@ async function getInitialForm(slug: string) {
         apikey: publicEnv.supabaseAnonKey,
         authorization: `Bearer ${publicEnv.supabaseAnonKey}`,
       },
-      cache: "no-store",
+      next: { revalidate: 60 },
     })
     if (!res.ok) return null
     const rows = (await res.json()) as Array<{ id: string; config: unknown }>
