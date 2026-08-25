@@ -2144,23 +2144,26 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     return String(source.header?.programId||"").trim()
   }
   async function syncLinkedProgramResponses(formId:string,source:Cfg,opts:{notify?:boolean}={}){
+    const isUnlinked=!!source.header?.programUnlinked
     const programId=linkedProgramIdOf(source)
-    if(!supa||!formId||!programId)return
-    if(linkedProgramResponseSyncRef.current[formId]===programId)return
-    linkedProgramResponseSyncRef.current[formId]=programId
+    if(!supa||!formId||(!isUnlinked&&!programId))return
+    const syncKey=isUnlinked?"__unlinked__":programId
+    if(linkedProgramResponseSyncRef.current[formId]===syncKey)return
+    linkedProgramResponseSyncRef.current[formId]=syncKey
     const tables=["applications","company_applications"]
     const errors:string[]=[]
+    const patch:{program_id:string|null}={program_id:isUnlinked?null:programId}
     await Promise.all(tables.map(async table=>{
-      const {error}=await supa.from(table).update({program_id:programId}).eq("form_id",formId)
+      const {error}=await supa.from(table).update(patch).eq("form_id",formId)
       if(error)errors.push(`${table}: ${error.message}`)
     }))
     if(errors.length){
       delete linkedProgramResponseSyncRef.current[formId]
       console.warn("Failed to sync linked program responses",errors)
-      if(opts.notify)showToast("기존 응답의 교육과정 연결에 실패했어요.",false)
+      if(opts.notify)showToast(isUnlinked?"기존 응답의 교육과정 연결 해제에 실패했어요.":"기존 응답의 교육과정 연결에 실패했어요.",false)
       return
     }
-    if(opts.notify)showToast("기존 응답도 연결된 교육과정으로 업데이트했어요.")
+    if(opts.notify)showToast(isUnlinked?"기존 응답의 교육과정 연결을 해제했어요.":"기존 응답도 연결된 교육과정으로 업데이트했어요.")
   }
   function resetQrEditorState(nextCfg?:Cfg){
     const savedDetailQr=(nextCfg?.integrations?.qrLinks||[]).find(link=>link.type==="detail"&&link.url)
