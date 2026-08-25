@@ -2110,6 +2110,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [deletedField,setDeletedField]=React.useState<{field:FormField;idx:number}|null>(null)
   const [appUpdateAvailable,setAppUpdateAvailable]=React.useState(false)
   const appVersionRef=React.useRef("")
+  const linkedProgramResponseSyncRef=React.useRef<Record<string,string>>({})
   const dashboardRefreshTimer=React.useRef<any>(null)
   const dashboardRefreshBusy=React.useRef(false)
   React.useEffect(()=>{setSlugDraft(savedSlug||saveSlug||"")},[savedSlug,saveSlug])
@@ -2137,6 +2138,29 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       setToastLeaving(true)
       setTimeout(()=>{setToast(null);setToastLeaving(false)},300)
     },4000)
+  }
+  function linkedProgramIdOf(source:Cfg){
+    if(source.header?.programUnlinked)return""
+    return String(source.header?.programId||"").trim()
+  }
+  async function syncLinkedProgramResponses(formId:string,source:Cfg,opts:{notify?:boolean}={}){
+    const programId=linkedProgramIdOf(source)
+    if(!supa||!formId||!programId)return
+    if(linkedProgramResponseSyncRef.current[formId]===programId)return
+    linkedProgramResponseSyncRef.current[formId]=programId
+    const tables=["applications","company_applications"]
+    const errors:string[]=[]
+    await Promise.all(tables.map(async table=>{
+      const {error}=await supa.from(table).update({program_id:programId}).eq("form_id",formId)
+      if(error)errors.push(`${table}: ${error.message}`)
+    }))
+    if(errors.length){
+      delete linkedProgramResponseSyncRef.current[formId]
+      console.warn("Failed to sync linked program responses",errors)
+      if(opts.notify)showToast("기존 응답의 교육과정 연결에 실패했어요.",false)
+      return
+    }
+    if(opts.notify)showToast("기존 응답도 연결된 교육과정으로 업데이트했어요.")
   }
   function resetQrEditorState(nextCfg?:Cfg){
     const savedDetailQr=(nextCfg?.integrations?.qrLinks||[]).find(link=>link.type==="detail"&&link.url)
@@ -2742,6 +2766,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const updatedAt=new Date().toISOString()
       const {error}=await supa.from("form_configs").update({name:nextName,config:next,brand:dbBrandValue(dashboardSettings.brand),updated_at:updatedAt}).eq("id",dashboardSettings.item.id)
       if(error)throw error
+      await syncLinkedProgramResponses(dashboardSettings.item.id,next)
       delete fullFormCache.current[dashboardSettings.item.id]
       if(dashboardSettings.item.__fromBuilder){
         setCfg(next)
@@ -2788,11 +2813,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   function applyLinkedProgram(program:Prog){
     const mode=recruitmentPeriodModeOf(cfg)
     const period=recruitmentPeriodOf(program,mode)
-    setCfg(p=>({
-      ...p,
-      header:{...p.header,programId:program.id,programUnlinked:false,recruitmentPeriodMode:mode,title:program.title||p.header.title},
-      dashboard:dashboardWithOperationPeriods({...(p.dashboard||{}),operationStart:period.start||"",operationEnd:period.end||""},period.start||period.end?[makeOperationPeriod("range",{id:"linked_program_period",label:recruitmentPeriodLabel(mode),start:period.start||"",end:period.end||""})]:[]),
-    }))
+    const nextCfg={
+      ...cfg,
+      header:{...cfg.header,programId:program.id,programUnlinked:false,recruitmentPeriodMode:mode,title:program.title||cfg.header.title},
+      dashboard:dashboardWithOperationPeriods({...(cfg.dashboard||{}),operationStart:period.start||"",operationEnd:period.end||""},period.start||period.end?[makeOperationPeriod("range",{id:"linked_program_period",label:recruitmentPeriodLabel(mode),start:period.start||"",end:period.end||""})]:[]),
+    }
+    setCfg(nextCfg)
   }
   function setRecruitmentPeriodMode(mode:RecruitmentPeriodMode){
     const program=progs.find(p=>p.id===cfg.header.programId)
@@ -3179,7 +3205,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	    const updatedAt=new Date().toISOString()
 	    fullFormCache.current[loadedId]={updatedAt,data:{config:cfgFinal,slug:savedSlug,name:loadedName,brand:currentBrand}}
 	    supa.from("form_configs").update({config:cfgFinal,brand:dbBrandValue(currentBrand),updated_at:updatedAt}).eq("id",loadedId)
-		      .then(({error})=>{if(error)showToast("저장 중 오류가 발생했어요",false);else{loadList();loadDashboard(supa)}})
+		      .then(({error})=>{if(error)showToast("저장 중 오류가 발생했어요",false);else{void syncLinkedProgramResponses(loadedId,cfgFinal);loadList();loadDashboard(supa)}})
 		  }
   function onSaveClick(){if(loadedId)setShowUpdateModal(true);else setShowSave(true)}
   function getBrandFormBaseUrl(brand=currentBrand){
@@ -3223,6 +3249,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }),currentBrand)
       const{error}=await supa.from("form_configs").update({config:nextCfg,brand:dbBrandValue(currentBrand),updated_at:now}).eq("id",loadedId)
       if(error)throw error
+      await syncLinkedProgramResponses(loadedId,nextCfg)
       setCfg(nextCfg)
       fullFormCache.current[loadedId]={updatedAt:now,data:{config:nextCfg,slug:savedSlug,name:loadedName,brand:currentBrand}}
       loadList();loadDashboard(supa)
@@ -3979,7 +4006,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       supa.from("form_configs").update({config:cfgFinal,brand:dbBrandValue(currentBrand),updated_at:new Date().toISOString()}).eq("id",loadedId)
         .then(({error})=>{
           setAutoSaving(false)
-          if(!error)setAutoSaved(true)
+          if(!error){
+            setAutoSaved(true)
+            void syncLinkedProgramResponses(loadedId,cfgFinal)
+          }
         })
     },2000)
     return ()=>{if(autoSaveTimer.current)clearTimeout(autoSaveTimer.current)}
