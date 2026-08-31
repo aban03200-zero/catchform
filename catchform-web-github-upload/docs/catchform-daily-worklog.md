@@ -10,11 +10,16 @@
 - `sniperfactory.com -> Framer iframe -> CatchForm` 구조에서 UTM이 끊기지 않도록 프론트 구현 가이드를 `docs/sniperfactory-framer-utm-forwarding-guide.md`로 작성
 - 테스트 대상 페이지 `https://sniperfactory.com/program/kdt-kakaocloud-6`와 CRM Framer URL `https://major-terms-956572.framer.app/` 기준으로 iframe src에 UTM을 전달하는 방법을 정리
 - 스나이퍼팩토리 브랜드에서 사용하는 `social`, `banner`, `viral`, `email`, `sms`, `cpc`, `display` UTM 규칙과 테스트 체크리스트를 문서화
+- 공개 폼 제출 시 URL의 `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`, `landing_page`, `referrer`, `fbclid`, `gclid` 값을 응답 DB 컬럼에 저장하도록 추가
+- UTM이 있는 제출은 `_attribution` 백업 데이터를 `form_data`에도 함께 남겨 컬럼 외 복구/확인 경로를 보강
+- UTM source/medium/campaign이 있는 경우 `referral_source`가 비어 있을 때 자동 요약값을 저장하도록 추가
+- 응답 및 분석의 `응답별 데이터` 표와 CSV 다운로드에 UTM/landing/referrer 컬럼이 표시되도록 추가
 
 ### 확인 필요
 
 - `sniperfactory.com` 프론트의 iframe 렌더링 공통 컴포넌트에서 CRM Framer URL에 현재 페이지 UTM을 붙이도록 별도 반영 필요
-- CatchForm 쪽에는 이후 UTM 수신, DB 저장, 관리자/CSV 노출 작업이 추가로 필요함
+- DB 컬럼이 없는 환경에 배포하면 제출 저장이 실패할 수 있으므로 `applications`, `company_applications` 양쪽 컬럼 존재 여부 확인 필요
+- 과거에 이미 제출된 응답은 URL UTM을 소급 복원할 수 없고, 이번 배포 이후 들어온 제출부터 응답별 데이터와 CSV에 표시됨
 
 ## 2026-08-25
 

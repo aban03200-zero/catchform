@@ -790,6 +790,17 @@ const CONSENT_TYPES = [
   {key:"terms",             label:"서비스 이용약관",          answerKey:"terms_consent",              isPrivacy:false},
   {key:"marketing_consent", label:"마케팅 정보 수신 동의",    answerKey:"marketing_consent",          isPrivacy:false},
 ]
+const ATTRIBUTION_RESPONSE_FIELDS = [
+  {id:"__attr_utm_source",answerKey:"utm_source",label:"utm_source"},
+  {id:"__attr_utm_medium",answerKey:"utm_medium",label:"utm_medium"},
+  {id:"__attr_utm_campaign",answerKey:"utm_campaign",label:"utm_campaign"},
+  {id:"__attr_utm_content",answerKey:"utm_content",label:"utm_content"},
+  {id:"__attr_utm_term",answerKey:"utm_term",label:"utm_term"},
+  {id:"__attr_landing_page",answerKey:"landing_page",label:"landing_page"},
+  {id:"__attr_referrer",answerKey:"referrer",label:"referrer"},
+  {id:"__attr_fbclid",answerKey:"fbclid",label:"fbclid"},
+  {id:"__attr_gclid",answerKey:"gclid",label:"gclid"},
+]
 const CONSENT_POLICY_URLS: Record<string,Record<string,string>> = {
   INSIDEOUT: {
     privacy_policy: "https://insideout.or.kr/signup/privacy-policy",
@@ -3366,7 +3377,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const safe=String(answerKey||label||"custom").replace(/[^A-Za-z0-9_-]+/g,"_").replace(/^_+|_+$/g,"").slice(0,60)
     return `__consent_${safe||"custom"}`
   }
-  function getAnalyticsFields(options?:{includeConsentFields?:boolean;rows?:any[]}){
+  function analyticsAttributionValue(row:any,key:string){
+    const direct=row?.[key]
+    if(direct!==undefined&&direct!==null&&String(direct).trim()!=="")return direct
+    const fd=Array.isArray(row?.form_data)?row.form_data:[]
+    const attributionItem=fd.find((item:any)=>String(item?.answerKey||"")==="_attribution"||String(item?.question||"")==="_attribution")
+    const attribution=attributionItem?.answer&&typeof attributionItem.answer==="object"?attributionItem.answer:null
+    const nested=attribution?.[key]
+    return nested!==undefined&&nested!==null&&String(nested).trim()!==""?nested:""
+  }
+  function getAnalyticsFields(options?:{includeConsentFields?:boolean;includeAttributionFields?:boolean;rows?:any[]}){
     const raw:any[] = isKdt ? (cfg.kdtFields||[]) : (cfg.form.fields||[])
     const fields:any[]=raw.filter(f=>!isDisplayOnlyFieldType(f.type)).map(f=>({
       id:f.id,
@@ -3375,7 +3395,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       page:f.page||1,
       opts:(f.opts&&f.opts.length)?f.opts:(f.options||[]).map((o:any)=>({label:String(o),value:String(o)}))
     }))
-    if(!options?.includeConsentFields)return fields
+    const addAttributionFields=(baseFields:any[])=>options?.includeAttributionFields
+      ? [
+          ...ATTRIBUTION_RESPONSE_FIELDS.map(field=>({
+            ...field,
+            type:"text",
+            page:0,
+            opts:[],
+            readOnly:true,
+            attributionField:true,
+          })),
+          ...baseFields,
+        ]
+      : baseFields
+    if(!options?.includeConsentFields)return addAttributionFields(fields)
     const existingIds=new Set(fields.flatMap((field:any)=>[String(field.id||""),String(field.answerKey||"")].filter(Boolean)))
     const consentFields:any[]=[]
     const usedAnswerKeys=new Set<string>()
@@ -3421,9 +3454,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         addConsentField(question||known?.label||String(item?.answerKey||"동의 항목"),[item?.answerKey,type,known?.answerKey])
       })
     })
-    return consentFields.length?[...fields,...consentFields]:fields
+    return addAttributionFields(consentFields.length?[...fields,...consentFields]:fields)
   }
   function analyticsRawAnswer(row:any,field:any){
+    if(field.attributionField)return analyticsAttributionValue(row,field.answerKey||field.id)
     const answerKeys=Array.from(new Set([field.answerKey,field.id,...(Array.isArray(field.answerKeys)?field.answerKeys:[])].map(key=>String(key||"")).filter(Boolean)))
     const normalize=(value:any)=>field.consentField?normalizeConsentAnswer(value):value
     const direct=row[field.id]
@@ -3972,7 +4006,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setExpandedDuplicateResponseGroups([])
   },[loadedId,analyticsResponseScope])
   function exportAnalyticsCsv(srcRows:any[]=analyticsRows,fileSuffix="responses"){
-    const fields=getAnalyticsFields({includeConsentFields:true,rows:srcRows})
+    const fields=getAnalyticsFields({includeConsentFields:true,includeAttributionFields:analyticsResponseScope==="submitted",rows:srcRows})
     const headers=["날짜","시간",...fields.map(f=>f.label)]
     const csvEscape=(v:any)=>`"${String(v??"").replace(/"/g,'""')}"`
     const lines=[headers.map(csvEscape).join(",")]
@@ -6914,7 +6948,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
     }).filter(Boolean) as any[]
     const responseRows=analyticsResponseScope==="draft"?draftResponseRows:rows
-    const responseFields=getAnalyticsFields({includeConsentFields:true,rows:responseRows})
+    const responseFields=getAnalyticsFields({includeConsentFields:true,includeAttributionFields:analyticsResponseScope==="submitted",rows:responseRows})
+    const editResponseFields=editResponse?getAnalyticsFields({includeConsentFields:true,rows:[editResponse.row]}):[]
     const responseRowIds=responseRows.map((row:any)=>analyticsRowKey(row))
     const selectedResponseRows=responseRows.filter((row:any)=>selectedAnalyticsRowIds.includes(analyticsRowKey(row)))
     const canDeleteSelectedResponses=selectedResponseRows.length>0&&!analyticsSelectedDeleteBusy
@@ -6961,8 +6996,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     })()
     const duplicateFoldedCount=responseRows.length-responseRowGroups.length
     const toggleDuplicateResponseGroup=(key:string)=>setExpandedDuplicateResponseGroups(prev=>prev.includes(key)?prev.filter(item=>item!==key):[...prev,key])
-    const isResizableAnalyticsField=(field:any)=>field.type==="text"||field.type==="textarea"
-    const analyticsDefaultColumnWidth=(field:any,fileCount=0)=>isResizableAnalyticsField(field)?440:fileCount?260:220
+    const isResizableAnalyticsField=(field:any)=>!field.attributionField&&(field.type==="text"||field.type==="textarea")
+    const analyticsDefaultColumnWidth=(field:any,fileCount=0)=>field.attributionField
+      ? (["landing_page","referrer"].includes(String(field.answerKey||field.id))?280:170)
+      : isResizableAnalyticsField(field)?440:fileCount?260:220
     const analyticsColumnMeta=responseFields.map((field:any)=>{
       const fileCount=analyticsFieldFiles(responseRows,field).length
       const resizable=isResizableAnalyticsField(field)
@@ -7783,7 +7820,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	              <button onClick={()=>!editResponseSaving&&setEditResponse(null)} disabled={editResponseSaving} style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,cursor:editResponseSaving?"not-allowed":"pointer",fontSize:18,lineHeight:1}}>×</button>
 	            </div>
 	            <div style={{padding:18,overflow:"auto",display:"grid",gridTemplateColumns:width<900?"1fr":"1fr 1fr",gap:14}}>
-	              {responseFields.map((field:any)=>{
+	              {editResponseFields.map((field:any)=>{
 	                const fileItems=analyticsFileItems(analyticsRawAnswer(editResponse.row,field))
 	                const isFile=field.type==="file"
 	                return <div key={field.id} style={{gridColumn:field.type==="textarea"||isFile?"1 / -1":undefined}}>
@@ -7811,7 +7848,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	              <div style={{fontSize:12,color:A.t3,lineHeight:1.5}}>저장하면 응답별 데이터, 질문별 인사이트, CSV 다운로드에 바로 반영됩니다.</div>
 	              <div style={{display:"flex",gap:8,flexShrink:0}}>
 	                <button onClick={()=>setEditResponse(null)} disabled={editResponseSaving} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:editResponseSaving?"not-allowed":"pointer"}}>취소</button>
-	                <button onClick={()=>saveEditedAnalyticsRow(responseFields)} disabled={editResponseSaving} style={{height:38,padding:"0 15px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:editResponseSaving?"wait":"pointer"}}>{editResponseSaving?"저장 중...":"저장"}</button>
+	                <button onClick={()=>saveEditedAnalyticsRow(editResponseFields)} disabled={editResponseSaving} style={{height:38,padding:"0 15px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:editResponseSaving?"wait":"pointer"}}>{editResponseSaving?"저장 중...":"저장"}</button>
 	              </div>
 	            </div>
 	          </div>

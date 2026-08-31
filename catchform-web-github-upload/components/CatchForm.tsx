@@ -41,6 +41,8 @@ type ConsentDocMode = "brand"|"custom"
 type ModalShareKey = "kakao"|"instagram"|"threads"|"x"|"link"
 type ModalShareButtons = Record<ModalShareKey,boolean>
 type AdMode = "image"|"split"
+type AttributionKey = "utm_source"|"utm_medium"|"utm_campaign"|"utm_content"|"utm_term"|"landing_page"|"referrer"|"fbclid"|"gclid"
+type AttributionData = Record<AttributionKey,string>
 type OperationPeriodType = "range"|"single"
 type OperationPeriod = { id:string; type:OperationPeriodType; label?:string; start?:string; end?:string; date?:string; enabled?:boolean }
 type EducationScheduleType = "range"|"single"
@@ -118,6 +120,49 @@ const consentTypeFromTitle = (title:string) => {
 const policyUrlForConsent = (type:string,brand?:string) => CONSENT_POLICY_URLS[consentPolicyBrandKey(brand||"")][type] || ""
 const customPolicyPathForConsent = (slug:string,idx:number) => slug ? `/policy/${encodeURIComponent(slug)}/${idx}` : ""
 const DEFAULT_MODAL_SHARE_BUTTONS: ModalShareButtons = { kakao: true, instagram: true, threads: true, x: true, link: true }
+const ATTRIBUTION_KEYS: AttributionKey[] = ["utm_source","utm_medium","utm_campaign","utm_content","utm_term","landing_page","referrer","fbclid","gclid"]
+const emptyAttribution = (): AttributionData => ({
+    utm_source: "",
+    utm_medium: "",
+    utm_campaign: "",
+    utm_content: "",
+    utm_term: "",
+    landing_page: "",
+    referrer: "",
+    fbclid: "",
+    gclid: "",
+})
+const cleanAttributionValue = (value: any) => String(value ?? "").trim().slice(0, 1000)
+const referrerPath = (value: string) => {
+    try {
+        const url = new URL(value)
+        return `${url.pathname}${url.search || ""}`
+    } catch {
+        return ""
+    }
+}
+const getSubmissionAttribution = (): AttributionData => {
+    if (typeof window === "undefined") return emptyAttribution()
+    const params = new URLSearchParams(window.location.search || "")
+    const fbclid = cleanAttributionValue(params.get("fbclid"))
+    const gclid = cleanAttributionValue(params.get("gclid"))
+    const referrer = cleanAttributionValue(params.get("referrer")) || (typeof document !== "undefined" ? cleanAttributionValue(document.referrer) : "")
+    const utmSource = cleanAttributionValue(params.get("utm_source")) || (fbclid ? "facebook" : gclid ? "google" : "")
+    const utmMedium = cleanAttributionValue(params.get("utm_medium")) || (fbclid || gclid ? "cpc" : "")
+    return {
+        utm_source: utmSource,
+        utm_medium: utmMedium,
+        utm_campaign: cleanAttributionValue(params.get("utm_campaign")),
+        utm_content: cleanAttributionValue(params.get("utm_content")),
+        utm_term: cleanAttributionValue(params.get("utm_term")),
+        landing_page: cleanAttributionValue(params.get("landing_page")) || cleanAttributionValue(params.get("lp")) || referrerPath(referrer),
+        referrer,
+        fbclid,
+        gclid,
+    }
+}
+const hasAttributionValue = (attribution: AttributionData) => ATTRIBUTION_KEYS.some(key => !!attribution[key])
+const attributionSourceSummary = (attribution: AttributionData) => [attribution.utm_source, attribution.utm_medium, attribution.utm_campaign].filter(Boolean).join(" / ")
 
 // ─── Supabase ─────────────────────────────────────────────────────────────
 let _sb: SupabaseClient | null = null
@@ -869,9 +914,10 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const getTrackingMeta = () => {
         if (typeof window === "undefined") return {}
         const params = new URLSearchParams(window.location.search || "")
-        const ref = typeof document !== "undefined" ? document.referrer || "" : ""
+        const attribution = getSubmissionAttribution()
+        const ref = attribution.referrer || (typeof document !== "undefined" ? document.referrer || "" : "")
         const refHost = (() => { try { return ref ? new URL(ref).hostname.replace(/^www\./, "") : "" } catch { return "" } })()
-        const explicitSource = params.get("utm_source") || params.get("source") || params.get("ref") || ""
+        const explicitSource = attribution.utm_source || params.get("source") || params.get("ref") || ""
         const sourceRaw = explicitSource || refHost || "direct"
         const sourceMap: Record<string, string> = {
             google: "Google", naver: "Naver", medium: "Medium", twitter: "Twitter", x: "Twitter",
@@ -885,16 +931,21 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         const sourceOrigin = isQr ? "qr" : explicitSource ? "url_param" : refHost ? "referrer" : "unknown"
         const sourceDetail = isQr ? (params.get("qr_label") || params.get("utm_campaign") || "QR") : explicitSource ? sourceRaw : refHost ? refHost : "referrer/UTM 없음"
         return {
-            utm_source: params.get("utm_source") || "",
-            utm_medium: params.get("utm_medium") || "",
-            utm_campaign: params.get("utm_campaign") || "",
+            utm_source: attribution.utm_source,
+            utm_medium: attribution.utm_medium,
+            utm_campaign: attribution.utm_campaign,
+            utm_content: attribution.utm_content,
+            utm_term: attribution.utm_term,
             source: isQr ? "QR" : (sourceMap[sourceKey] || sourceRaw),
             source_origin: sourceOrigin,
             source_detail: sourceDetail,
             referrer: ref,
             referrer_host: refHost,
+            landing_page: attribution.landing_page,
             landing_url: window.location.href,
             landing_path: window.location.pathname,
+            fbclid: attribution.fbclid,
+            gclid: attribution.gclid,
             country: params.get("country") || geoMeta.country || localeCountry || "",
             region: params.get("region") || params.get("province") || params.get("sido") || geoMeta.region || "",
             city: params.get("city") || geoMeta.city || "",
@@ -1863,7 +1914,17 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 if (isMarketing && consentOk[i]) marketingAgreed = true
             })
 
-            if (form_data.length > 0) payload.form_data = form_data
+            const attribution = getSubmissionAttribution()
+            const hasAttribution = hasAttributionValue(attribution)
+            if (hasAttribution) {
+                ATTRIBUTION_KEYS.forEach(key => {
+                    if (attribution[key]) payload[key] = attribution[key]
+                })
+                if (!payload.referral_source) {
+                    const attributionSummary = attributionSourceSummary(attribution)
+                    if (attributionSummary) payload.referral_source = attributionSummary
+                }
+            }
 
             // Meta fields
             if (cfg.header?.programId) payload.program_id = cfg.header.programId
@@ -1882,6 +1943,11 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             if (cfg.auth?.enabled && currentUserId) {
                 payload.user_id = currentUserId
             }
+
+            const storedFormData = hasAttribution
+                ? [...form_data, { question: "_attribution", answer: attribution, answerKey: "_attribution" }]
+                : form_data
+            if (storedFormData.length > 0) payload.form_data = storedFormData
 
             const { error: insertErr } = await supa.from(tableName).insert(payload)
             if (insertErr) {
