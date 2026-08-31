@@ -3,6 +3,19 @@
 이 파일은 CatchForm 작업 중 변경한 내용을 날짜별로 기록하는 문서입니다.
 앞으로 기능 수정, 배포 준비, 오류 수정, 성능 개선이 생기면 같은 형식으로 이어서 남깁니다.
 
+## 2026-08-31
+
+### 반영 내용
+
+- `sniperfactory.com -> Framer iframe -> CatchForm` 구조에서 UTM이 끊기지 않도록 프론트 구현 가이드를 `docs/sniperfactory-framer-utm-forwarding-guide.md`로 작성
+- 테스트 대상 페이지 `https://sniperfactory.com/program/kdt-kakaocloud-6`와 CRM Framer URL `https://major-terms-956572.framer.app/` 기준으로 iframe src에 UTM을 전달하는 방법을 정리
+- 스나이퍼팩토리 브랜드에서 사용하는 `social`, `banner`, `viral`, `email`, `sms`, `cpc`, `display` UTM 규칙과 테스트 체크리스트를 문서화
+
+### 확인 필요
+
+- `sniperfactory.com` 프론트의 iframe 렌더링 공통 컴포넌트에서 CRM Framer URL에 현재 페이지 UTM을 붙이도록 별도 반영 필요
+- CatchForm 쪽에는 이후 UTM 수신, DB 저장, 관리자/CSV 노출 작업이 추가로 필요함
+
 ## 2026-08-25
 
 ### 반영 내용
