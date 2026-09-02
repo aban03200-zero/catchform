@@ -54,12 +54,12 @@ type EditorTab = { key:string; id:string; name:string; slug:string; brand:string
 // ─── Admin UI theme (Toss-style) ─────────────────────────────────────────
 type AT = { bg:string; card:string; card2:string; border:string; border2:string; blue:string; blue2:string; t1:string; t2:string; t3:string; t4:string; green:string; red:string; shadow:string; r:string; r2:string }
 const ALT: AT = {
-  bg:"#F7F8FA", card:"#FFFFFF", card2:"#F2F4F6",
-  border:"#E5E8EB", border2:"#D1D5DB",
-  blue:"#3182F6", blue2:"rgba(49,130,246,0.08)",
-  t1:"#191919", t2:"#6B7280", t3:"#B0B8C1", t4:"#E5E8EB",
-  green:"#17C964", red:"#E85C5C",
-  shadow:"0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)",
+  bg:"#F6F7F9", card:"#FFFFFF", card2:"#F1F3F6",
+  border:"#EDEFF3", border2:"#D5D9DF",
+  blue:"#3182F6", blue2:"#EAF2FE",
+  t1:"#15181D", t2:"#5A6270", t3:"#9AA1AD", t4:"#C4CAD4",
+  green:"#2FBF71", red:"#E5484D",
+  shadow:"0 1px 2px rgba(16,24,40,.06), 0 12px 32px -20px rgba(16,24,40,.28)",
   r:"8px", r2:"12px",
 }
 const ADK: AT = {
@@ -138,8 +138,8 @@ if(typeof document!=="undefined"&&!document.getElementById("pretendard-cdn")){
 if(typeof document!=="undefined"&&!document.getElementById("catchform-keyframes")){
   const s=document.createElement("style");s.id="catchform-keyframes";
   s.textContent=`
-    @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(16px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-    @keyframes toastOut{from{opacity:1;transform:translateX(-50%) translateY(0)}to{opacity:0;transform:translateX(-50%) translateY(16px)}}
+    @keyframes toastIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes toastOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-10px)}}
     @keyframes actionSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
     @keyframes skeletonPulse{0%,100%{opacity:1}50%{opacity:0.4}}
   `;
@@ -1389,7 +1389,7 @@ function applyBrandDefaults(config:Cfg,brand:string):Cfg{
 // ─── UI Atoms ─────────────────────────────────────────────────────────────
 function TRow({label,on,toggle,A}:{label:string;on:boolean;toggle:()=>void;A:AT}) {
   return <div onClick={toggle} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,cursor:"pointer",marginBottom:10}}>
-    <span style={{fontSize:13,fontWeight:500,color:A.t1,fontFamily:FONT}}>{label}</span>
+    <span style={{fontSize:13.5,fontWeight:700,color:A.t1,fontFamily:FONT}}>{label}</span>
     <div style={{width:34,height:20,borderRadius:10,background:on?A.blue:A.border2,position:"relative",transition:"background .2s",flexShrink:0}}>
       <div style={{position:"absolute",width:14,height:14,borderRadius:"50%",background:"#fff",top:3,left:on?17:3,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,0.2)"}}/>
     </div>
@@ -1411,7 +1411,7 @@ function Slider({value,min,max,step=1,unit="px",onChange,A}:{value:number;min:nu
   return <div style={{display:"flex",alignItems:"center",gap:10}}>
     <input type="range" min={min} max={max} step={step} value={value} onChange={e=>onChange(Number(e.target.value))}
       style={{flex:1,WebkitAppearance:"none" as any,height:4,borderRadius:2,background:A.border2,outline:"none",border:"none",padding:0,cursor:"pointer"}}/>
-    <span style={{fontSize:12,fontWeight:600,color:A.t2,minWidth:36,textAlign:"right" as const,fontFamily:FONT}}>{value}{unit}</span>
+    <span style={{fontSize:14,fontWeight:700,color:A.t3,minWidth:56,textAlign:"right" as const,fontFamily:FONT}}>{value}{unit}</span>
   </div>
 }
 function CIn({value,onChange,A}:{value:string;onChange:(v:string)=>void;A:AT}) {
@@ -1426,13 +1426,13 @@ function CIn({value,onChange,A}:{value:string;onChange:(v:string)=>void;A:AT}) {
 }
 function FG({children,title,A,last=false}:{children:React.ReactNode;title?:string;A:AT;last?:boolean}) {
   return <div style={{marginBottom:last?0:20,paddingBottom:last?0:20,borderBottom:last?"none":`1px solid ${A.border}`}}>
-    {title&&<div style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,marginBottom:12,fontFamily:FONT}}>{title}</div>}
+    {title&&<div style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,marginBottom:12,fontFamily:FONT}}>{title}</div>}
     {children}
   </div>
 }
 function F({children,label,hint,A}:{children:React.ReactNode;label?:string;hint?:string;A:AT}) {
   return <div style={{marginBottom:12}}>
-    {label&&<div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:5,fontFamily:FONT}}>{label}</div>}
+    {label&&<div style={{fontSize:12.5,fontWeight:600,color:A.t2,marginBottom:8,fontFamily:FONT}}>{label}</div>}
     {hint&&<div style={{fontSize:11,color:A.t3,marginBottom:5,lineHeight:1.5,fontFamily:FONT}}>{hint}</div>}
     {children}
   </div>
@@ -1448,7 +1448,7 @@ function Btn({children,onClick,variant="ghost",disabled=false,sm=false,A}:{child
   }
   const s=map[variant]
   return <button onClick={onClick} disabled={disabled} onMouseEnter={()=>sh(true)} onMouseLeave={()=>sh(false)}
-    style={{height:sm?28:32,padding:sm?"0 12px":"0 14px",borderRadius:A.r,border:`1px solid ${s.bd}`,background:s.bg,color:s.col,fontFamily:FONT,fontSize:sm?12:12.5,fontWeight:600,cursor:disabled?"not-allowed":"pointer",display:"inline-flex",alignItems:"center",gap:5,opacity:disabled?0.45:1,whiteSpace:"nowrap" as const,transition:"all .12s"}}>
+    style={{height:sm?28:32,padding:sm?"0 12px":"0 14px",borderRadius:A.r,border:`1px solid ${s.bd}`,background:s.bg,color:s.col,fontFamily:FONT,fontSize:sm?12:12.5,fontWeight:variant==="blue"||variant==="primary"||variant==="success"?700:600,cursor:disabled?"not-allowed":"pointer",display:"inline-flex",alignItems:"center",gap:5,opacity:disabled?0.45:1,whiteSpace:"nowrap" as const,transition:"all .12s"}}>
     {children}
   </button>
 }
@@ -1955,14 +1955,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const dashTableScrollRef=React.useRef<HTMLDivElement|null>(null)
   const [showBrandModal,setShowBrandModal]=React.useState(false)
   const [showGuide,setShowGuide]=React.useState(false)
-  const [dashTab,setDashTab]=React.useState<BrandId>("SNIPERFACTORY")
   const [dashBrandFilter,setDashBrandFilter]=React.useState("")
   const [dashProgramFilter,setDashProgramFilter]=React.useState("")
-  const [dashSideTypeFilter,setDashSideTypeFilter]=React.useState<DashboardFormType|"" >("")
+  const [dashProgramGroupFilter,setDashProgramGroupFilter]=React.useState("")
   const [dashTopTypeFilter,setDashTopTypeFilter]=React.useState<DashboardFormType|"" >("")
   const [dashTopStatusFilter,setDashTopStatusFilter]=React.useState<DashboardManualStatus|"" >("")
   const [dashQuery,setDashQuery]=React.useState("")
-  const [dashOpenGroups,setDashOpenGroups]=React.useState<Record<string,boolean>>({})
   const [dashResponseCounts,setDashResponseCounts]=React.useState<Record<string,number>>({})
   const [dashboardSettings,setDashboardSettings]=React.useState<DashboardSettingsState|null>(null)
   const [dashboardSettingsSaving,setDashboardSettingsSaving]=React.useState(false)
@@ -2079,7 +2077,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [pvDd,setPvDd]=React.useState(false)
   const [pvPage,setPvPage]=React.useState(1)
   const [pvPageHistory,setPvPageHistory]=React.useState<number[]>([])
-  const [rightPanelW,setRightPanelW]=React.useState(320)
+  const [rightPanelW,setRightPanelW]=React.useState(344)
   const isResizingRef=React.useRef(false)
   const [pvFieldVals,setPvFieldVals]=React.useState<Record<string,string>>({})
   const [pvFieldErrors,setPvFieldErrors]=React.useState<Record<string,string>>({})
@@ -4252,22 +4250,21 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   function copyJSON(){navigator.clipboard.writeText(JSON.stringify(cfg,null,2));showToast("JSON 복사 완료!")}
 
   function renderEditorTabsStrip(){
-    const stripBg=adminDark?"#121419":"#F1F2F4"
+    const stripBg=adminDark?"#121419":"#F2F3F5"
     const activeBg=A.card
-    const edge=adminDark?"rgba(255,255,255,0.08)":"#D8DBE0"
+    const edge=adminDark?"rgba(255,255,255,0.08)":"#D5D9DF"
     const tabBorder="transparent"
-    const inactiveDivider=adminDark?"rgba(255,255,255,0.08)":"rgba(25,25,25,0.08)"
+    const inactiveDivider=adminDark?"rgba(255,255,255,0.08)":"rgba(141,149,163,0.28)"
     const homeActive=view==="dashboard"
     const iconColor=(active:boolean)=>active?A.blue:A.t3
-    const tabIcon=(active:boolean)=><svg width="15" height="15" viewBox="0 0 32 32" fill="none" style={{flexShrink:0,color:iconColor(active)}}>
-      <path d="M10.2 9.2V6.8c0-1 .8-1.8 1.8-1.8h8c1 0 1.8.8 1.8 1.8v2.4" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M6.5 8.8h19c.8 0 1.5.7 1.5 1.5v15.2c0 .8-.7 1.5-1.5 1.5h-19c-.8 0-1.5-.7-1.5-1.5V10.3c0-.8.7-1.5 1.5-1.5z" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"/>
-      <path d="M11 17h10M11 21h7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
+    const tabIcon=(active:boolean)=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" style={{flexShrink:0,color:iconColor(active)}}>
+      <rect x="4.5" y="4.5" width="15" height="15" rx="4" fill={active?A.blue:"#E3E7EC"}/>
+      <path d="M9.5 9.5h5M9.5 12.8h5M9.5 16h3" stroke={active?"#fff":A.t3} strokeWidth="1.6" strokeLinecap="round"/>
     </svg>
-    return <div style={{height:44,background:stripBg,borderBottom:`1px solid ${edge}`,display:"flex",alignItems:"center",gap:6,padding:"5px 8px",boxSizing:"border-box" as const,flexShrink:0,overflow:"hidden"}}>
+    return <div style={{height:52,background:stripBg,display:"flex",alignItems:"center",gap:6,padding:"0 14px",boxSizing:"border-box" as const,flexShrink:0,overflow:"hidden"}}>
       <button onClick={()=>{rememberActiveEditorTab();setView("dashboard")}} title="폼 리스트"
-        style={{width:34,height:32,border:`1px solid ${tabBorder}`,borderRadius:10,background:homeActive?activeBg:"transparent",boxShadow:homeActive?A.shadow:"none",color:iconColor(homeActive),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2.4 7.3 8 2.7l5.6 4.6v5.4a.8.8 0 0 1-.8.8h-3.1V9.4H6.3v4.1H3.2a.8.8 0 0 1-.8-.8V7.3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg>
+        style={{width:36,height:36,border:`1px solid ${homeActive?edge:"transparent"}`,borderRadius:10,background:homeActive?activeBg:"transparent",boxShadow:homeActive?"0 4px 12px -8px rgba(16,24,40,.32)":"none",color:iconColor(homeActive),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3.5 10.5 12 4l8.5 6.5V19a1.2 1.2 0 0 1-1.2 1.2h-4.4v-5.6H9.1v5.6H4.7A1.2 1.2 0 0 1 3.5 19v-8.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round"/></svg>
       </button>
       <div style={{display:"flex",alignItems:"center",gap:0,overflowX:"auto" as const,overflowY:"hidden" as const,scrollbarWidth:"none" as any,flex:1,minWidth:0}}>
         {editorTabs.map((tab,index)=>{
@@ -4278,8 +4275,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           const label=editorTabLabel(tab)
           return <div key={tab.key} role="button" tabIndex={0} onClick={()=>activateEditorTab(tab.key)} onKeyDown={e=>{if(e.key==="Enter"||e.key===" ")activateEditorTab(tab.key)}}
             title={label}
-            style={{height:32,width:178,maxWidth:178,minWidth:138,padding:"0 7px 0 11px",border:`1px solid ${tabBorder}`,borderRadius:11,background:active?activeBg:"transparent",boxShadow:active?A.shadow:"none",color:active?A.t1:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,flexShrink:0,position:"relative" as const,outline:"none",transition:"background .12s,box-shadow .12s"}}>
-            {showInactiveDivider&&<span aria-hidden="true" style={{position:"absolute" as const,left:0,top:8,bottom:8,width:1,background:inactiveDivider,borderRadius:999}}/>}
+            style={{height:36,width:186,maxWidth:186,minWidth:144,padding:"0 7px 0 11px",border:`1px solid ${tabBorder}`,borderRadius:12,background:active?activeBg:"transparent",boxShadow:active?"0 6px 18px -12px rgba(16,24,40,.38)":"none",color:active?A.t1:A.t2,fontFamily:FONT,fontSize:13,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,flexShrink:0,position:"relative" as const,outline:"none",transition:"background .12s,box-shadow .12s"}}>
+            {showInactiveDivider&&<span aria-hidden="true" style={{position:"absolute" as const,left:0,top:9,bottom:9,width:1,background:inactiveDivider,borderRadius:999}}/>}
             {tabIcon(active)}
             <span style={{minWidth:0,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
               {label}
@@ -4296,7 +4293,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
         })}
         <button type="button" onClick={()=>setShowBrandModal(true)} title="새 폼 만들기"
-          style={{width:32,height:32,marginLeft:6,border:`1px dashed ${edge}`,borderRadius:10,background:"transparent",color:A.t3,fontSize:18,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          style={{width:34,height:34,marginLeft:6,border:`1.5px dashed ${edge}`,borderRadius:10,background:"transparent",color:A.t3,fontSize:17,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
           +
         </button>
       </div>
@@ -4314,7 +4311,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const t2=adminDark?"#9CA3AF":"#6B7280"
     const t3=adminDark?"rgba(255,255,255,0.25)":"#B0B8C1"
     return (
-      <div style={{width,height,display:"flex",alignItems:"center",justifyContent:"center",background:bg,fontFamily:FONT,position:"relative" as const}}>
+      <div style={{width,height,display:"flex",alignItems:"center",justifyContent:"center",background:bg,fontFamily:FONT,position:"relative" as const,WebkitFontSmoothing:"antialiased"}}>
         <button onClick={()=>setAdminDark(d=>!d)} style={{position:"absolute",top:16,right:16,height:30,padding:"0 12px",borderRadius:6,border:`1px solid ${border}`,background:"transparent",color:t2,fontFamily:FONT,fontSize:12,fontWeight:500,cursor:"pointer"}}>
           {adminDark
             ?<><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M8 1v1.5M8 13.5V15M15 8h-1.5M2.5 8H1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1M12.6 12.6l-1.1-1.1M4.5 4.5 3.4 3.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> 라이트</>
@@ -4340,7 +4337,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
           {loginErr&&<div style={{fontSize:12.5,color:"#E85C5C",marginBottom:14,padding:"9px 12px",borderRadius:8,background:"rgba(232,92,92,0.08)",border:"1px solid rgba(232,92,92,0.18)"}}>{loginErr}</div>}
           <button onClick={doLogin} disabled={loginLoading}
-            style={{width:"100%",height:46,borderRadius:10,border:"none",background:loginLoading?"rgba(49,130,246,0.6)":"#3182F6",color:"#fff",fontFamily:FONT,fontSize:14.5,fontWeight:600,cursor:loginLoading?"not-allowed":"pointer",letterSpacing:"-0.2px"}}>
+            style={{width:"100%",height:46,borderRadius:10,border:"none",background:loginLoading?"rgba(49,130,246,0.6)":"#3182F6",color:"#fff",fontFamily:FONT,fontSize:14.5,fontWeight:700,cursor:loginLoading?"not-allowed":"pointer",letterSpacing:"-0.2px"}}>
             {loginLoading?"로그인 중...":"로그인"}
           </button>
           {!supabaseUrl&&<div style={{marginTop:18,fontSize:11.5,color:t3,textAlign:"center" as const,lineHeight:1.6}}>환경변수에 Supabase URL과 Key를 먼저 입력해주세요</div>}
@@ -4354,52 +4351,27 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   // ─────────────────────────────────────────────────────────────────────
   if(view==="dashboard") {
     const BRANDS=[
-      {id:"SNIPERFACTORY" as const,label:"스나이퍼팩토리",color:"#6366F1",sub:snList},
+      {id:"SNIPERFACTORY" as const,label:"스나이퍼팩토리",color:"#529DFF",sub:snList},
       {id:"INSIDEOUT" as const,label:"인사이드아웃",color:"#E85C5C",sub:ioList},
       {id:"SFACSPACE" as const,label:"스팩스페이스",color:"#073B70",sub:sfacList},
     ]
     return (
-      <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,fontFamily:FONT,overflow:"hidden",position:"relative" as const}}>
+      <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,fontFamily:FONT,overflow:"hidden",position:"relative" as const,WebkitFontSmoothing:"antialiased"}}>
         {renderEditorTabsStrip()}
         {/* Topbar */}
-        <div style={{height:56,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 24px",gap:12,flexShrink:0,boxShadow:A.shadow}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <FlickMark size={30}/>
-            <FlickWordmark size={17} dark={adminDark}/>
-          </div>
+        <div style={{height:58,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 20px",gap:10,flexShrink:0}}>
+          <FlickMark size={30}/>
+          <FlickWordmark size={17} dark={adminDark}/>
+          <span style={{marginLeft:6,padding:"3px 8px",borderRadius:6,background:A.card2,fontSize:11,fontWeight:600,color:A.t3,whiteSpace:"nowrap" as const}}>운영 콘솔</span>
           <div style={{flex:1}}/>
-          {/* 다크/라이트 토글 */}
-          <button onClick={()=>setAdminDark(d=>!d)} style={{display:"flex",alignItems:"center",gap:6,height:32,padding:"0 12px",borderRadius:8,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:"pointer"}}>
-            {adminDark
-              ?<><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M8 1v1.5M8 13.5V15M15 8h-1.5M2.5 8H1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1M12.6 12.6l-1.1-1.1M4.5 4.5 3.4 3.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> 라이트 모드</>
-              :<><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><path d="M13.5 8.5A5.5 5.5 0 0 1 7 2a6 6 0 1 0 6.5 6.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> 다크 모드</>}
-          </button>
-          <div style={{width:1,height:20,background:A.border}}/>
-          <span style={{fontSize:12.5,color:A.t3}}>{authUser?.email}</span>
-          <button onClick={doLogout} style={{fontSize:12.5,fontWeight:500,padding:"5px 12px",borderRadius:8,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,cursor:"pointer",fontFamily:FONT}}>로그아웃</button>
-          <button onClick={()=>setFormTrashOpen(true)}
-            style={{height:36,padding:"0 12px",borderRadius:8,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}
-            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=A.red;(e.currentTarget as HTMLElement).style.color=A.red}}
-            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=A.border;(e.currentTarget as HTMLElement).style.color=A.t2}}>
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v8M8 6v8M11 6v8M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            폼 휴지통{formTrashItems.length?` ${formTrashItems.length}`:""}
-          </button>
+          <div style={{display:"flex",alignItems:"center",gap:8,height:32,padding:"0 4px 0 10px",borderRadius:8,background:adminDark?A.card2:"#F8F9FB",flexShrink:0}}>
+            <span style={{fontSize:12.5,color:A.t2,whiteSpace:"nowrap" as const}}>{authUser?.email}</span>
+            <button onClick={doLogout} style={{height:24,padding:"0 8px",borderRadius:6,border:"none",background:A.card,color:A.t3,cursor:"pointer",fontFamily:FONT,fontSize:11.5,fontWeight:600}}>로그아웃</button>
+          </div>
           <button onClick={()=>setShowBrandModal(true)}
-            style={{height:36,padding:"0 16px",borderRadius:8,border:"none",background:"#3182F6",color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:17,lineHeight:1,marginTop:-1}}>+</span> 새 폼 만들기
-          </button>
-          <button onClick={()=>{
-              setShowGuide(true)
-              if(!supa)return
-              setGuideLoading(true)
-              supa.from("guide_content").select("content").eq("key","form_admin").single()
-                .then(({data})=>{if(data?.content)setGuideData(data.content as any);setGuideLoading(false)},()=>setGuideLoading(false))
-            }}
-            style={{height:36,padding:"0 14px",borderRadius:8,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}
-            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=A.blue;(e.currentTarget as HTMLElement).style.color=A.blue}}
-            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=A.border;(e.currentTarget as HTMLElement).style.color=A.t2}}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8"/><path d="M12 16v-4M12 8.5v.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-            가이드
+            style={{height:34,padding:"0 14px",borderRadius:8,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+            새 폼 만들기
           </button>
         </div>
         {(()=>{
@@ -4421,7 +4393,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           }
           const typeLabel=(type:DashboardFormType)=>DASHBOARD_FORM_TYPES.find(x=>x.value===type)?.label||"기타"
           const brandOf=(item:any)=>canonicalBrand(item.config?.brand||item.brand||"")
-          const brandLabel=(brand:string)=>brandDisplayName(brand)
           const categoryNameOf=(prog?:Prog)=>{
             if(prog?.category===SF_ETC_CAT_ID)return"ETC"
             const name=cats.find(c=>c.id===prog?.category)?.name||"기타"
@@ -4430,6 +4401,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             return name
           }
           const sidebarItems=saved.filter((item:any)=>!dashBrandFilter||brandOf(item)===dashBrandFilter)
+          const recentItems=[...saved].sort((a:any,b:any)=>new Date(b.updated_at||b.created_at||0).getTime()-new Date(a.updated_at||a.created_at||0).getTime()).slice(0,5)
           const sidebarProgramIds=new Set(sidebarItems.map((item:any)=>item.config?.header?.programId).filter(Boolean))
           const sidebarPrograms=progs.filter(program=>sidebarProgramIds.has(program.id))
           const sfProgramGroups=["새싹","KDT","인재키움","인턴형","ETC"]
@@ -4451,111 +4423,194 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             ;(acc[key]||(acc[key]=[])).push(program)
             return acc
           },Object.fromEntries(visibleProgramGroups.map(group=>[group,[]])) as Record<string,Prog[]>)
+          const selectedGroupPrograms=dashProgramGroupFilter?(programGroups[dashProgramGroupFilter]||[]):[]
           const filtered=saved.filter((item:any)=>{
             const type=typeOf(item)
             const status=statusOf(item)
+            const program=programOf(item)
+            const programGroup=categoryNameOf(program)
             const query=dashQuery.trim().toLowerCase()
             return(!dashBrandFilter||brandOf(item)===dashBrandFilter)
+              &&(!dashProgramGroupFilter||programGroup===dashProgramGroupFilter)
               &&(!dashProgramFilter||item.config?.header?.programId===dashProgramFilter)
-              &&(!dashSideTypeFilter||type===dashSideTypeFilter)
               &&(!dashTopTypeFilter||type===dashTopTypeFilter)
               &&(!dashTopStatusFilter||status===dashTopStatusFilter)
-              &&(!query||`${item.name||""} ${item.config?.header?.title||""} ${programOf(item)?.title||""}`.toLowerCase().includes(query))
+              &&(!query||`${item.name||""} ${item.config?.header?.title||""} ${program?.title||""}`.toLowerCase().includes(query))
           })
-          const sideButton=(active:boolean):React.CSSProperties=>({width:"100%",height:34,padding:"0 10px",borderRadius:A.r,border:"none",background:active?A.blue2:"transparent",color:active?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:active?600:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left" as const})
+          const maxResponseCount=Math.max(1,...filtered.map((item:any)=>dashResponseCounts[item.id]||0))
+          const brandCounts=BRANDS.map(brand=>({
+            ...brand,
+            count:saved.filter((item:any)=>brandOf(item)===brand.id).length,
+          }))
+          const groupCount=(group:string)=>sidebarItems.filter((item:any)=>categoryNameOf(programOf(item))===group).length
+          const tableColumns="minmax(240px,1.4fr) minmax(150px,0.9fr) 84px 82px 78px 92px 128px"
+          const sideButton=(active:boolean):React.CSSProperties=>({width:"100%",height:32,padding:"0 8px",borderRadius:A.r,border:"none",background:active?A.blue2:"transparent",color:active?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:active?700:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left" as const})
+          const sidebarToolButton=(color:string=A.t2):React.CSSProperties=>({width:"100%",height:32,padding:"0 8px",borderRadius:A.r,border:"none",background:"transparent",color,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left" as const})
+          const openGuide=()=>{
+            setShowGuide(true)
+            if(!supa)return
+            setGuideLoading(true)
+            supa.from("guide_content").select("content").eq("key","form_admin").single()
+              .then(({data})=>{if(data?.content)setGuideData(data.content as any);setGuideLoading(false)},()=>setGuideLoading(false))
+          }
           return <div style={{flex:1,minHeight:0,display:"flex",overflow:"hidden"}}>
-            <aside style={{width:252,flexShrink:0,overflowY:"auto" as const,padding:16,borderRight:`1px solid ${A.border}`,background:A.card}}>
-              <div style={{border:`1px solid ${A.border}`,borderRadius:A.r2,padding:8,marginBottom:12}}>
-                <div style={{padding:"4px 6px 8px",fontSize:11.5,fontWeight:600,color:A.t3}}>브랜드</div>
-                <button onClick={()=>{setDashBrandFilter("");setDashProgramFilter("")}} style={sideButton(!dashBrandFilter)}>전체 브랜드</button>
-                <button onClick={()=>{setDashBrandFilter("SNIPERFACTORY");setDashProgramFilter("")}} style={sideButton(dashBrandFilter==="SNIPERFACTORY")}><SFLogo height={13} dark={adminDark}/></button>
-                <button onClick={()=>{setDashBrandFilter("INSIDEOUT");setDashProgramFilter("")}} style={sideButton(dashBrandFilter==="INSIDEOUT")}><IOLogo height={12} dark={adminDark}/></button>
-                <button onClick={()=>{setDashBrandFilter("SFACSPACE");setDashProgramFilter("")}} style={sideButton(dashBrandFilter==="SFACSPACE")}><SfacspaceLogo height={11} dark={adminDark}/></button>
+            <aside style={{width:208,flexShrink:0,background:A.bg,display:"flex",flexDirection:"column" as const,minHeight:0}}>
+              <div style={{flex:1,minHeight:0,overflowY:"auto" as const,padding:"16px 12px",display:"flex",flexDirection:"column" as const,gap:26}}>
+                <div>
+                  <div style={{padding:"0 8px 9px",fontSize:11,fontWeight:700,letterSpacing:".4px",color:A.t3}}>최근 작업</div>
+                  {recentItems.length===0
+                    ? <div style={{padding:"12px 10px",fontSize:12,color:A.t3,lineHeight:1.5}}>최근에 수정한 폼이 없어요.</div>
+                    : recentItems.map((item:any)=>{
+                      const brand=BRANDS.find(b=>b.id===brandOf(item))
+                      return <button key={item.id} onPointerDown={()=>prefetchFullFormRow(item,true)} onFocus={()=>prefetchFullFormRow(item,true)} onClick={()=>requestOpenFormForEdit(item)}
+                        style={{width:"100%",minHeight:32,padding:"7px 8px",borderRadius:A.r,border:"none",background:"transparent",cursor:"pointer",fontFamily:FONT,display:"flex",alignItems:"center",gap:8,textAlign:"left" as const,color:A.t2}}
+                        onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=A.card2}
+                        onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
+                        <span style={{width:7,height:7,borderRadius:"50%",background:brand?.color||A.blue,flexShrink:0}}/>
+                        <span style={{minWidth:0,flex:1,fontSize:12.5,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name||"이름 없는 폼"}</span>
+                      </button>
+                    })}
+                </div>
+                <div>
+                  <div style={{padding:"0 8px 7px",fontSize:11,fontWeight:700,letterSpacing:".4px",color:A.t3}}>브랜드</div>
+                  <button onClick={()=>{setDashBrandFilter("");setDashProgramGroupFilter("");setDashProgramFilter("")}} style={{...sideButton(!dashBrandFilter),justifyContent:"space-between"}}>
+                    <span style={{display:"flex",alignItems:"center",gap:8}}><span style={{width:7,height:7,borderRadius:"50%",background:A.t3}}/>전체 브랜드</span>
+                    <span style={{fontSize:11.5,color:!dashBrandFilter?A.blue:A.t3}}>{saved.length}</span>
+                  </button>
+                  {brandCounts.map(brand=><button key={brand.id} onClick={()=>{setDashBrandFilter(brand.id);setDashProgramGroupFilter("");setDashProgramFilter("")}} style={{...sideButton(dashBrandFilter===brand.id),justifyContent:"space-between"}}>
+                    <span style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+                      <span style={{width:7,height:7,borderRadius:"50%",background:brand.color,flexShrink:0}}/>
+                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{brand.label}</span>
+                    </span>
+                    <span style={{fontSize:11.5,color:dashBrandFilter===brand.id?A.blue:A.t3}}>{brand.count}</span>
+                  </button>)}
+                </div>
               </div>
-              <div style={{border:`1px solid ${A.border}`,borderRadius:A.r2,padding:8,marginBottom:12}}>
-                <div style={{padding:"4px 6px 8px",fontSize:11.5,fontWeight:600,color:A.t3}}>교육과정</div>
-                <button onClick={()=>setDashProgramFilter("")} style={sideButton(!dashProgramFilter)}>전체 교육과정</button>
-                {visibleProgramGroups.length===0&&<div style={{padding:"10px 10px 8px",fontSize:12,color:A.t3,lineHeight:1.5}}>등록된 교육과정이 없어요.</div>}
-                {visibleProgramGroups.map(group=>{
-                  const programs=programGroups[group]||[]
-                  const open=dashOpenGroups[group]===true
-                  return <div key={group}>
-                    <button onClick={()=>setDashOpenGroups(prev=>({...prev,[group]:!open}))} style={{...sideButton(false),justifyContent:"space-between",color:A.t1,fontWeight:600}}>
-                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{group}</span>
-                      <span style={{fontSize:12,color:A.t3}}>{open?"−":"+"}</span>
-                    </button>
-                    {open&&programs.sort((a,b)=>a.title.localeCompare(b.title,"ko")).map(program=><button key={program.id} onClick={()=>setDashProgramFilter(program.id)} style={{...sideButton(dashProgramFilter===program.id),paddingLeft:18}}>
-                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{program.title}</span>
-                    </button>)}
-                  </div>
-                })}
-              </div>
-              <div style={{border:`1px solid ${A.border}`,borderRadius:A.r2,padding:8}}>
-                <div style={{padding:"4px 6px 8px",fontSize:11.5,fontWeight:600,color:A.t3}}>폼 유형</div>
-                <button onClick={()=>setDashSideTypeFilter("")} style={sideButton(!dashSideTypeFilter)}>전체</button>
-                {DASHBOARD_FORM_TYPES.map(type=><button key={type.value} onClick={()=>setDashSideTypeFilter(type.value)} style={sideButton(dashSideTypeFilter===type.value)}>{type.label}</button>)}
+              <div style={{padding:"12px",boxShadow:`inset 0 1px 0 ${adminDark?A.border:"#E7EAEF"}`,display:"flex",flexDirection:"column" as const,gap:2,flexShrink:0}}>
+                <button onClick={()=>setAdminDark(d=>!d)} style={sidebarToolButton()}>
+                  {adminDark
+                    ? <><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M8 1v1.5M8 13.5V15M15 8h-1.5M2.5 8H1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1M12.6 12.6l-1.1-1.1M4.5 4.5 3.4 3.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> 라이트 모드</>
+                    : <><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><path d="M13.5 8.5A5.5 5.5 0 0 1 7 2a6 6 0 1 0 6.5 6.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> 다크 모드</>}
+                </button>
+                <button onClick={()=>setFormTrashOpen(true)} style={sidebarToolButton(A.red)}>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><path d="M2 4h12M6 4V2.8h4V4M5 6v8M8 6v8M11 6v8M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <span style={{flex:1}}>폼 휴지통</span>
+                  {formTrashItems.length>0&&<span style={{fontSize:11.5,color:A.red}}>{formTrashItems.length}</span>}
+                </button>
+                <button onClick={openGuide} style={sidebarToolButton()}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{flexShrink:0}}><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8"/><path d="M12 16v-4M12 8.5v.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                  가이드
+                </button>
               </div>
             </aside>
-            <main style={{flex:1,minWidth:0,overflow:"hidden",padding:24,display:"flex",flexDirection:"column" as const}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18,flexShrink:0}}>
+            <main style={{flex:1,minWidth:0,overflow:"hidden",padding:0,display:"flex",flexDirection:"column" as const,background:A.card}}>
+              <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:22,padding:"0 24px",overflowX:"auto" as const,boxShadow:`inset 0 -1px 0 ${A.border}`}}>
+                <button onClick={()=>{setDashProgramGroupFilter("");setDashProgramFilter("")}}
+                  style={{height:44,padding:"0 2px",border:"none",borderRadius:0,background:"transparent",color:!dashProgramGroupFilter?A.t1:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const,display:"flex",alignItems:"center",gap:6,boxShadow:!dashProgramGroupFilter?`inset 0 -2px 0 ${A.blue}`:"none"}}>
+                  <span>전체 교육과정</span>
+                  <span style={{fontSize:11.5,color:!dashProgramGroupFilter?A.blue:A.t3}}>{sidebarItems.length}</span>
+                </button>
+                {visibleProgramGroups.map(group=>{
+                  const active=dashProgramGroupFilter===group
+                  return <button key={group} onClick={()=>{setDashProgramGroupFilter(group);setDashProgramFilter("")}}
+                    style={{height:44,padding:"0 2px",border:"none",borderRadius:0,background:"transparent",color:active?A.t1:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const,display:"flex",alignItems:"center",gap:6,boxShadow:active?`inset 0 -2px 0 ${A.blue}`:"none",opacity:groupCount(group)===0?0.55:1}}>
+                    <span>{group}</span>
+                    <span style={{fontSize:11.5,color:active?A.blue:A.t3}}>{groupCount(group)}</span>
+                  </button>
+                })}
+              </div>
+              {dashProgramGroupFilter&&<div style={{flexShrink:0,display:"flex",alignItems:"center",gap:8,padding:"14px 24px 0"}}>
+                <div style={{position:"relative" as const,flexShrink:0}}>
+                  <select value={dashProgramFilter} onChange={e=>setDashProgramFilter(e.target.value)} style={{height:32,minWidth:232,maxWidth:320,padding:"0 34px 0 11px",appearance:"none" as any,WebkitAppearance:"none" as any,borderRadius:A.r,border:"none",background:A.card2,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,outline:"none"}}>
+                    <option value="">{dashProgramGroupFilter} 전체 과정</option>
+                    {[...selectedGroupPrograms].sort((a,b)=>a.title.localeCompare(b.title,"ko")).map(program=><option key={program.id} value={program.id}>{program.title}</option>)}
+                  </select>
+                  <SelectChevron color={A.t2}/>
+                </div>
+                <button onClick={()=>{setDashProgramGroupFilter("");setDashProgramFilter("")}}
+                  style={{height:32,padding:"0 10px",borderRadius:A.r,border:"none",background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
+                  초기화
+                </button>
+              </div>}
+              <div style={{display:"flex",alignItems:"center",gap:12,padding:"20px 24px 26px",flexShrink:0}}>
                 <div>
-                  <div style={{fontSize:20,fontWeight:600,color:A.t1}}>전체 폼</div>
-                  <div style={{fontSize:12.5,color:A.t3,marginTop:4}}>필요한 폼을 빠르게 찾고 응답 현황을 확인할 수 있어요.</div>
+                  <div style={{display:"flex",alignItems:"baseline",gap:7}}>
+                    <span style={{fontSize:17,fontWeight:700,letterSpacing:"-.2px",color:A.t1}}>{dashBrandFilter?brandDisplayName(dashBrandFilter):"전체"} 폼</span>
+                    <span style={{fontSize:13,fontWeight:600,color:A.t3}}>{filtered.length}개</span>
+                  </div>
+                  <div style={{fontSize:12,color:A.t3,marginTop:3}}>폼 이름, 교육과정, 상태를 한 번에 관리합니다.</div>
                 </div>
                 <div style={{flex:1}}/>
-                <div style={{position:"relative" as const}}>
-                  <select value={dashTopTypeFilter} onChange={e=>setDashTopTypeFilter(e.target.value as DashboardFormType|"")} style={{height:36,minWidth:132,padding:"0 38px 0 12px",appearance:"none" as any,WebkitAppearance:"none" as any,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,outline:"none"}}>
+                <div style={{position:"relative" as const,flexShrink:0}}>
+                  <select value={dashTopTypeFilter} onChange={e=>setDashTopTypeFilter(e.target.value as DashboardFormType|"")} style={{height:34,minWidth:140,padding:"0 34px 0 12px",appearance:"none" as any,WebkitAppearance:"none" as any,borderRadius:A.r,border:"none",background:A.card2,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,outline:"none"}}>
                     <option value="">폼 유형 전체</option>
                     {DASHBOARD_FORM_TYPES.map(type=><option key={type.value} value={type.value}>{type.label}</option>)}
                   </select>
                   <SelectChevron color={A.t2}/>
                 </div>
-                <div style={{position:"relative" as const}}>
-                  <select value={dashTopStatusFilter} onChange={e=>setDashTopStatusFilter(e.target.value as DashboardManualStatus|"")} style={{height:36,minWidth:116,padding:"0 38px 0 12px",appearance:"none" as any,WebkitAppearance:"none" as any,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,outline:"none"}}>
-                    <option value="">상태 전체</option>
-                    <option value="draft">작성중</option>
-                    <option value="active">진행중</option>
-                    <option value="closed">종료</option>
-                  </select>
-                  <SelectChevron color={A.t2}/>
+                <div style={{display:"flex",alignItems:"center",gap:2,padding:3,borderRadius:9,background:A.card2,flexShrink:0}}>
+                  {[
+                    {value:"" as const,label:"전체"},
+                    {value:"draft" as const,label:"작성중"},
+                    {value:"active" as const,label:"진행중"},
+                    {value:"closed" as const,label:"종료"},
+                  ].map(status=>{
+                    const active=dashTopStatusFilter===status.value
+                    return <button key={status.value||"all"} onClick={()=>setDashTopStatusFilter(status.value as DashboardManualStatus|"")}
+                      style={{height:28,padding:"0 10px",border:"none",borderRadius:7,background:active?A.card:"transparent",color:active?A.t1:A.t3,fontFamily:FONT,fontSize:12,fontWeight:active?700:600,cursor:"pointer",boxShadow:active?"0 1px 2px rgba(16,24,40,.08)":"none",whiteSpace:"nowrap" as const}}>
+                      {status.label}
+                    </button>
+                  })}
                 </div>
-                <div style={{width:220,height:36,display:"flex",alignItems:"center",gap:7,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card}}>
+                <div style={{width:240,height:34,display:"flex",alignItems:"center",gap:7,padding:"0 11px",borderRadius:A.r,border:"none",background:A.card2,flexShrink:0}}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{color:A.t3,flexShrink:0}}><circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8"/><path d="m20 20-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-                  <input value={dashQuery} onChange={e=>setDashQuery(e.target.value)} placeholder="폼 이름 검색" style={{width:"100%",border:"none",outline:"none",background:"transparent",color:A.t1,fontFamily:FONT,fontSize:12.5}}/>
+                  <input value={dashQuery} onChange={e=>setDashQuery(e.target.value)} placeholder="폼 이름 · 교육과정 검색" style={{width:"100%",border:"none",outline:"none",background:"transparent",color:A.t1,fontFamily:FONT,fontSize:12.5}}/>
                 </div>
               </div>
-              <div style={{flex:1,minHeight:0,background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,boxShadow:A.shadow,overflow:"hidden"}}>
+              <div style={{flex:1,minHeight:0,background:A.card,overflow:"hidden"}}>
                 <div ref={dashTableScrollRef} onScroll={onDashboardTableScroll} style={{height:"100%",overflow:"auto"}}>
-                <div style={{display:"grid",gridTemplateColumns:"minmax(210px,1.35fr) 132px minmax(160px,1fr) 92px 80px 74px 100px 148px",alignItems:"center",minWidth:1080,padding:"11px 14px",borderBottom:`1px solid ${A.border}`,background:A.card2,fontSize:11.5,fontWeight:600,color:A.t3,position:"sticky" as const,top:0,zIndex:4}}>
-                    <span>폼 이름</span><span>브랜드</span><span>교육과정</span><span>폼 유형</span><span>상태</span><span>응답 수</span><span>수정일</span><span style={{textAlign:"right"}}>관리</span>
+                <div style={{display:"grid",gridTemplateColumns:tableColumns,alignItems:"center",gap:12,minWidth:940,padding:"0 24px 8px",boxShadow:`inset 0 -1px 0 ${adminDark?A.border:"#EFF1F4"}`,background:A.card,fontSize:11.5,fontWeight:600,color:A.t3,position:"sticky" as const,top:0,zIndex:4}}>
+                    <span>폼 이름</span><span>교육과정</span><span>폼 유형</span><span>상태</span><span>응답 수</span><span>수정일</span><span style={{textAlign:"right"}}>액션</span>
                   </div>
-                  <div style={{minWidth:1080}}>
-                  {dashLoading?<div style={{padding:14}}>{[1,2,3,4,5].map(i=><div key={i} style={{height:50,borderRadius:A.r,background:A.card2,marginBottom:8,animation:"skeletonPulse 1.4s ease-in-out infinite"}}/>)}</div>
-                  :filtered.length===0?<div style={{padding:"56px 20px",textAlign:"center" as const,fontSize:13,color:A.t3}}>조건에 맞는 폼이 없어요.</div>
+                  <div style={{minWidth:940,padding:"0 0 10px"}}>
+                  {dashLoading?<div style={{padding:"8px 24px"}}>{[1,2,3,4,5].map(i=><div key={i} style={{height:48,borderRadius:A.r,background:A.card2,marginBottom:8,animation:"skeletonPulse 1.4s ease-in-out infinite"}}/>)}</div>
+                  :filtered.length===0?<div style={{padding:"72px 20px",textAlign:"center" as const}}>
+                    <div style={{fontSize:13.5,fontWeight:600,color:A.t2}}>조건에 맞는 폼이 없어요.</div>
+                    <div style={{fontSize:12.5,color:A.t3,marginTop:5}}>필터를 초기화하거나 검색어를 지워보세요.</div>
+                  </div>
                   :filtered.map((item:any)=>{
                     const type=typeOf(item)
                     const status=statusInfo(statusOf(item))
                     const program=programOf(item)
                     const locked=!!item.config?.dashboard?.editPasswordHash
-                    return <div key={item.id} onMouseEnter={()=>prefetchFullFormRow(item)} onContextMenu={e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,item,source:"dashboard"})}}
-                      style={{display:"grid",gridTemplateColumns:"minmax(210px,1.35fr) 132px minmax(160px,1fr) 92px 80px 74px 100px 148px",alignItems:"center",minHeight:58,padding:"0 14px",borderBottom:`1px solid ${A.border}`,fontSize:12.5,color:A.t2}}>
-                      <div style={{minWidth:0,paddingRight:20}}>
+                    const responseCount=dashResponseCounts[item.id]||0
+                    const responsePct=responseCount?Math.max(8,Math.round((responseCount/maxResponseCount)*100)):0
+                    return <div key={item.id} onMouseEnter={e=>{prefetchFullFormRow(item);(e.currentTarget as HTMLElement).style.background=adminDark?A.card2:"#F7F9FC"}} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background=A.card} onContextMenu={e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,item,source:"dashboard"})}}
+                      style={{display:"grid",gridTemplateColumns:tableColumns,alignItems:"center",gap:12,minHeight:48,padding:"0 24px",boxShadow:`inset 0 -1px 0 ${A.border}`,fontSize:12.5,color:A.t2,transition:"background .12s"}}>
+                      <div style={{minWidth:0,paddingRight:12}}>
                         <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
                           <span style={{fontSize:13,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name||"이름 없는 폼"}</span>
                           {locked&&<span title="편집 비밀번호 설정됨" style={{color:A.t3,display:"inline-flex",alignItems:"center",flexShrink:0}}><LockIcon/></span>}
                         </div>
-                        <div style={{fontSize:11.5,color:A.t3,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.config?.header?.title||""}</div>
                       </div>
-                      <span>{brandLabel(brandOf(item))}</span>
                       <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{program?.title||"교육과정 없음"}</span>
                       <span style={{color:A.t2}}>{typeLabel(type)}</span>
-                      <span><span style={{display:"inline-flex",padding:"3px 7px",borderRadius:999,background:status.bg,color:status.color,fontSize:11.5,fontWeight:600}}>{status.label}</span></span>
-                      <span style={{fontWeight:600,color:A.t1}}>{dashResponseCounts[item.id]||0}</span>
-                      <span>{item.updated_at?new Date(item.updated_at).toLocaleDateString("ko-KR"):"-"}</span>
+                      <span><span style={{height:24,display:"inline-flex",alignItems:"center",gap:6,padding:"0 8px",borderRadius:999,background:status.bg,color:status.color,fontSize:11.5,fontWeight:700}}>
+                        <span style={{width:6,height:6,borderRadius:"50%",background:status.color,flexShrink:0}}/>
+                        {status.label}
+                      </span></span>
+                      <div style={{display:"flex",flexDirection:"column" as const,alignItems:"flex-start",gap:4,minWidth:0}}>
+                        <span style={{fontWeight:700,color:A.t1,fontVariantNumeric:"tabular-nums" as const}}>{responseCount}</span>
+                        <span style={{width:48,height:3,borderRadius:2,background:adminDark?A.card2:"#EFF1F4",overflow:"hidden",display:"block"}}>
+                          <span style={{display:"block",width:`${responsePct}%`,height:"100%",borderRadius:999,background:A.blue}}/>
+                        </span>
+                      </div>
+                      <span style={{fontSize:12.5,color:A.t3,fontVariantNumeric:"tabular-nums" as const}}>{item.updated_at?new Date(item.updated_at).toLocaleDateString("ko-KR"):"-"}</span>
                       <div style={{display:"flex",justifyContent:"flex-end",gap:4}}>
-                        <button onClick={()=>openFormAnalytics(item)} title="응답 및 분석" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg></button>
-                        <button onClick={()=>openDashboardSettings(item)} title="폼 설정" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><GearIcon size={15}/></button>
-                        <button onPointerDown={()=>prefetchFullFormRow(item,true)} onFocus={()=>prefetchFullFormRow(item,true)} onClick={()=>requestOpenFormForEdit(item)} title="편집" style={{height:30,padding:"0 9px",borderRadius:6,border:`1px solid ${A.border}`,background:A.card,color:A.t1,cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:600}}>편집</button>
+                        <button onClick={()=>openFormAnalytics(item)} title="응답 및 분석" style={{width:28,height:28,borderRadius:7,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 20V11M10 20V4M16 20v-6M22 20H2" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/></svg></button>
+                        <button onClick={()=>openDashboardSettings(item)} title="폼 설정" style={{width:28,height:28,borderRadius:7,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><GearIcon size={14}/></button>
+                        <button onPointerDown={()=>prefetchFullFormRow(item,true)} onFocus={()=>prefetchFullFormRow(item,true)} onClick={()=>requestOpenFormForEdit(item)} title="편집" style={{height:28,padding:"0 11px",borderRadius:7,border:`1px solid ${adminDark?A.border:"#E3E7EC"}`,background:A.card,color:A.t2,cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:600}}>편집</button>
                       </div>
                     </div>
                   })}
@@ -4567,6 +4622,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   </div>
                 </div>
               </div>
+              <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:8,padding:"11px 24px",background:adminDark?A.card2:"#FAFBFC",fontSize:11.5,color:A.t3}}>
+                <span>{filtered.length}개 폼 표시 중</span>
+                <div style={{flex:1}}/>
+                <span>우클릭으로 폼 복사 · 이름 변경 · 휴지통 이동</span>
+              </div>
             </main>
           </div>
         })()}
@@ -4577,25 +4637,25 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           const hasRecruitmentPeriod=!!(recruitment.start||recruitment.end)
           return <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={()=>setDashboardSettings(null)}>
             <div style={{width:500,maxWidth:"92vw",maxHeight:"88vh",overflowY:"auto" as const,padding:24,borderRadius:16,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-              <div style={{fontSize:17,fontWeight:600,color:A.t1,marginBottom:5}}>폼 설정</div>
+              <div style={{fontSize:17,fontWeight:700,color:A.t1,marginBottom:5,letterSpacing:"-.2px"}}>폼 설정</div>
               <div style={{fontSize:12.5,color:A.t3,marginBottom:20}}>폼 제목, 브랜드, 폼 유형과 운영 기준을 정합니다.</div>
-              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 제목</div>
+              <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>폼 제목</div>
               <input value={dashboardSettings.formName} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formName:e.target.value}))} placeholder="폼 제목" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16,boxSizing:"border-box" as const}}/>
-              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>브랜드</div>
+              <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>브랜드</div>
               <select value={dashboardSettings.brand} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,brand:e.target.value as BrandId}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
                 <option value="SNIPERFACTORY">스나이퍼팩토리</option><option value="INSIDEOUT">인사이드아웃</option><option value="SFACSPACE">스팩스페이스</option>
               </select>
-              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 유형</div>
+              <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>폼 유형</div>
               <select value={dashboardSettings.formTypeTag} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formTypeTag:e.target.value as DashboardFormType}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
                 {DASHBOARD_FORM_TYPES.map(type=><option key={type.value} value={type.value}>{type.label}</option>)}
               </select>
-              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>편집 비밀번호</div>
+              <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>편집 비밀번호</div>
               {!!dashboardSettings.item.config?.dashboard?.editPasswordHash&&!canMasterReset(authRole)&&<input type="password" value={dashboardSettings.currentEditPasswordDraft} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,currentEditPasswordDraft:e.target.value}))} placeholder="변경 또는 해제 시 현재 비밀번호" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:8,boxSizing:"border-box" as const}}/>}
               <input type="password" value={dashboardSettings.editPasswordDraft} disabled={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,editPasswordDraft:e.target.value}))} placeholder={dashboardSettings.item.config?.dashboard?.editPasswordHash?"새 비밀번호 입력 시 변경":"비밀번호 입력 시 편집 보호"} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,opacity:dashboardSettings.clearEditPassword?.55:1}}/>
               <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,margin:"6px 0 9px"}}>{canMasterReset(authRole)&&dashboardSettings.item.config?.dashboard?.editPasswordHash?"master 권한 계정은 현재 비밀번호 없이 편집 비밀번호를 변경하거나 해제할 수 있어요.":"설정하면 대시보드에서 편집을 열 때 비밀번호를 확인합니다. 원문 대신 해시값만 저장됩니다."}</div>
               {!!dashboardSettings.item.config?.dashboard?.editPasswordHash&&<label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:16}}><input type="checkbox" checked={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,clearEditPassword:e.target.checked,editPasswordDraft:e.target.checked?"":prev.editPasswordDraft}))}/>편집 비밀번호 해제</label>}
               {hasRecruitmentPeriod&&<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB의 {recruitmentPeriodLabel(recruitmentMode)}을 기본 운영 기간으로 불러왔어요.<br/>필요하면 아래에서 기간을 추가하거나 수정할 수 있습니다.<br/>{recruitmentPeriodText(recruitment,"기간 데이터 없음")}</div>}
-              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
+              <div style={{fontSize:12,fontWeight:600,color:A.t3,marginBottom:9}}>폼 운영 기간</div>
               <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:8}}>
                 <input type="checkbox" checked={dashboardSettings.alwaysOpen} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,alwaysOpen:e.target.checked,manualStatus:""}))}/>
                 상시 운영
@@ -4610,7 +4670,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               </div>
               <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
                 <button onClick={()=>setDashboardSettings(null)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
-                <button onClick={saveDashboardSettings} disabled={dashboardSettingsSaving} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>{dashboardSettingsSaving?"저장 중...":"저장"}</button>
+                <button onClick={saveDashboardSettings} disabled={dashboardSettingsSaving} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>{dashboardSettingsSaving?"저장 중...":"저장"}</button>
               </div>
             </div>
           </div>
@@ -4621,7 +4681,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <div style={{width:40,height:40,borderRadius:A.r,background:A.blue2,color:A.blue,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:14}}>
                 <svg width="19" height="19" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="2" stroke="currentColor" strokeWidth="1.4"/><path d="M5 7V5a3 3 0 0 1 6 0v2M8 10v1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
               </div>
-              <div style={{fontSize:17,fontWeight:600,color:A.t1,marginBottom:5}}>편집 비밀번호 확인</div>
+              <div style={{fontSize:17,fontWeight:700,color:A.t1,marginBottom:5,letterSpacing:"-.2px"}}>편집 비밀번호 확인</div>
               <div style={{fontSize:12.5,color:A.t3,lineHeight:1.55,marginBottom:15}}>이 폼은 편집 보호가 설정되어 있어요.</div>
               <input autoFocus type="password" value={editPasswordPrompt.password} onChange={e=>setEditPasswordPrompt(prev=>prev&&({...prev,password:e.target.value,error:""}))} onKeyDown={e=>e.key==="Enter"&&verifyEditPassword()} placeholder="비밀번호 입력" style={{width:"100%",height:40,padding:"0 11px",borderRadius:A.r,border:`1px solid ${editPasswordPrompt.error?A.red:A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,outline:"none"}}/>
               {editPasswordPrompt.error&&<div style={{fontSize:12,color:A.red,marginTop:7}}>{editPasswordPrompt.error}</div>}
@@ -4629,7 +4689,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 <button onClick={()=>canMasterReset(authRole)?resetEditPasswordFromPrompt():setEditPasswordPrompt(prev=>prev&&({...prev,error:"비밀번호 원문은 복구할 수 없어요. master 권한 계정으로 비밀번호를 초기화해주세요."}))} disabled={editPasswordPrompt.checking} style={{height:38,padding:"0 4px",border:"none",background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12.5,cursor:"pointer"}}>{canMasterReset(authRole)?"비밀번호 초기화":"비밀번호 찾기"}</button>
                 <div style={{display:"flex",gap:8}}>
                 <button onClick={()=>setEditPasswordPrompt(null)} disabled={editPasswordPrompt.checking} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
-                <button onClick={verifyEditPassword} disabled={editPasswordPrompt.checking} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>{editPasswordPrompt.checking?"확인 중...":"편집 열기"}</button>
+                <button onClick={verifyEditPassword} disabled={editPasswordPrompt.checking} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>{editPasswordPrompt.checking?"확인 중...":"편집 열기"}</button>
                 </div>
               </div>
             </div>
@@ -4643,7 +4703,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   <svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v8M8 6v8M11 6v8M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:16,fontWeight:600,color:A.t1}}>폼 휴지통</div>
+                  <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px"}}>폼 휴지통</div>
                   <div style={{fontSize:12,color:A.t3,marginTop:2}}>삭제한 폼을 다시 복구할 수 있어요.</div>
                 </div>
                 <button onClick={()=>setFormTrashOpen(false)} disabled={!!formTrashBusy} style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,cursor:formTrashBusy?"not-allowed":"pointer",fontSize:18,lineHeight:1}}>×</button>
@@ -4662,7 +4722,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                           {trashedAt&&<span>{new Date(trashedAt).toLocaleString("ko-KR")}</span>}
                         </div>
                       </div>
-                      <button onClick={()=>restoreFormFromTrash(item)} disabled={busy} style={{height:34,padding:"0 12px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:busy?"wait":"pointer",flexShrink:0}}>{busy?"처리 중...":"복구"}</button>
+                      <button onClick={()=>restoreFormFromTrash(item)} disabled={busy} style={{height:34,padding:"0 12px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:busy?"wait":"pointer",flexShrink:0}}>{busy?"처리 중...":"복구"}</button>
                       <button onClick={()=>purgeFormFromTrash(item)} disabled={busy} style={{height:34,padding:"0 12px",borderRadius:A.r,border:`1px solid ${A.red}44`,background:A.card,color:A.red,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:busy?"wait":"pointer",flexShrink:0}}>영구 삭제</button>
                     </div>
                   })}
@@ -4675,7 +4735,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={()=>setShowBrandModal(false)}>
             <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:16,padding:"28px 28px 24px",width:380,boxShadow:A.shadow,position:"relative" as const}} onClick={e=>e.stopPropagation()}>
               <button onClick={()=>setShowBrandModal(false)} style={{position:"absolute",top:14,right:14,width:28,height:28,borderRadius:"50%",border:`1px solid ${A.border}`,background:A.card2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:A.t3,fontFamily:FONT,lineHeight:1}}>×</button>
-              <div style={{fontSize:18,fontWeight:600,color:A.t1,marginBottom:22,letterSpacing:"-0.3px"}}>어떤 브랜드 폼을 만들까요?</div>
+              <div style={{fontSize:17,fontWeight:700,color:A.t1,marginBottom:22,letterSpacing:"-0.2px"}}>어떤 브랜드 폼을 만들까요?</div>
               <div style={{display:"flex",flexDirection:"column" as const,gap:12}}>
                 <button onClick={()=>startNewForm("SNIPERFACTORY")}
                   style={{width:"100%",padding:"22px 28px",borderRadius:12,border:`1px solid ${A.border2}`,background:"transparent",cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,transition:"all .15s"}}
@@ -4706,7 +4766,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <button onClick={()=>{setShowTemplateModal(false);setPendingBrand(null)}} style={{position:"absolute",top:14,right:14,width:28,height:28,borderRadius:"50%",border:`1px solid ${A.border}`,background:A.card2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:A.t3,lineHeight:1}}>×</button>
             {/* 왼쪽: 기본 폼 종류 */}
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:18,fontWeight:600,color:A.t1,marginBottom:6,letterSpacing:"-0.3px"}}>어떤 형식의 폼을 만들까요?</div>
+              <div style={{fontSize:18,fontWeight:700,color:A.t1,marginBottom:6,letterSpacing:"-0.2px"}}>어떤 형식의 폼을 만들까요?</div>
               <div style={{fontSize:13,color:A.t3,marginBottom:20}}>
                 {brandDisplayName(pendingBrand||"")} 브랜드 폼
               </div>
@@ -4747,44 +4807,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
         </div>
       )}
-      {/* CONTEXT MENU */}
-      {ctxMenu&&<>
-        <div style={{position:"fixed" as const,inset:0,zIndex:9998}} onClick={()=>setCtxMenu(null)}/>
-        <div style={{position:"fixed" as const,left:ctxMenu.x,top:ctxMenu.y,zIndex:9999,background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:4,boxShadow:A.shadow,minWidth:140}}>
-          <button onClick={()=>{copyForm(ctxMenu.item);setCtxMenu(null)}}
-            style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 12px",border:"none",background:"transparent",cursor:"pointer",color:A.t1,fontFamily:FONT,fontSize:13,borderRadius:A.r,textAlign:"left" as const}}
-            onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=A.card2}
-            onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            폼 복사
-          </button>
-          {ctxMenu.source==="dashboard"&&<>
-            <div style={{height:1,background:A.border,margin:"4px 0"}}/>
-            <button onClick={()=>{setRenameModal({id:ctxMenu.item.id,name:ctxMenu.item.name});setRenameName(ctxMenu.item.name);setCtxMenu(null)}}
-              style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 12px",border:"none",background:"transparent",cursor:"pointer",color:A.t1,fontFamily:FONT,fontSize:13,borderRadius:A.r,textAlign:"left" as const}}
-              onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=A.card2}
-              onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              폼 이름 변경
-            </button>
-            <div style={{height:1,background:A.border,margin:"4px 0"}}/>
-            <button onClick={()=>{delCfg(ctxMenu.item.id,ctxMenu.item.name);setCtxMenu(null)}}
-              style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 12px",border:"none",background:"transparent",cursor:"pointer",color:A.red,fontFamily:FONT,fontSize:13,borderRadius:A.r,textAlign:"left" as const}}
-              onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=A.card2}
-              onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              휴지통으로 이동
-            </button>
-          </>}
-        </div>
-      </>}
-      {/* TOAST */}
       {/* RENAME MODAL */}
       {renameModal&&<div style={{position:"fixed" as const,inset:0,zIndex:10000,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setRenameModal(null)}>
         <div style={{background:A.card,borderRadius:16,padding:"28px 24px",width:360,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-          <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:6}}>폼 이름 변경</div>
+          <div style={{fontSize:17,fontWeight:700,color:A.t1,marginBottom:6,letterSpacing:"-.2px"}}>폼 이름 변경</div>
           <div style={{fontSize:12.5,color:A.t3,marginBottom:18}}>새로운 폼 이름을 입력해주세요.</div>
-          <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 이름</div>
+          <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>폼 이름</div>
           <input value={renameName} onChange={e=>setRenameName(e.target.value)}
             onKeyDown={e=>{if(e.key==="Enter"&&renameName.trim())renameCfg(renameModal.id,renameName)}}
             placeholder="폼 이름을 입력해주세요"
@@ -4794,7 +4822,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <button onClick={()=>setRenameModal(null)}
               style={{flex:1,height:40,borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
             <button onClick={()=>renameCfg(renameModal.id,renameName)}
-              style={{flex:2,height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>변경하기</button>
+              style={{flex:2,height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>변경하기</button>
           </div>
         </div>
       </div>}
@@ -4833,10 +4861,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       {renderActionLoading()}
       {/* TOAST */}
       {toast&&(
-        <div style={{position:"absolute" as const,bottom:24,left:"50%",background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:"10px 16px",fontSize:13,fontWeight:600,color:toast.ok?A.t1:A.red,zIndex:99999,display:"flex",alignItems:"center",gap:8,boxShadow:A.shadow,whiteSpace:"nowrap" as const,animation:`${toastLeaving?"toastOut":"toastIn"} .3s cubic-bezier(.4,0,.2,1) forwards`}}>
-          <span>{toast.ok?"✓":"✗"}</span><span>{toast.msg}</span>
+        <div style={{position:"absolute" as const,top:122,right:20,background:"#15181D",border:"none",borderRadius:10,padding:"12px 14px",fontSize:12.5,fontWeight:500,color:"#fff",zIndex:99999,display:"flex",alignItems:"center",gap:9,boxShadow:"0 8px 28px -6px rgba(16,24,40,.4)",whiteSpace:"nowrap" as const,animation:`${toastLeaving?"toastOut":"toastIn"} .3s cubic-bezier(.4,0,.2,1) forwards`}}>
+          <span style={{width:16,height:16,borderRadius:8,background:toast.ok?A.green:A.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:10,fontWeight:700,color:"#fff"}}>{toast.ok?"✓":"!"}</span><span>{toast.msg}</span>
           {toast.undo&&<button onClick={toast.undo}
-            style={{marginLeft:8,padding:"2px 10px",borderRadius:4,border:"none",background:"transparent",cursor:"pointer",color:A.blue,fontFamily:FONT,fontSize:12,fontWeight:600}}>실행 취소</button>}
+            style={{marginLeft:8,padding:"2px 10px",borderRadius:5,border:"none",background:"rgba(255,255,255,.1)",cursor:"pointer",color:"#fff",fontFamily:FONT,fontSize:12,fontWeight:600}}>실행 취소</button>}
         </div>
       )}
       {/* GUIDE MODAL */}
@@ -5251,7 +5279,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                           <button onClick={()=>uad("adElementImageUrl","")} style={{height:32,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:12,cursor:"pointer"}}>삭제</button>
                         </div>
                       : <div>
-                          <label htmlFor="form_ad_element_upload" style={{display:"flex",alignItems:"center",justifyContent:"center",height:36,borderRadius:A.r,border:`1.5px dashed ${A.border}`,background:A.card2,cursor:"pointer",fontSize:12.5,color:A.t3,fontFamily:FONT,fontWeight:600}}>이미지 업로드</label>
+                          <label htmlFor="form_ad_element_upload" style={{display:"flex",alignItems:"center",justifyContent:"center",height:36,borderRadius:A.r,border:`1.5px dashed ${A.border}`,background:A.card2,cursor:"pointer",fontSize:12.5,color:A.t3,fontFamily:FONT,fontWeight:700}}>이미지 업로드</label>
                           <input id="form_ad_element_upload" type="file" accept="image/*" style={{display:"none"}}
                             onChange={async e=>{
                               const file=e.target.files?.[0]
@@ -5290,7 +5318,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <div style={{marginBottom:14,background:A.card2,borderRadius:A.r,border:`1px solid ${A.border}`,overflow:"hidden"}}>
             {/* 헤더 */}
             <div style={{display:"flex",alignItems:"center",padding:"8px 10px",borderBottom:`1px solid ${A.border}`}}>
-              <span style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.6px",textTransform:"uppercase" as const,flex:1}}>섹션 목록</span>
+              <span style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:"0.6px",textTransform:"uppercase" as const,flex:1}}>섹션 목록</span>
               <button onClick={()=>{if(isKdt){const newPage=formPages+1;setCfg(p=>({...p,kdtFields:[...(p.kdtFields||[]),{id:"kdt_p"+newPage+"_"+Date.now(),label:"새 질문",type:"text" as const,page:newPage,required:false}]}));setPvPage(newPage)}else{addPage();setPvPage(formPages+1)}}}
                 style={{display:"flex",alignItems:"center",gap:4,height:24,padding:"0 8px",borderRadius:A.r,border:`1px dashed ${A.border2}`,background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12,fontWeight:600}}>
                 <span style={{fontSize:14,lineHeight:1}}>+</span> 섹션 추가
@@ -5355,11 +5383,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     onBlur={e=>{e.currentTarget.contentEditable="false";setPageLabel(p,e.currentTarget.textContent||getPageLabel(p))}}
                     onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();(e.currentTarget as HTMLElement).blur()}e.stopPropagation()}}
                     onClick={()=>{setPvPage(p);setEditIdx(null)}}
-                    style={{flex:1,color:isActive?A.blue:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:isActive?600:500,outline:"none",cursor:"default",minWidth:0,userSelect:"none" as const}}>
+                    style={{flex:1,color:isActive?A.blue:A.t1,fontFamily:FONT,fontSize:isActive?13:12.5,fontWeight:isActive?700:500,outline:"none",cursor:"default",minWidth:0,userSelect:"none" as const}}>
                     {getPageLabel(p)}
                   </span>
                   {/* 필드 개수 뱃지 */}
-                  <span style={{fontSize:10,color:A.t3,flexShrink:0,background:A.card,padding:"1px 6px",borderRadius:999,border:`1px solid ${A.border}`}}>
+                  <span style={{fontSize:11.5,fontWeight:500,color:A.t3,flexShrink:0,background:A.card,padding:"1px 6px",borderRadius:999,border:`1px solid ${A.border}`}}>
                     {isKdt?(cfg.kdtFields||[]).filter(f=>f.page===p).length:cfg.form.fields.filter(f=>(f.page||1)===p).length}개
                   </span>
                   {/* 삭제 버튼 */}
@@ -5374,8 +5402,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
           {/* Layer list */}
           <div style={{marginBottom:12}}>
-            {isKdt&&<div style={{fontSize:11,fontWeight:600,color:A.t3,marginBottom:8}}>{getPageLabel(pvPage)}</div>}
-            {!isKdt&&<div style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,marginBottom:10}}>필드 레이어</div>}
+            {isKdt&&<div style={{fontSize:11,fontWeight:700,color:A.t3,marginBottom:8}}>{getPageLabel(pvPage)}</div>}
+            {!isKdt&&<div style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,marginBottom:10}}>필드 레이어</div>}
             {pageFields.length===0&&<div style={{padding:"16px",textAlign:"center" as const,fontSize:12.5,color:A.t3,borderRadius:A.r,border:`1px dashed ${A.border2}`}}>필드를 추가해주세요</div>}
             {pageFields.map((field,idx)=>(
               <div key={(field as any).id||idx}
@@ -5405,7 +5433,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       {FTYPE_ICONS[(field as any).type as string]||FTYPE_ICONS.text}
                     </div>
                     <span style={{flex:1,fontSize:12.5,fontWeight:500,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{(field as any).label||"(라벨 없음)"}</span>
-                    {(field as any).required&&<span style={{fontSize:9,color:accentBg,fontWeight:600,flexShrink:0}}>필수</span>}
+                    {(field as any).required&&<span style={{fontSize:11.5,color:accentBg,fontWeight:700,flexShrink:0}}>필수</span>}
                   </div>
                   {!isKdt&&<button
                     onClick={e=>{e.stopPropagation();duplicateField(cfg.form.fields.indexOf(pageFields[idx] as FormField))}}
@@ -5425,7 +5453,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 </div>
                 {editIdx===idx&&<div style={{borderRadius:A.r,background:adminDark?"#1E2230":"#F7F8F9",marginBottom:4,overflow:"hidden"}}>
                   {!isKdt&&<div style={{padding:"10px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                    <span style={{fontSize:12,fontWeight:600,color:A.t2}}>유형</span>
+                    <span style={{fontSize:12.5,fontWeight:600,color:A.t2}}>유형</span>
                     <select value={(field as any).type||"text"} onChange={e=>patchActiveField(idx,{type:e.target.value as FieldType})}
                       style={{background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:12.5,padding:"4px 8px",outline:"none",cursor:"pointer",maxWidth:140}}>
                       {FTYPES.filter(ft=>!ft.divider).map(ft=><option key={ft.type} value={ft.type}>{ft.label}</option>)}
@@ -5438,7 +5466,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     const helpers:HelperItem[]=rawHelpers.map((h:any)=>typeof h==="string"?{text:h,callout:false}:h)
                     const setHelpers=(arr:HelperItem[])=>patchActiveField(idx,{helpers:arr,helper:arr[0]?.text||""})
                     return <div style={{padding:"10px 12px"}}>
-                      <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>보조 안내 문구
+                      <div style={{fontSize:12.5,fontWeight:600,color:A.t2,marginBottom:8}}>보조 안내 문구
                         <span style={{fontWeight:400,color:A.t3,marginLeft:5}}>질문 아래 작게 표시</span>
                       </div>
                       {helpers.map((h,hi)=>(
@@ -5467,12 +5495,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   {((field as any).type==="text"||(field as any).type==="name"||(field as any).type==="phone"||(field as any).type==="email"||(field as any).type==="textarea")&&
                     <div style={{padding:"10px 12px"}}><F label="예시 텍스트" hint="입력 칸 안에 흐리게 표시됩니다" A={A}><TIn value={(field as any).placeholder||""} onChange={v=>patchActiveField(idx,{placeholder:v})} A={A}/></F></div>}
                   {(field as any).type==="info"&&<div style={{padding:"10px 12px"}}>
-                    <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>내용
+                    <div style={{fontSize:12.5,fontWeight:600,color:A.t2,marginBottom:8}}>내용
                       <span style={{fontWeight:400,color:A.t3,marginLeft:5}}>볼드·밑줄·링크 지원</span>
                     </div>
                     <ConsentBodyEditor value={(field as any).placeholder||""} onChange={v=>patchActiveField(idx,{placeholder:v})} A={A}/>
                     <div style={{marginTop:12}}>
-                      <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>이미지 <span style={{fontWeight:400,color:A.t3}}>선택</span></div>
+                      <div style={{fontSize:12.5,fontWeight:600,color:A.t2,marginBottom:8}}>이미지 <span style={{fontWeight:400,color:A.t3}}>선택</span></div>
                       {(field as any).imageUrl
                         ? <div>
                             <div style={{...imagePreviewBoxStyle(field,160),border:`1px solid ${A.border}`,marginBottom:6}}>
@@ -5640,7 +5668,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     return <div style={{padding:"10px 12px"}}>
                       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:8}}>
                         <div>
-                          <span style={{fontSize:12,fontWeight:600,color:A.t2}}>답변 옵션</span>
+                          <span style={{fontSize:12.5,fontWeight:600,color:A.t2}}>답변 옵션</span>
                           <div style={{fontSize:11.5,color:A.t3,lineHeight:1.45,marginTop:3}}>옵션 문구는 더블클릭해서 수정할 수 있어요.</div>
                         </div>
                         {((field as any).type==="button_select"||(field as any).type==="checkbox")&&<div style={{display:"flex",alignItems:"center",gap:4}}>
@@ -5692,7 +5720,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     </div>
                   })()}
                   {!isKdt&&isMultiPage&&<div style={{padding:"10px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                    <span style={{fontSize:12,fontWeight:600,color:A.t2,flexShrink:0}}>섹션 지정</span>
+                    <span style={{fontSize:12.5,fontWeight:600,color:A.t2,flexShrink:0}}>섹션 지정</span>
                     <select value={(field as any).page||1} onChange={e=>patchActiveField(idx,{page:Number(e.target.value)})}
                       style={{flex:1,background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:12.5,padding:"4px 8px",outline:"none",cursor:"pointer",boxSizing:"border-box" as const}}>
                       {Array.from({length:formPages},(_,i)=>i+1).map(p=><option key={p} value={p}>{getPageLabel(p)}</option>)}
@@ -5758,7 +5786,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </F>
         {cfg.consents.map((cs,idx)=><FG key={idx} A={A} last={idx===cfg.consents.length-1}>
           <div style={{display:"flex",alignItems:"center",marginBottom:12}}>
-            <span style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const}}>동의 항목 {idx+1}</span>
+            <span style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const}}>동의 항목 {idx+1}</span>
             <div style={{flex:1}}/>
             <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:A.t2,fontFamily:FONT}}>
               <span>필수</span>
@@ -6205,15 +6233,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const clearError=(id:string)=>setPvFieldErrors(p=>{const n={...p};delete n[id];return n})
 
 
-    return <div style={{flex:1,overflowY:"auto" as const,display:"flex",justifyContent:"center",padding:seniorMode?"44px 20px 88px":"40px 20px 80px",background:FC.bg,"--link-color":accentBg} as React.CSSProperties}>
-      <div style={{width:"100%",maxWidth:cfg.styles.maxW,fontFamily:FONT}}>
+    return <div style={{flex:1,overflowY:"auto" as const,display:"flex",justifyContent:"center",padding:0,background:"transparent","--link-color":accentBg} as React.CSSProperties}>
+      <div style={{width:"100%",maxWidth:cfg.styles.maxW,fontFamily:FONT,padding:seniorMode?"44px 34px 48px":"36px 34px 32px",borderRadius:14,background:FC.bg,boxShadow:cfg.styles.theme==="dark"?"0 1px 2px rgba(0,0,0,.18), 0 12px 32px -20px rgba(0,0,0,.6)":ALT.shadow,height:"fit-content",boxSizing:"border-box" as const}}>
         {cfg.header.imageUrl&&<div style={{...imagePreviewBoxStyle(cfg.header,200),borderRadius:fr2,marginBottom:22,background:FC.fieldBg}}>
           <img src={cfg.header.imageUrl} alt="" style={imagePreviewImgStyle(cfg.header)}/>
         </div>}
         <div style={{textAlign:"center" as const,marginBottom:22}}>
-          {cfg.header.overline&&<div style={{fontSize:fs(12),fontWeight:600,color:accentText,marginBottom:8}}>{cfg.header.overline}</div>}
-          <div style={{fontSize:fs(22),fontWeight:600,color:FC.t1,lineHeight:1.25,letterSpacing:seniorMode?0:"-0.5px",marginBottom:10,whiteSpace:"pre-line" as const}}>{cfg.header.title}</div>
-          <div style={{display:"flex",justifyContent:"center",gap:8,fontSize:fs(12.5),color:FC.t2,flexWrap:"wrap" as const}}>
+          {cfg.header.overline&&<div style={{fontSize:fs(12.5),fontWeight:700,color:accentText,marginBottom:8,textAlign:"center" as const}}>{cfg.header.overline}</div>}
+          <div style={{fontSize:fs(26),fontWeight:700,color:FC.t1,lineHeight:1.25,letterSpacing:seniorMode?0:"-0.4px",marginBottom:12,whiteSpace:"pre-line" as const,textAlign:"center" as const}}>{cfg.header.title}</div>
+          <div style={{display:"flex",justifyContent:"center",gap:"8px 16px",fontSize:fs(12.5),color:FC.t2,flexWrap:"wrap" as const,lineHeight:1.55}}>
             {(()=>{
               const schedules=educationScheduleSummaries(cfg.header)
               const hasTuition=cfg.header.tuitionFree||!!cfg.header.tuitionAmount
@@ -6233,7 +6261,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           {renderPreviewAdSlot({...DEFAULT_FORM_AD,...cfg.ad})}
         </div>}
         {pvPage===1&&cfg.header.noticeEnabled&&<div style={{display:"flex",justifyContent:"center",marginBottom:24}}>
-          <div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"9px 16px",borderRadius:(cfg.header.noticeShape||"pill")==="pill"?999:10,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,fontSize:fs(12.5),color:FC.t2}}>
+          <div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"12px 14px",borderRadius:(cfg.header.noticeShape||"pill")==="pill"?999:10,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,fontSize:fs(12.5),color:FC.t2,textAlign:"center" as const,lineHeight:1.6}}>
             {cfg.header.noticeIconEnabled&&<span style={{width:seniorMode?20:17,height:seniorMode?20:17,borderRadius:"50%",border:`1px solid ${FC.fieldBorder}`,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:fs(10),flexShrink:0}}>{cfg.header.noticeIconText}</span>}
             <span style={{lineHeight:1.5}} dangerouslySetInnerHTML={{__html:mdToHtml(cfg.header.noticeText)}}/>
           </div>
@@ -6244,11 +6272,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <div style={{flex:1,height:3,borderRadius:2,background:FC.fieldBorder,overflow:"hidden"}}>
               <div style={{height:"100%",borderRadius:2,background:accentBg,width:`${(pvPage/formPages)*100}%`,transition:"width .35s cubic-bezier(.4,0,.2,1)"}}/>
             </div>
-            <span style={{fontSize:fs(11),color:FC.t3,flexShrink:0,fontFamily:FONT}}>{pvPage}/{formPages}</span>
+            <span style={{fontSize:fs(11.5),fontWeight:600,color:FC.t3,flexShrink:0,fontFamily:FONT}}>{pvPage}/{formPages}</span>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <div style={{width:4,height:18,borderRadius:2,background:accentBg,flexShrink:0}}/>
-            <span style={{fontSize:fs(15),fontWeight:600,color:FC.t1,fontFamily:FONT,letterSpacing:seniorMode?0:"-0.2px"}}>{getPageLabel(pvPage)}</span>
+            <span style={{fontSize:fs(15),fontWeight:700,color:FC.t1,fontFamily:FONT,letterSpacing:seniorMode?0:"-0.2px"}}>{getPageLabel(pvPage)}</span>
           </div>
         </div>}
         {/* Dynamic fields */}
@@ -6256,7 +6284,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           {fields.map((field:any,i:number)=>{
           // KDT section_desc
           if(field.type==="section_desc") return <div key={field.id} style={{padding:"14px 16px",borderRadius:fr2,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`}}>
-            <div style={{fontSize:fs(14),fontWeight:600,color:FC.t1,marginBottom:field.desc?6:0}}>{field.label}</div>
+            <div style={{fontSize:fs(15),fontWeight:700,color:FC.t1,marginBottom:field.desc?6:0,lineHeight:1.45}}>{field.label}</div>
             {field.desc&&<div style={{fontSize:fs(12.5),color:FC.t3,lineHeight:1.7,whiteSpace:"pre-line" as const}}>{field.desc}</div>}
           </div>
           const id=field.id
@@ -6321,7 +6349,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {/* Label row */}
             {!isDisplayOnlyFieldType(field.type)&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:cfg.styles.labelGap??8}}>
               {isSelected&&<span style={{cursor:"grab",color:FC.t3,fontSize:14,lineHeight:1,flexShrink:0,userSelect:"none" as const}}>⠿</span>}
-              <div style={{fontSize:fs(13.5),fontWeight:600,color:FC.t1,flex:1,whiteSpace:"pre-line" as const,lineHeight:1.35}}>
+              <div style={{fontSize:fs(12.5),fontWeight:600,color:FC.t1,flex:1,whiteSpace:"pre-line" as const,lineHeight:1.45}}>
                 {field.label}{field.required&&<span style={{color:accentBg,marginLeft:3}}>*</span>}
               </div>
               {isSelected&&<div style={{position:"relative" as const}}>
@@ -6349,11 +6377,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               if(isDisplayOnlyFieldType(field.type))return null
               return hs.filter(h=>h.text.trim()).map((h,hi)=>
                 h.callout
-                  ?<div key={hi} style={{display:"flex",gap:8,padding:"9px 12px",borderRadius:fr2,background:accentC+"0d",border:`1px solid ${accentC}33`,marginBottom:hi===hs.filter(item=>item.text.trim()).length-1?helperCalloutGap:6}}>
+                  ?<div key={hi} style={{display:"flex",gap:8,padding:"10px 12px",borderRadius:fr2,background:accentC+"0d",border:`1px solid ${accentC}33`,marginBottom:hi===hs.filter(item=>item.text.trim()).length-1?helperCalloutGap:6}}>
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><circle cx="8" cy="8" r="6" stroke={accentC} strokeWidth="1.4"/><path d="M8 7v4M8 5.5v.5" stroke={accentC} strokeWidth="1.4" strokeLinecap="round"/></svg>
-                    <div style={{fontSize:fs(12),color:accentText,lineHeight:1.6,fontWeight:500}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>
+                    <div style={{fontSize:fs(12.5),color:accentText,lineHeight:1.6,fontWeight:500}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>
                   </div>
-                  :<div key={hi} style={{fontSize:fs(12),color:FC.t3,marginBottom:hi===hs.filter(item=>item.text.trim()).length-1?helperGap:4,lineHeight:1.6}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>
+                  :<div key={hi} style={{fontSize:fs(12.5),color:FC.t3,marginBottom:hi===hs.filter(item=>item.text.trim()).length-1?helperGap:4,lineHeight:1.6}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>
               )
             })()}
             {(field.type==="text"||field.type==="name")&&
@@ -6646,11 +6674,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         {/* CTA — first: next only, middle: prev+next, last: submit */}
         <div style={{display:"flex",gap:10}}>
           {isMultiPage&&pvPage>1&&<button onClick={goPreviewPrevious}
-            style={{flex:1,height:seniorFieldHeight(seniorMode,cfg.cta.height),borderRadius:fr2,border:"none",background:FC.fieldBg||"#F2F4F6",color:FC.t2,fontFamily:FONT,fontSize:fs(14),fontWeight:600,cursor:"pointer"}}>이전</button>}
+            style={{flex:1,height:seniorFieldHeight(seniorMode,cfg.cta.height),borderRadius:fr2,border:"none",background:FC.fieldBg||"#F2F4F6",color:FC.t2,fontFamily:FONT,fontSize:fs(14.5),fontWeight:700,cursor:"pointer"}}>이전</button>}
           {isMultiPage&&pvPage<formPages
             ?<button onClick={goPreviewNext}
-                style={{flex:2,height:seniorFieldHeight(seniorMode,cfg.cta.height),borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color,fontFamily:FONT,fontSize:fs(14),fontWeight:600,cursor:"pointer"}}>다음</button>
-            :<button style={{flex:2,height:seniorFieldHeight(seniorMode,cfg.cta.height),borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color,fontFamily:FONT,fontSize:fs(14),fontWeight:600,cursor:"pointer"}}>{cfg.cta.label}</button>}
+                style={{flex:2,height:seniorFieldHeight(seniorMode,cfg.cta.height),borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color,fontFamily:FONT,fontSize:fs(14.5),fontWeight:700,cursor:"pointer"}}>다음</button>
+            :<button style={{flex:2,height:seniorFieldHeight(seniorMode,cfg.cta.height),borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color,fontFamily:FONT,fontSize:fs(14.5),fontWeight:700,cursor:"pointer"}}>{cfg.cta.label}</button>}
         </div>
       </div>
     </div>
@@ -6663,12 +6691,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const fr2 = seniorMode?"10px":cfg.styles.theme==="dark"?"6px":"8px"
     const qg = seniorGap(seniorMode,cfg.styles.qGap||20)
     const lg = seniorGap(seniorMode,cfg.styles.labelGap??8)
-    return <div style={{flex:1,overflowY:"auto" as const,display:"flex",justifyContent:"center",padding:seniorMode?"44px 20px 88px":"40px 20px 80px",background:FC.bg}}>
-      <div style={{width:"100%",maxWidth:cfg.styles.maxW,fontFamily:FONT}}>
+    return <div style={{flex:1,overflowY:"auto" as const,display:"flex",justifyContent:"center",padding:0,background:"transparent"}}>
+      <div style={{width:"100%",maxWidth:cfg.styles.maxW,fontFamily:FONT,padding:seniorMode?"44px 34px 48px":"36px 34px 32px",borderRadius:14,background:FC.bg,boxShadow:cfg.styles.theme==="dark"?"0 1px 2px rgba(0,0,0,.18), 0 12px 32px -20px rgba(0,0,0,.6)":ALT.shadow,height:"fit-content",boxSizing:"border-box" as const}}>
         {/* 헤더 */}
         {cfg.header.title&&<div style={{marginBottom:24}}>
-          {cfg.header.overline&&<div style={{fontSize:fs(12),fontWeight:600,color:accentText,marginBottom:6}}>{cfg.header.overline}</div>}
-          <div style={{fontSize:fs(22),fontWeight:600,color:FC.t1,lineHeight:1.25,letterSpacing:seniorMode?0:"-0.5px",whiteSpace:"pre-line" as const}}>{cfg.header.title}</div>
+          {cfg.header.overline&&<div style={{fontSize:fs(12.5),fontWeight:700,color:accentText,marginBottom:8,textAlign:"center" as const}}>{cfg.header.overline}</div>}
+          <div style={{fontSize:fs(26),fontWeight:700,color:FC.t1,lineHeight:1.25,letterSpacing:seniorMode?0:"-0.4px",whiteSpace:"pre-line" as const,textAlign:"center" as const}}>{cfg.header.title}</div>
         </div>}
         {cfg.ad?.enabled&&<div onClick={()=>setSec("ad")} style={{marginBottom:24,cursor:"pointer",outline:sec==="ad"?`2px solid ${accentBg}`:"none",outlineOffset:4,borderRadius:14}}>
           {renderPreviewAdSlot({...DEFAULT_FORM_AD,...cfg.ad})}
@@ -6691,7 +6719,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{display:"flex",flexDirection:"column" as const,gap:qg}}>
           {curFields.map((field,idx)=>{
             if(field.type==="section_desc") return <div key={field.id} style={{padding:"14px 16px",borderRadius:fr2,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`}}>
-              <div style={{fontSize:fs(14),fontWeight:600,color:FC.t1,marginBottom:field.desc?6:0}}>{field.label}</div>
+              <div style={{fontSize:fs(15),fontWeight:700,color:FC.t1,marginBottom:field.desc?6:0,lineHeight:1.45}}>{field.label}</div>
               {field.desc&&<div style={{fontSize:fs(12.5),color:FC.t3,lineHeight:1.7,whiteSpace:"pre-line" as const}}>{field.desc}</div>}
             </div>
             const kdtId=field.id
@@ -6707,7 +6735,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               {dragInsertAt===idx&&dragIdx!==idx&&<div style={{position:"absolute" as const,top:-qg/2-1,left:0,right:0,height:2,borderRadius:1,background:accentBg,zIndex:10,pointerEvents:"none" as const}}/>}
               {!isDisplayOnlyFieldType(field.type)&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:lg}}>
                 {kdtIsSelected&&<span style={{cursor:"grab",color:FC.t3,fontSize:14,lineHeight:1,flexShrink:0,userSelect:"none" as const}}>⠿</span>}
-                <div style={{fontSize:fs(13.5),fontWeight:600,color:FC.t1,flex:1,whiteSpace:"pre-line" as const,lineHeight:1.35}}>
+                <div style={{fontSize:fs(12.5),fontWeight:600,color:FC.t1,flex:1,whiteSpace:"pre-line" as const,lineHeight:1.45}}>
                   {field.label}{field.required&&<span style={{color:accentBg,marginLeft:3}}>*</span>}
                 </div>
                 {kdtIsSelected&&<div style={{position:"relative" as const}}>
@@ -6728,7 +6756,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   </div>}
                 </div>}
               </div>}
-              {(()=>{if(isDisplayOnlyFieldType(field.type))return null;const rawH:any[]=((field as any).helpers&&(field as any).helpers.length)?(field as any).helpers:((field as any).helper)?[{text:(field as any).helper,callout:false}]:[];const hs=rawH.map((h:any)=>typeof h==="string"?{text:h,callout:false}:h);return hs.filter((h:any)=>h.text&&h.text.trim()).map((h:any,hi:number)=>h.callout?<div key={hi} style={{display:"flex",gap:8,padding:"9px 12px",borderRadius:fr2,background:accentBg+"0d",border:`1px solid ${accentBg}33`,marginBottom:6}}><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><circle cx="8" cy="8" r="6" stroke={accentBg} strokeWidth="1.4"/><path d="M8 7v4M8 5.5v.5" stroke={accentBg} strokeWidth="1.4" strokeLinecap="round"/></svg><div style={{fontSize:fs(12),color:accentText,lineHeight:1.6,fontWeight:500}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>  </div>:<div key={hi} style={{fontSize:fs(12),color:FC.t3,marginBottom:4,lineHeight:1.6}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>)})()}
+              {(()=>{if(isDisplayOnlyFieldType(field.type))return null;const rawH:any[]=((field as any).helpers&&(field as any).helpers.length)?(field as any).helpers:((field as any).helper)?[{text:(field as any).helper,callout:false}]:[];const hs=rawH.map((h:any)=>typeof h==="string"?{text:h,callout:false}:h);return hs.filter((h:any)=>h.text&&h.text.trim()).map((h:any,hi:number)=>h.callout?<div key={hi} style={{display:"flex",gap:8,padding:"10px 12px",borderRadius:fr2,background:accentBg+"0d",border:`1px solid ${accentBg}33`,marginBottom:6}}><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><circle cx="8" cy="8" r="6" stroke={accentBg} strokeWidth="1.4"/><path d="M8 7v4M8 5.5v.5" stroke={accentBg} strokeWidth="1.4" strokeLinecap="round"/></svg><div style={{fontSize:fs(12.5),color:accentText,lineHeight:1.6,fontWeight:500}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>  </div>:<div key={hi} style={{fontSize:fs(12.5),color:FC.t3,marginBottom:4,lineHeight:1.6}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>)})()}
               {(field.type==="text"||field.type==="name")&&<input
                 value={pvKdtVals[field.id]||""}
                 onChange={e=>setPvKdtVals(v=>({...v,[field.id]:e.target.value}))}
@@ -6807,9 +6835,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </div>
         {/* 페이지 이동 */}
         <div style={{display:"flex",gap:10,marginTop:28}}>
-          {isMultiPage&&pvPage>1&&<button onClick={()=>setPvPage(p=>p-1)} style={{flex:1,height:fh,borderRadius:fr2,border:`1px solid ${FC.fieldBorder}`,background:"transparent",color:FC.t2,fontFamily:FONT,fontSize:fs(14),fontWeight:600,cursor:"pointer"}}>이전</button>}
-          {pvPage<3?<button onClick={()=>setPvPage(p=>p+1)} style={{flex:1,height:fh,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color||"#fff",fontFamily:FONT,fontSize:fs(14),fontWeight:600,cursor:"pointer"}}>다음</button>
-          :<button style={{flex:1,height:fh,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color||"#fff",fontFamily:FONT,fontSize:fs(14),fontWeight:600,cursor:"pointer"}}>{cfg.cta.label}</button>}
+          {isMultiPage&&pvPage>1&&<button onClick={()=>setPvPage(p=>p-1)} style={{flex:1,height:fh,borderRadius:fr2,border:`1px solid ${FC.fieldBorder}`,background:"transparent",color:FC.t2,fontFamily:FONT,fontSize:fs(14.5),fontWeight:700,cursor:"pointer"}}>이전</button>}
+          {pvPage<3?<button onClick={()=>setPvPage(p=>p+1)} style={{flex:1,height:fh,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color||"#fff",fontFamily:FONT,fontSize:fs(14.5),fontWeight:700,cursor:"pointer"}}>다음</button>
+          :<button style={{flex:1,height:fh,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color||"#fff",fontFamily:FONT,fontSize:fs(14.5),fontWeight:700,cursor:"pointer"}}>{cfg.cta.label}</button>}
         </div>
       </div>
     </div>
@@ -6825,7 +6853,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const hasSaved = savedSlug.length > 0
     const formUrl = hasSaved ? buildPublicFormUrl(savedSlug) : ""
     const brandLabel = brandDisplayName(currentBrand)
-    const brandColor = isSF ? "#6366F1" : currentBrand==="SFACSPACE" ? "#073B70" : A.red
+    const brandColor = isSF ? "#529DFF" : currentBrand==="SFACSPACE" ? "#073B70" : A.red
     const urlPropName = usesCatchformDirect ? "CatchForm 직접 URL" : "Form Base URL"
 
     return <div style={{flex:1,overflowY:"auto" as const,padding:20,display:"flex",flexDirection:"column" as const,gap:14}}>
@@ -7293,11 +7321,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const activeAnalyticsTab=tabs.some(t=>t.id===analyticsTab)?analyticsTab:"responses"
     const metric=(icon:any,value:string,label:string,color:string=accent)=><div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,display:"flex",alignItems:"center",gap:14,minHeight:88,boxShadow:A.shadow}}>
       <div style={{width:46,height:46,borderRadius:A.r,background:color===accent?accentSoft:color+"18",display:"flex",alignItems:"center",justifyContent:"center",color}}><svg width="22" height="22" viewBox="0 0 16 16" fill="none">{icon}</svg></div>
-      <div style={{minWidth:0}}><div style={{fontSize:23,fontWeight:600,color:A.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:210}}>{value}</div><div style={{fontSize:13,color:A.t2,marginTop:3}}>{label}</div></div>
+      <div style={{minWidth:0}}><div style={{fontSize:28,fontWeight:700,color:A.t1,letterSpacing:"-.8px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:210,fontVariantNumeric:"tabular-nums" as const}}>{value}</div><div style={{fontSize:12.5,fontWeight:500,color:A.t3,marginTop:3}}>{label}</div></div>
     </div>
     const emptyState=(text:string)=><div style={{background:A.card,border:`1px dashed ${A.border2}`,borderRadius:A.r2,padding:28,textAlign:"center" as const,color:A.t3,fontSize:13}}>{text}</div>
     const infoTitle=(label:string,tip:string)=><div style={{display:"flex",alignItems:"center",gap:7,marginBottom:12,position:"relative" as const}}>
-      <span style={{fontSize:16,fontWeight:600,color:A.t1}}>{label}</span>
+      <span style={{fontSize:15,fontWeight:700,color:A.t1}}>{label}</span>
       <span
         onMouseEnter={()=>setAnalyticsInfoTip(label)}
         onMouseLeave={()=>setAnalyticsInfoTip("")}
@@ -7308,7 +7336,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         style={{width:18,height:18,borderRadius:"50%",border:`1px solid ${A.border2}`,color:A.t3,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600,cursor:"help",background:A.card2,position:"relative" as const,outline:"none"}}>
         ?
         {analyticsInfoTip===label&&<div style={{position:"absolute" as const,left:"50%",top:25,transform:"translateX(-50%)",width:280,padding:"11px 12px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,boxShadow:A.shadow,fontSize:12.5,fontWeight:500,lineHeight:1.55,textAlign:"left" as const,zIndex:50,pointerEvents:"none" as const,whiteSpace:"normal" as const}}>
-          <div style={{fontSize:12,fontWeight:600,color:A.t1,marginBottom:5}}>{label} 데이터 기준</div>
+          <div style={{fontSize:12,fontWeight:700,color:A.t1,marginBottom:5}}>{label} 데이터 기준</div>
           {tip}
         </div>}
       </span>
@@ -7336,57 +7364,60 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	        onMouseEnter={()=>setAnalyticsTopTip(key)}
 	        onMouseLeave={()=>setAnalyticsTopTip("")}
 	        aria-label={label}
-	        style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-	        <svg width="15" height="15" viewBox="0 0 16 16" fill="none">{icon}</svg>
+	        style={{width:34,height:34,borderRadius:A.r,border:"none",background:"transparent",color:color===A.red?A.red:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+	        <svg width="17" height="17" viewBox="0 0 16 16" fill="none">{icon}</svg>
 	      </button>
 	      {analyticsTopTip===key&&<div style={{position:"absolute" as const,top:39,left:"50%",transform:"translateX(-50%)",padding:"5px 8px",borderRadius:6,background:A.t1,color:A.card,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const,zIndex:1000,boxShadow:A.shadow,pointerEvents:"none" as const}}>{label}</div>}
 	    </div>
-	    return <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,color:A.t1,fontFamily:FONT,overflow:"hidden",position:"relative" as const}}>
-      <div style={{height:52,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 16px",gap:10,flexShrink:0,boxShadow:A.shadow}}>
-        <button onClick={returnToBuilderFromAnalytics} style={{display:"flex",alignItems:"center",gap:6,background:"transparent",border:"none",cursor:"pointer",color:A.t2,fontSize:12.5,fontWeight:600,fontFamily:FONT}}>
-          <span style={{fontSize:13}}>←</span><span>편집으로</span>
+	    return <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,color:A.t1,fontFamily:FONT,overflow:"hidden",position:"relative" as const,WebkitFontSmoothing:"antialiased"}}>
+      {renderEditorTabsStrip()}
+      <div style={{height:58,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 20px",gap:12,flexShrink:0}}>
+        <button onClick={returnToBuilderFromAnalytics} style={{height:32,padding:"0 10px",display:"flex",alignItems:"center",gap:6,background:"transparent",border:"none",borderRadius:A.r,cursor:"pointer",color:A.t2,fontSize:12.5,fontWeight:500,fontFamily:FONT}}>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M9.5 3.5 5 8l4.5 4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span>편집으로</span>
         </button>
-        <div style={{width:1,height:16,background:A.border}}/>
+        <div style={{width:1,height:18,background:A.border}}/>
         <div style={{minWidth:0}}>
-          <div style={{fontSize:13,fontWeight:600,color:A.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:340}}>{loadedName||"응답 및 분석"}</div>
+          <div style={{fontSize:14,fontWeight:700,color:A.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:280}}>{loadedName||"응답 및 분석"}</div>
         </div>
+        <span style={{padding:"3px 8px",borderRadius:6,background:A.card2,fontSize:11.5,fontWeight:600,color:A.t3,flexShrink:0,whiteSpace:"nowrap" as const}}>응답 {rows.length}건</span>
         <div style={{flex:1}}/>
 	        <div style={{position:"relative" as const}}>
 	          {topIconButton("trash-menu","응답 삭제 관리",()=>{setAnalyticsTopTip("");setShowAnalyticsDeleteMenu(v=>!v)},<><path d="M3 5h10M6 5V3.5h4V5M5 7v5M8 7v5M11 7v5M4 5l.55 8.2c.04.45.4.8.85.8h5.2c.45 0 .81-.35.85-.8L12 5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/>{trashRecords.length>0&&<circle cx="13" cy="3" r="2.2" fill={A.red}/>}</>,A.red)}
-	          {showAnalyticsDeleteMenu&&<div style={{position:"absolute" as const,top:38,right:0,width:148,padding:5,borderRadius:A.r,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow,zIndex:1002}}>
-	            <button onClick={()=>{setShowAnalyticsDeleteMenu(false);setShowDeleteAllAnalytics(true)}} style={{width:"100%",height:32,padding:"0 9px",border:"none",borderRadius:6,background:"transparent",color:A.red,fontFamily:FONT,fontSize:12.5,fontWeight:600,textAlign:"left" as const,cursor:"pointer"}}>응답 전체 삭제</button>
-	            <button onClick={()=>{setShowAnalyticsDeleteMenu(false);setShowAnalyticsTrash(true)}} style={{width:"100%",height:32,padding:"0 9px",border:"none",borderRadius:6,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,textAlign:"left" as const,cursor:"pointer"}}>휴지통{trashRecords.length>0?` ${trashRecords.length}`:""}</button>
+	          {showAnalyticsDeleteMenu&&<div style={{position:"absolute" as const,top:42,right:0,width:184,padding:6,borderRadius:A.r2,background:A.card,boxShadow:"0 1px 2px rgba(16,24,40,.08),0 16px 40px -10px rgba(16,24,40,.28)",zIndex:1002}}>
+	            <button onClick={()=>{setShowAnalyticsDeleteMenu(false);setShowDeleteAllAnalytics(true)}} style={{width:"100%",height:38,padding:"0 11px",border:"none",borderRadius:9,background:"transparent",color:A.red,fontFamily:FONT,fontSize:13.5,fontWeight:700,textAlign:"left" as const,cursor:"pointer"}}>응답 전체 삭제</button>
+	            <button onClick={()=>{setShowAnalyticsDeleteMenu(false);setShowAnalyticsTrash(true)}} style={{width:"100%",height:38,padding:"0 11px",border:"none",borderRadius:9,background:"transparent",color:A.t1,fontFamily:FONT,fontSize:13.5,fontWeight:600,textAlign:"left" as const,cursor:"pointer"}}>휴지통{trashRecords.length>0?` ${trashRecords.length}`:""}</button>
 	          </div>}
 	        </div>
 	        {topIconButton("refresh","새로고침",loadAnalytics,<path d="M13 3v4H9M3 13V9h4M12.2 8.8A4.5 4.5 0 0 1 4.5 12M3.8 7.2A4.5 4.5 0 0 1 11.5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>)}
 	        {activeAnalyticsTab==="responses"&&<div style={{position:"relative" as const}}>
 	          <select value={analyticsCsvSort} onChange={e=>setAnalyticsCsvSort(e.target.value as "desc"|"asc")} title="시트 다운로드 날짜 정렬"
-	            style={{height:32,minWidth:116,padding:"0 30px 0 10px",appearance:"none" as any,WebkitAppearance:"none" as any,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,outline:"none",cursor:"pointer"}}>
+	            style={{height:34,minWidth:124,padding:"0 30px 0 10px",appearance:"none" as any,WebkitAppearance:"none" as any,borderRadius:A.r,border:"none",background:A.card2,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,outline:"none",cursor:"pointer"}}>
 	            <option value="desc">날짜 내림차순</option>
 	            <option value="asc">날짜 오름차순</option>
 	          </select>
 	          <SelectChevron color={A.t2}/>
 	        </div>}
-	        {activeAnalyticsTab==="responses"&&<button onClick={()=>exportAnalyticsCsv(responseRows)} style={{height:32,padding:"0 13px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+	        {activeAnalyticsTab==="responses"&&<button onClick={()=>exportAnalyticsCsv(responseRows)} style={{height:34,padding:"0 13px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
 	          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>시트 다운로드
 	        </button>}
       </div>
-      <div style={{height:50,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 20px",gap:6,flexShrink:0}}>
+      <div style={{height:44,background:A.card,boxShadow:`inset 0 -1px 0 ${A.border}`,display:"flex",alignItems:"center",padding:"0 24px",gap:22,flexShrink:0}}>
         {tabs.map(t=>{const on=activeAnalyticsTab===t.id;return <React.Fragment key={t.id}>
-          {t.dividerBefore&&<div style={{width:1,height:22,background:A.border,margin:"0 8px"}}/>}
+          {t.dividerBefore&&<div style={{width:1,height:18,background:A.border,margin:"0 0 0 -4px"}}/>}
           <button onClick={()=>setAnalyticsTab(t.id)}
-          style={{height:32,padding:"0 12px",borderRadius:A.r,border:`1px solid ${on?A.blue+"33":"transparent"}`,background:on?A.blue2:"transparent",color:on?A.blue:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:7}}>
+          style={{height:44,padding:"0 2px",borderRadius:0,border:"none",background:"transparent",color:on?A.t1:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:7,boxShadow:on?`inset 0 -2px 0 ${A.blue}`:"none"}}>
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none">{t.icon}</svg>{t.label}
         </button>
         </React.Fragment>})}
       </div>
-      <div style={{flex:1,minHeight:0,overflow:activeAnalyticsTab==="responses"?"hidden":"auto",padding:"24px 28px 36px",boxSizing:"border-box" as const}}>
+      <div style={{flex:1,minHeight:0,overflow:activeAnalyticsTab==="responses"?"hidden":"auto",padding:"22px 28px 36px",boxSizing:"border-box" as const,background:A.card}}>
         <div style={{maxWidth:1280,margin:"0 auto",height:activeAnalyticsTab==="responses"?"100%":"auto"}}>
         {analyticsLoading?<div style={{fontSize:14,color:A.t2}}>불러오는 중...</div>:analyticsErr?<div style={{fontSize:14,color:A.red}}>{analyticsErr}</div>:<>
           {activeAnalyticsTab==="responses"&&<div style={{height:"100%",minHeight:0,display:"flex",flexDirection:"column" as const}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap" as const,marginBottom:16}}>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <div style={{fontSize:22,fontWeight:600,color:A.t1}}>응답별 데이터</div>
+                <div style={{fontSize:18,fontWeight:700,color:A.t1,letterSpacing:"-.2px"}}>응답별 데이터</div>
                 <div style={{height:26,padding:"0 12px",borderRadius:999,background:A.card2,border:`1px solid ${A.border}`,color:A.t2,display:"flex",alignItems:"center",fontSize:12.5,fontWeight:600}}>{responseRows.length}개</div>
                 {duplicateFoldedCount>0&&<div style={{height:26,padding:"0 10px",borderRadius:999,background:A.blue2,border:`1px solid ${A.blue}33`,color:A.blue,display:"flex",alignItems:"center",fontSize:12,fontWeight:600}}>중복 {duplicateFoldedCount}개 접힘</div>}
               </div>
@@ -7413,8 +7444,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {analyticsResponseScope==="submitted"&&duplicateFoldedCount>0&&<div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,margin:"-5px 0 14px"}}>로그인 없이 제출된 응답 중 이름·전화번호·이메일이 모두 같은 응답은 대표 1개로 묶었어요. `중복` 버튼을 누르면 같은 사람이 더 제출한 응답을 펼쳐볼 수 있습니다.</div>}
             {responseRows.length===0?emptyState(analyticsResponseScope==="draft"?"아직 작성 중인 응답이 없습니다.":"아직 제출 완료된 응답이 없습니다."):<div className="catchform-analytics-table-scroll" style={{flex:1,minHeight:0,background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,overflow:"auto",boxShadow:A.shadow}}>
               <style>{`.catchform-analytics-table-scroll::-webkit-scrollbar{height:7px;width:7px}.catchform-analytics-table-scroll::-webkit-scrollbar-thumb{background:${A.border2};border-radius:999px}.catchform-analytics-table-scroll::-webkit-scrollbar-track{background:transparent}`}</style>
-              <table style={{borderCollapse:"collapse",minWidth:analyticsTableMinWidth,width:"100%",fontSize:13,tableLayout:"fixed" as const}}>
-                <thead><tr><th style={{position:"sticky" as const,top:0,zIndex:4,width:analyticsControlColumnWidth,minWidth:analyticsControlColumnWidth,padding:"13px 10px",textAlign:"center" as const,borderBottom:`1px solid ${A.border}`,color:A.t2,background:A.card2}}><label style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7,cursor:"pointer"}}><input type="checkbox" checked={allResponseRowsSelected} onChange={toggleAllResponseRows} style={{width:15,height:15,accentColor:A.blue,cursor:"pointer"}}/>전체</label></th><th style={{position:"sticky" as const,top:0,zIndex:4,width:analyticsDateColumnWidth,minWidth:analyticsDateColumnWidth,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t2,background:A.card2}}>날짜</th>{analyticsColumnMeta.map(({field:f,fileCount,resizable,width:colWidth}:any)=>{return <th key={f.id} style={{position:"sticky" as const,top:0,zIndex:4,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,width:colWidth,minWidth:colWidth,maxWidth:colWidth,background:A.card2}}>
+              <table style={{borderCollapse:"collapse",minWidth:analyticsTableMinWidth,width:"100%",fontSize:12.5,tableLayout:"fixed" as const}}>
+                <thead><tr><th style={{position:"sticky" as const,top:0,zIndex:4,width:analyticsControlColumnWidth,minWidth:analyticsControlColumnWidth,padding:"13px 10px",textAlign:"center" as const,borderBottom:`1px solid ${A.border}`,color:A.t3,background:A.card2,fontSize:11.5,fontWeight:600}}><label style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7,cursor:"pointer"}}><input type="checkbox" checked={allResponseRowsSelected} onChange={toggleAllResponseRows} style={{width:15,height:15,accentColor:A.blue,cursor:"pointer"}}/>전체</label></th><th style={{position:"sticky" as const,top:0,zIndex:4,width:analyticsDateColumnWidth,minWidth:analyticsDateColumnWidth,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t3,background:A.card2,fontSize:11.5,fontWeight:600}}>날짜</th>{analyticsColumnMeta.map(({field:f,fileCount,resizable,width:colWidth}:any)=>{return <th key={f.id} style={{position:"sticky" as const,top:0,zIndex:4,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t3,width:colWidth,minWidth:colWidth,maxWidth:colWidth,background:A.card2,fontSize:11.5,fontWeight:600}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
                     <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{f.label}</span>
                     {fileCount>0&&<button onClick={()=>downloadAnalyticsFilesZip(f,responseRows)} title={`첨부파일 ${fileCount}개 일괄 다운로드`} style={{height:28,padding:"0 9px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,flexShrink:0,fontFamily:FONT,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const}}>
@@ -7450,7 +7481,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                         </div>
                       </td>
                       <td style={{width:analyticsDateColumnWidth,minWidth:analyticsDateColumnWidth,padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}>
-                        <div style={{whiteSpace:"nowrap" as const,fontWeight:400}}>{dt[0]}</div>
+                        <div style={{whiteSpace:"nowrap" as const,fontSize:12.5,fontWeight:400,color:A.t3}}>{dt[0]}</div>
                         <div style={{fontSize:12,color:A.t3,marginTop:4,whiteSpace:"nowrap" as const}}>{dt[1]}</div>
                         {row.__draft&&<div style={{display:"inline-flex",alignItems:"center",height:20,padding:"0 7px",borderRadius:999,background:chartOrange+"16",color:chartOrange,fontSize:11,fontWeight:600,marginTop:7}}>작성 중 · 섹션 {row.__page}</div>}
                       </td>
@@ -7469,11 +7500,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </div>}
           </div>}
           {activeAnalyticsTab==="questions"&&<div>
-            <div style={{fontSize:22,fontWeight:600,color:A.t1,marginBottom:16}}>질문별 인사이트</div>
+            <div style={{fontSize:18,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:16}}>질문별 인사이트</div>
             <div style={{display:"grid",gridTemplateColumns:width<980?"1fr":"320px minmax(0,1fr)",gap:16,alignItems:"start"}}>
               <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,boxShadow:A.shadow,overflow:"hidden"}}>
                 <div style={{padding:"14px 14px 10px",borderBottom:`1px solid ${A.border}`,background:A.card2}}>
-                  <div style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.6px",marginBottom:4}}>섹션 / 질문</div>
+                  <div style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:"0.6px",marginBottom:4}}>섹션 / 질문</div>
                   <div style={{fontSize:13,fontWeight:600,color:A.t1}}>섹션을 열어 질문을 선택하세요</div>
                 </div>
                 <div style={{padding:10,display:"flex",flexDirection:"column" as const,gap:8,maxHeight:620,overflow:"auto"}}>
@@ -7509,7 +7540,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               </div>
             {!activeField?emptyState("분석할 질문이 없습니다."):<div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:24,minHeight:620,boxShadow:A.shadow}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:22}}>
-                <div style={{fontSize:18,fontWeight:600,color:A.t1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{activeField.label}</div>
+                <div style={{fontSize:18,fontWeight:700,color:A.t1,letterSpacing:"-.2px",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{activeField.label}</div>
                 {activeFileCount>0&&<button onClick={()=>downloadAnalyticsFilesZip(activeField,rows)} style={{height:34,padding:"0 12px",borderRadius:A.r,border:`1px solid ${A.blue}33`,background:A.blue2,color:A.blue,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v7M5 6l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   첨부파일 {activeFileCount}개 다운로드
@@ -7546,7 +7577,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </div>
           </div>}
           {activeAnalyticsTab==="period"&&<div>
-            <div style={{fontSize:22,fontWeight:600,color:A.t1,marginBottom:16}}>기간별 인사이트</div>
+            <div style={{fontSize:18,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:16}}>기간별 인사이트</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14,marginBottom:16}}>
 	              {metric(<path d="M5 3l7 5-7 5V3z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/>,String(sessionCount),"참여",chartBlue)}
 	              {metric(<path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>,`${completionRate}%`,"완료율",chartGreen)}
@@ -7642,7 +7673,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	            </div>}
           </div>}
           {activeAnalyticsTab==="dropoff"&&<div>
-            <div style={{fontSize:22,fontWeight:600,color:A.t1,marginBottom:16}}>질문별 이탈률</div>
+            <div style={{fontSize:18,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:16}}>질문별 이탈률</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14,marginBottom:16}}>
 	              {metric(<path d="M4 3.5h5v9H4M9 8h5M12 5.8 14.2 8 12 10.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>,String(dropTotal),"추정 이탈",chartPink)}
 	              {metric(<path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>,`${completionRate}%`,"완료율",chartGreen)}
@@ -7662,7 +7693,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>}
           {activeAnalyticsTab==="qr"&&<div>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap" as const,marginBottom:10}}>
-              <div style={{fontSize:22,fontWeight:600,color:A.t1}}>QR 데이터</div>
+              <div style={{fontSize:18,fontWeight:700,color:A.t1,letterSpacing:"-.2px"}}>QR 데이터</div>
               {hasDetailQr&&<div style={{display:"flex",gap:4,padding:4,borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`}}>
                 {([{id:"form",label:"폼 QR"},{id:"detail",label:"상세페이지 QR"}] as const).map(item=>{const active=activeQrScope===item.id;return <button key={item.id} onClick={()=>setQrAnalyticsScope(item.id)}
                   style={{height:30,padding:"0 12px",borderRadius:A.r,border:"none",background:active?A.card:"transparent",color:active?A.blue:A.t2,boxShadow:active?A.shadow:"none",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
@@ -7760,7 +7791,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	                <svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6 5V3.5h4V5M5 7v5M8 7v5M11 7v5M4 5l.55 8.2c.04.45.4.8.85.8h5.2c.45 0 .81-.35.85-.8L12 5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg>
 	              </div>
 	              <div style={{flex:1,minWidth:0}}>
-	                <div style={{fontSize:16,fontWeight:600,color:A.t1}}>응답 휴지통</div>
+	                <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px"}}>응답 휴지통</div>
 	                <div style={{fontSize:12,color:A.t3,marginTop:3}}>실수로 삭제한 응답을 다시 복구할 수 있어요.</div>
 	              </div>
 	              <button onClick={()=>setShowAnalyticsTrash(false)} disabled={analyticsTrashBusy} style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>
@@ -7795,7 +7826,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	            <div style={{width:44,height:44,borderRadius:A.r,background:A.red+"14",color:A.red,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:14}}>
 	              <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v6M8 6v6M11 6v6M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/></svg>
 	            </div>
-	            <div style={{fontSize:18,fontWeight:600,color:A.t1,marginBottom:8}}>응답 데이터를 모두 삭제할까요?</div>
+	            <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:8}}>응답 데이터를 모두 삭제할까요?</div>
 	            <div style={{fontSize:13,color:A.t2,lineHeight:1.65,marginBottom:18}}>
 	              현재 폼의 제출 응답과 분석 기록을 휴지통으로 이동합니다. 휴지통에서 다시 복구할 수 있어요.
 	            </div>
@@ -7814,7 +7845,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	                <svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M3 11.5V13h1.5L12 5.5 10.5 4 3 11.5zM9.8 4.7l1.5 1.5" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/></svg>
 	              </div>
 	              <div style={{minWidth:0,flex:1}}>
-	                <div style={{fontSize:16,fontWeight:600,color:A.t1}}>응답 데이터 수정</div>
+	                <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px"}}>응답 데이터 수정</div>
 	                <div style={{fontSize:12,color:A.t3,marginTop:3}}>{fmtAnalyticsDate(editResponse.row.created_at).filter(Boolean).join(" ")}</div>
 	              </div>
 	              <button onClick={()=>!editResponseSaving&&setEditResponse(null)} disabled={editResponseSaving} style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,cursor:editResponseSaving?"not-allowed":"pointer",fontSize:18,lineHeight:1}}>×</button>
@@ -7879,9 +7910,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     </div>
     } catch(e){
       const msg=(e as any)?.message||"알 수 없는 오류"
-      return <div style={{width,height,display:"flex",alignItems:"center",justifyContent:"center",background:A.bg,color:A.t1,fontFamily:FONT,padding:32}}>
+      return <div style={{width,height,display:"flex",alignItems:"center",justifyContent:"center",background:A.bg,color:A.t1,fontFamily:FONT,padding:32,WebkitFontSmoothing:"antialiased"}}>
         <div style={{maxWidth:520,background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:24,boxShadow:A.shadow}}>
-          <div style={{fontSize:18,fontWeight:600,marginBottom:8}}>응답 및 분석 화면 오류</div>
+          <div style={{fontSize:18,fontWeight:700,letterSpacing:"-.2px",marginBottom:8}}>응답 및 분석 화면 오류</div>
           <div style={{fontSize:13,color:A.red,lineHeight:1.6,marginBottom:16}}>{msg}</div>
           <Btn onClick={returnToBuilderFromAnalytics} sm A={A}>편집으로 돌아가기</Btn>
         </div>
@@ -7890,31 +7921,31 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
 
   // ── Builder layout ────────────────────────────────────────────────────
-  const SW=320, PW=rightPanelW
+  const SW=216, PW=rightPanelW
 
   if((view as string)==="analytics")return renderAnalyticsPage()
 
   return (
-    <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,color:A.t1,fontFamily:FONT,overflow:"hidden",position:"relative" as const}}>
+    <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,color:A.t1,fontFamily:FONT,overflow:"hidden",position:"relative" as const,WebkitFontSmoothing:"antialiased"}}>
       {renderEditorTabsStrip()}
 
       {/* TOPBAR */}
-      <div style={{height:52,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 16px",gap:10,flexShrink:0,boxShadow:A.shadow}}>
-        <button onClick={()=>setView("dashboard")} style={{display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",padding:0}}>
-          <FlickMark size={28}/>
+      <div style={{height:58,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 20px",gap:12,flexShrink:0}}>
+        <button onClick={()=>{rememberActiveEditorTab();setView("dashboard")}} style={{display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",padding:0}}>
+          <FlickMark size={30}/>
         </button>
-        <button onClick={()=>setView("dashboard")} style={{display:"flex",alignItems:"center",gap:6,background:"transparent",border:"none",cursor:"pointer",color:A.t2,fontSize:12.5,fontWeight:600,fontFamily:FONT}}>
-          <span style={{fontSize:13,lineHeight:1}}>←</span>
+        <button onClick={()=>{rememberActiveEditorTab();setView("dashboard")}} style={{height:32,padding:"0 10px",display:"flex",alignItems:"center",gap:6,background:"transparent",border:"none",borderRadius:A.r,cursor:"pointer",color:A.t2,fontSize:12.5,fontWeight:500,fontFamily:FONT}}>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M9.5 3.5 5 8l4.5 4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
           <span>대시보드</span>
         </button>
         {currentBrand&&<>
-          <div style={{width:1,height:16,background:A.border}}/>
-          <div style={{display:"flex",alignItems:"center"}}>
+          <div style={{width:1,height:18,background:A.border}}/>
+          <div style={{display:"flex",alignItems:"center",flexShrink:0}}>
             <BrandLogo brand={currentBrand} height={currentBrand==="SNIPERFACTORY"?20:15} dark={adminDark}/>
           </div>
         </>}
-        {loadedName&&editorTabs.length===0&&<span style={{fontSize:12.5,fontWeight:600,color:A.t1}}>{loadedName}</span>}
-        {loadedId&&<span style={{fontSize:11.5,color:autoSaving?A.t3:autoSaved?A.green:A.t4,display:"flex",alignItems:"center",gap:4,transition:"color .3s"}}>
+        {loadedName&&<span style={{fontSize:14,fontWeight:700,color:A.t1,maxWidth:280,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{loadedName}</span>}
+        {loadedId&&<span style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px",borderRadius:6,background:autoSaving?A.card2:"#E7F6EE",color:autoSaving?A.t3:"#0F8A47",fontSize:11.5,fontWeight:600,transition:"color .3s, background .3s",whiteSpace:"nowrap" as const,flexShrink:0}}>
           {autoSaving
             ? <><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{animation:"spin 1s linear infinite"}}><path d="M8 2a6 6 0 1 0 6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>저장 중</>
             : autoSaved
@@ -7928,7 +7959,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             onMouseEnter={()=>setShowBuilderSettingsTip(true)}
             onMouseLeave={()=>setShowBuilderSettingsTip(false)}
             onClick={openBuilderSettings}
-            style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
+            style={{width:34,height:34,borderRadius:A.r,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
             aria-label="폼 설정">
             <GearIcon size={16}/>
           </button>
@@ -7943,56 +7974,59 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               setAnalyticsTab("responses")
               setView("analytics")
             }}
-            style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
+            style={{width:34,height:34,borderRadius:A.r,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
             aria-label="응답 및 분석">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M3 13V8M8 13V3M13 13V6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M4 20V11M10 20V4M16 20v-6M22 20H2" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/>
             </svg>
           </button>
           {showAnalyticsTip&&<div style={{position:"absolute" as const,top:"calc(100% + 7px)",left:"50%",transform:"translateX(-50%)",background:A.t1,color:A.card,padding:"5px 8px",borderRadius:6,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const,zIndex:1000,boxShadow:A.shadow}}>응답 및 분석</div>}
         </div>
-        <Btn onClick={onSaveClick} sm A={A}>저장</Btn>
-        <Btn onClick={publishAndOpenForm} variant="blue" sm A={A}>
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><path d="M10 2h4v4M14 2l-7 7M6 4H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        <button onClick={onSaveClick} style={{height:34,padding:"0 13px",border:"none",borderRadius:A.r,background:A.card2,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",flexShrink:0}}>저장</button>
+        <button onClick={publishAndOpenForm} style={{height:34,padding:"0 14px",border:"none",borderRadius:A.r,background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><path d="M6.5 3H3.6A.6.6 0 0 0 3 3.6v8.8a.6.6 0 0 0 .6.6h8.8a.6.6 0 0 0 .6-.6V9.5M9.5 2.5H13.5V6.5M13 3l-5.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           폼 열기
-        </Btn>
+        </button>
       </div>
 
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
 
         {/* SIDEBAR */}
         <nav ref={sbRef} onMouseMove={e=>{const r=sbRef.current?.getBoundingClientRect();if(r)myPos.current=e.clientY-r.top}} onMouseEnter={()=>setOverSb(true)} onMouseLeave={()=>setOverSb(false)}
-          style={{width:SW,background:A.card,borderRight:`1px solid ${A.border}`,overflowY:"auto" as const,flexShrink:0,display:"flex",flexDirection:"column" as const,scrollbarWidth:"none" as any}}>
+          style={{width:SW,background:adminDark?A.bg:"#FAFBFC",overflowY:"auto" as const,flexShrink:0,display:"flex",flexDirection:"column" as const,scrollbarWidth:"none" as any,padding:"16px 12px",boxSizing:"border-box" as const}}>
 
           {/* Nav */}
           {NAV.map(grp=>(
-            <div key={grp.group} style={{padding:"8px 12px 4px",flexShrink:0}}>
-              <div style={{fontSize:10,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,padding:"0 4px",marginBottom:4}}>{grp.group}</div>
+            <div key={grp.group} style={{padding:"0 0 10px",flexShrink:0}}>
+              <div style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:".4px",padding:"0 8px 8px"}}>{grp.group}</div>
               {grp.items.map(item=>{const a=sec===item.id;return(
                 <div key={item.id} onClick={()=>setSec(item.id)}
-                  style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:A.r,cursor:"pointer",fontSize:13,fontWeight:a?600:500,color:a?A.blue:A.t2,background:a?A.blue2:"transparent",marginBottom:1,transition:"all .1s"}}>
+                  style={{height:34,display:"flex",alignItems:"center",gap:8,padding:"0 8px",borderRadius:A.r,cursor:"pointer",fontSize:12.5,fontWeight:a?700:500,color:a?A.blue:A.t2,background:a?A.blue2:"transparent",marginBottom:2,transition:"all .12s"}}>
                   <span style={{flex:1}}>{item.label}</span>
-                  {"badge" in item&&<span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:999,background:(item as any).badge==="ON"?A.blue2:A.card2,color:(item as any).badge==="ON"?A.blue:A.t3,border:`1px solid ${(item as any).badge==="ON"?A.blue+"33":A.border}`}}>{(item as any).badge}</span>}
+                  {"badge" in item&&<span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:999,background:(item as any).badge==="ON"?A.blue2:A.card2,color:(item as any).badge==="ON"?A.blue:A.t3,border:`1px solid ${(item as any).badge==="ON"?A.blue+"33":A.border}`}}>{(item as any).badge}</span>}
                 </div>
               )})}
             </div>
           ))}
 
           <div style={{flex:1}}/>
-          <div style={{padding:"12px",borderTop:`1px solid ${A.border}`,flexShrink:0}}>
-            <Btn onClick={()=>setShowBrandModal(true)} variant="ghost" sm A={A}>+ 새 폼 만들기</Btn>
+          <div style={{paddingTop:14,flexShrink:0}}>
+            <button onClick={()=>setShowBrandModal(true)} style={{width:"100%",height:34,display:"flex",alignItems:"center",justifyContent:"center",gap:6,border:`1px solid ${adminDark?A.border:"#E3E7EC"}`,borderRadius:A.r,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+              새 폼 만들기
+            </button>
           </div>
         </nav>
 
         {/* PREVIEW — 중앙 */}
-        <div style={{flex:1,display:"flex",flexDirection:"column" as const,overflow:"hidden",minWidth:0}}>
-          <div style={{flex:1,overflow:"hidden",display:"flex"}}>
+        <div style={{flex:1,display:"flex",flexDirection:"column" as const,overflow:"hidden",minWidth:0,background:adminDark?A.bg:"#F1F3F6"}}>
+          <div style={{flex:1,overflow:"hidden",display:"flex",padding:"28px 32px",boxSizing:"border-box" as const}}>
             {renderPreview()}
           </div>
         </div>
 
         {/* SETTINGS PANEL — 우측 */}
-        <div style={{width:PW,background:A.card,borderLeft:`1px solid ${A.border}`,overflowY:"auto" as const,flexShrink:0,scrollbarWidth:"none" as any,position:"relative" as const}}>
+        <div style={{width:PW,background:A.card,boxShadow:`inset 1px 0 0 ${A.border}`,overflowY:"auto" as const,flexShrink:0,scrollbarWidth:"none" as any,position:"relative" as const}}>
           {/* 드래그 리사이즈 핸들 */}
           <div
             style={{position:"absolute" as const,left:0,top:0,bottom:0,width:5,cursor:"col-resize",zIndex:20,background:"transparent"}}
@@ -8004,7 +8038,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               const onMove=(ev:MouseEvent)=>{
                 if(!isResizingRef.current)return
                 const delta=startX-ev.clientX
-                setRightPanelW(Math.min(600,Math.max(200,startW+delta)))
+                setRightPanelW(Math.min(600,Math.max(280,startW+delta)))
               }
               const onUp=()=>{
                 isResizingRef.current=false
@@ -8021,8 +8055,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.blue+"44"}}
             onMouseLeave={e=>{if(!isResizingRef.current)(e.currentTarget as HTMLElement).style.background="transparent"}}
           />
-          <div style={{padding:"14px 18px 12px",borderBottom:`1px solid ${A.border}`,position:"sticky" as const,top:0,background:A.card,zIndex:10}}>
-            <div style={{fontSize:15,fontWeight:600,color:A.t1,letterSpacing:"-0.3px"}}>{NAV.flatMap(g=>g.items).find(i=>i.id===sec)?.label||sec}</div>
+          <div style={{padding:"18px 20px 4px",position:"sticky" as const,top:0,background:A.card,zIndex:10}}>
+            <div style={{fontSize:15,fontWeight:700,color:A.t1,letterSpacing:"-.2px"}}>{NAV.flatMap(g=>g.items).find(i=>i.id===sec)?.label||sec}</div>
           </div>
           {renderPanel()}
         </div>
@@ -8034,7 +8068,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9998}} onClick={()=>setShowBrandModal(false)}>
           <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:16,padding:"26px 26px 22px",width:360,boxShadow:A.shadow,position:"relative" as const}} onClick={e=>e.stopPropagation()}>
             <button onClick={()=>setShowBrandModal(false)} style={{position:"absolute",top:12,right:12,width:26,height:26,borderRadius:"50%",border:`1px solid ${A.border}`,background:A.card2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,color:A.t3,lineHeight:1}}>×</button>
-            <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:6}}>어떤 브랜드 폼을 만들까요?</div>
+            <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:6}}>어떤 브랜드 폼을 만들까요?</div>
             <div style={{fontSize:12.5,color:A.t3,marginBottom:18}}>현재 작업 중인 내용은 초기화됩니다</div>
             <div style={{display:"flex",flexDirection:"column" as const,gap:10}}>
               <button onClick={()=>startNewForm("SNIPERFACTORY")}
@@ -8065,7 +8099,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>{setShowTemplateModal(false);setPendingBrand(null)}}>
           <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:16,padding:"28px 24px",width:420,boxShadow:A.shadow,position:"relative" as const}} onClick={e=>e.stopPropagation()}>
             <button onClick={()=>{setShowTemplateModal(false);setPendingBrand(null)}} style={{position:"absolute",top:14,right:14,width:28,height:28,borderRadius:"50%",border:`1px solid ${A.border}`,background:A.card2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:A.t3,lineHeight:1}}>×</button>
-            <div style={{fontSize:18,fontWeight:600,color:A.t1,marginBottom:6,letterSpacing:"-0.3px"}}>어떤 형식의 폼을 만들까요?</div>
+            <div style={{fontSize:18,fontWeight:700,color:A.t1,marginBottom:6,letterSpacing:"-0.2px"}}>어떤 형식의 폼을 만들까요?</div>
             <div style={{fontSize:13,color:A.t3,marginBottom:20}}>
               {brandDisplayName(pendingBrand||"")} 브랜드 폼
             </div>
@@ -8114,25 +8148,25 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         const hasRecruitmentPeriod=!!(recruitment.start||recruitment.end)
         return <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setDashboardSettings(null)}>
           <div style={{width:500,maxWidth:"92vw",maxHeight:"88vh",overflowY:"auto" as const,padding:24,borderRadius:16,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:17,fontWeight:600,color:A.t1,marginBottom:5}}>폼 설정</div>
+            <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:5}}>폼 설정</div>
             <div style={{fontSize:12.5,color:A.t3,marginBottom:20}}>폼 제목, 브랜드, 폼 유형과 운영 기준을 정합니다.</div>
-            <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 제목</div>
+            <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>폼 제목</div>
             <input value={dashboardSettings.formName} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formName:e.target.value}))} placeholder="폼 제목" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16,boxSizing:"border-box" as const}}/>
-            <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>브랜드</div>
+            <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>브랜드</div>
             <select value={dashboardSettings.brand} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,brand:e.target.value as BrandId}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
               <option value="SNIPERFACTORY">스나이퍼팩토리</option><option value="INSIDEOUT">인사이드아웃</option><option value="SFACSPACE">스팩스페이스</option>
             </select>
-            <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 유형</div>
+            <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>폼 유형</div>
             <select value={dashboardSettings.formTypeTag} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formTypeTag:e.target.value as DashboardFormType}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
               {DASHBOARD_FORM_TYPES.map(type=><option key={type.value} value={type.value}>{type.label}</option>)}
             </select>
-            <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>편집 비밀번호</div>
+            <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>편집 비밀번호</div>
             {!!settingsConfig?.dashboard?.editPasswordHash&&!canMasterReset(authRole)&&<input type="password" value={dashboardSettings.currentEditPasswordDraft} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,currentEditPasswordDraft:e.target.value}))} placeholder="변경 또는 해제 시 현재 비밀번호" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:8,boxSizing:"border-box" as const}}/>}
             <input type="password" value={dashboardSettings.editPasswordDraft} disabled={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,editPasswordDraft:e.target.value}))} placeholder={settingsConfig?.dashboard?.editPasswordHash?"새 비밀번호 입력 시 변경":"비밀번호 입력 시 편집 보호"} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,opacity:dashboardSettings.clearEditPassword?.55:1}}/>
             <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,margin:"6px 0 9px"}}>{canMasterReset(authRole)&&settingsConfig?.dashboard?.editPasswordHash?"master 권한 계정은 현재 비밀번호 없이 편집 비밀번호를 변경하거나 해제할 수 있어요.":"설정하면 대시보드에서 편집을 열 때 비밀번호를 확인합니다. 원문 대신 해시값만 저장됩니다."}</div>
             {!!settingsConfig?.dashboard?.editPasswordHash&&<label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:16}}><input type="checkbox" checked={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,clearEditPassword:e.target.checked,editPasswordDraft:e.target.checked?"":prev.editPasswordDraft}))}/>편집 비밀번호 해제</label>}
             {hasRecruitmentPeriod&&<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB의 {recruitmentPeriodLabel(recruitmentMode)}을 기본 운영 기간으로 불러왔어요.<br/>필요하면 아래에서 기간을 추가하거나 수정할 수 있습니다.<br/>{recruitmentPeriodText(recruitment,"기간 데이터 없음")}</div>}
-            <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
+            <div style={{fontSize:12,fontWeight:600,color:A.t3,marginBottom:9}}>폼 운영 기간</div>
             <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:8}}>
               <input type="checkbox" checked={dashboardSettings.alwaysOpen} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,alwaysOpen:e.target.checked,manualStatus:""}))}/>
               상시 운영
@@ -8147,7 +8181,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </div>
             <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
               <button onClick={()=>setDashboardSettings(null)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
-              <button onClick={saveDashboardSettings} disabled={dashboardSettingsSaving} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>{dashboardSettingsSaving?"저장 중...":"저장"}</button>
+              <button onClick={saveDashboardSettings} disabled={dashboardSettingsSaving} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>{dashboardSettingsSaving?"저장 중...":"저장"}</button>
             </div>
           </div>
         </div>
@@ -8157,11 +8191,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       {showUpdateModal&&(
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setShowUpdateModal(false)}>
           <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:cfg.header.programUnlinked?500:320,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:8}}>수정 사항 저장</div>
+            <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:8}}>수정 사항 저장</div>
             <div style={{fontSize:13.5,color:A.t2,marginBottom:6}}><span style={{fontWeight:600,color:A.t1}}>"{loadedName}"</span>에 변경 사항을 덮어쓰시겠어요?</div>
             <div style={{fontSize:12,color:A.t3,marginBottom:22,lineHeight:1.5}}>기존 설정이 수정된 내용으로 교체됩니다.</div>
             {cfg.header.programUnlinked&&<div style={{padding:"12px 12px 11px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`}}>
-              <div style={{fontSize:12,fontWeight:600,color:A.blue,marginBottom:5}}>폼 운영 기간</div>
+              <div style={{fontSize:12,fontWeight:700,color:A.blue,marginBottom:5}}>폼 운영 기간</div>
               <div style={{fontSize:11.5,color:A.t2,lineHeight:1.5,marginBottom:8}}>교육과정 연동을 하지 않는 폼은 운영 기간을 설정해야 합니다.</div>
               <OperationPeriodsEditor compact periods={operationPeriodsFromDashboard(cfg.dashboard)} onChange={setOperationPeriods} A={A}/>
             </div>}
@@ -8178,19 +8212,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       {showSave&&(
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setShowSave(false)}>
           <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:cfg.header.programUnlinked?500:310,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:18}}>설정 저장</div>
+            <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:18}}>설정 저장</div>
             <div style={{marginBottom:12}}>
-              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:5}}>설정 이름</div>
+              <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>설정 이름</div>
               <input value={saveName} onChange={e=>setSaveName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveCfg()} placeholder="예) UXUI 9기 오픈폼"
                 style={{width:"100%",background:A.card2,border:`1.5px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:13.5,padding:"9px 11px",outline:"none",boxSizing:"border-box" as const}}/>
             </div>
             <div style={{marginBottom:14}}>
-              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:5}}>슬러그 <span style={{fontWeight:400,color:A.t3}}>(비워두면 자동)</span></div>
+              <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>슬러그 <span style={{fontWeight:400,color:A.t3}}>(비워두면 자동)</span></div>
               <input value={saveSlug} onChange={e=>setSaveSlug(e.target.value)} placeholder="uxui-9th-open"
                 style={{width:"100%",background:A.card2,border:`1.5px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:13,padding:"8px 11px",outline:"none",boxSizing:"border-box" as const}}/>
             </div>
             {cfg.header.programUnlinked&&<div style={{padding:"12px 12px 11px",marginBottom:14,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`}}>
-              <div style={{fontSize:12,fontWeight:600,color:A.blue,marginBottom:5}}>폼 운영 기간</div>
+              <div style={{fontSize:12,fontWeight:700,color:A.blue,marginBottom:5}}>폼 운영 기간</div>
               <div style={{fontSize:11.5,color:A.t2,lineHeight:1.5,marginBottom:8}}>교육과정 연동을 하지 않는 폼은 운영 기간을 설정해야 합니다.</div>
               <OperationPeriodsEditor compact periods={operationPeriodsFromDashboard(cfg.dashboard)} onChange={setOperationPeriods} A={A}/>
             </div>}
@@ -8240,7 +8274,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 <button onClick={()=>setImageCropModal(null)}
                   style={{height:40,padding:"0 14px",border:"none",background:"transparent",color:A.t2,fontFamily:FONT,fontSize:15,fontWeight:600,cursor:"pointer"}}>취소</button>
                 <button onClick={applyImageCropModal}
-                  style={{height:42,padding:"0 18px",border:"none",borderRadius:10,background:A.blue,color:"#fff",fontFamily:FONT,fontSize:15,fontWeight:600,cursor:"pointer"}}>저장</button>
+                  style={{height:42,padding:"0 18px",border:"none",borderRadius:10,background:A.blue,color:"#fff",fontFamily:FONT,fontSize:15,fontWeight:700,cursor:"pointer"}}>저장</button>
               </div>
             </div>
             <div style={{padding:"34px 28px 40px",display:"flex",flexDirection:"column" as const,alignItems:"center",gap:12}}>
@@ -8281,10 +8315,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
       {/* TOAST */}
       {toast&&(
-        <div style={{position:"absolute" as const,bottom:24,left:"50%",background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:"10px 16px",fontSize:13,fontWeight:600,color:toast.ok?A.t1:A.red,zIndex:99999,display:"flex",alignItems:"center",gap:8,boxShadow:A.shadow,whiteSpace:"nowrap" as const,animation:`${toastLeaving?"toastOut":"toastIn"} .3s cubic-bezier(.4,0,.2,1) forwards`}}>
-          <span>{toast.ok?"✓":"✗"}</span><span>{toast.msg}</span>
+        <div style={{position:"absolute" as const,top:122,right:20,background:"#15181D",border:"none",borderRadius:10,padding:"12px 14px",fontSize:12.5,fontWeight:500,color:"#fff",zIndex:99999,display:"flex",alignItems:"center",gap:9,boxShadow:"0 8px 28px -6px rgba(16,24,40,.4)",whiteSpace:"nowrap" as const,animation:`${toastLeaving?"toastOut":"toastIn"} .3s cubic-bezier(.4,0,.2,1) forwards`}}>
+          <span style={{width:16,height:16,borderRadius:8,background:toast.ok?A.green:A.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:10,fontWeight:700,color:"#fff"}}>{toast.ok?"✓":"!"}</span><span>{toast.msg}</span>
           {toast.undo&&<button onClick={toast.undo}
-            style={{marginLeft:8,padding:"2px 10px",borderRadius:4,border:"none",background:"transparent",cursor:"pointer",color:A.blue,fontFamily:FONT,fontSize:12,fontWeight:600}}>실행 취소</button>}
+            style={{marginLeft:8,padding:"2px 10px",borderRadius:5,border:"none",background:"rgba(255,255,255,.1)",cursor:"pointer",color:"#fff",fontFamily:FONT,fontSize:12,fontWeight:600}}>실행 취소</button>}
         </div>
       )}
 
