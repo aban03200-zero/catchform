@@ -9,7 +9,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 // ─── Types ────────────────────────────────────────────────────────────────
 type Theme = "dark" | "light"
 type Opt = { label: string; value: string; isEtc: boolean; nextPage?: number }
-type Cat = { id: string; name: string }
+type Cat = { id: string; name: string; brand?: string; slug?: string }
 type Prog = { id: string; title: string; slug?: string; category?: string; [key:string]:any }
 type BrandId = "SNIPERFACTORY"|"INSIDEOUT"|"SFACSPACE"
 type DashboardFormType = "alert"|"application"|"recruit"|"survey"|"evaluation"|"other"
@@ -150,6 +150,23 @@ const seniorFontSize = (enabled:boolean, size:number) => enabled ? Math.round(si
 const seniorFieldHeight = (enabled:boolean, height:number) => enabled ? Math.max(56, Math.round(height * 1.24)) : height
 const seniorGap = (enabled:boolean, gap:number) => enabled ? Math.round(gap * 1.16) : gap
 const DASHBOARD_PAGE_SIZE = 60
+// 편집 화면 우측 패널 제목 아래 설명 (시안 PANELS.sub 기준)
+const PANEL_SUBS:Record<string,string> = {
+  header:"폼 상단에 노출되는 대표 이미지와 제목, 운영 기간을 설정합니다.",
+  notice:"제목 아래 회색 박스에 들어가는 안내 문장입니다.",
+  ad:"대표 이미지와 제목 아래, 질문 시작 전에 배너를 노출합니다.",
+  form:"단계별 질문을 추가하고 순서를 바꿉니다.",
+  consent:"개인정보 수집·이용 동의 항목을 관리합니다.",
+  login:"응답 전 로그인을 요구할 수 있습니다.",
+  integrations:"응답이 접수될 때 외부 도구로 전달합니다.",
+  slug:"폼 공개 주소를 정합니다.",
+  qr:"현장 배포용 QR 코드를 만들고 다운로드합니다.",
+  cta:"단계 이동과 제출 버튼의 문구와 색을 정합니다.",
+  modal:"제출 후 보여줄 화면을 설정합니다.",
+  styles:"폼 전체의 색과 모서리, 폰트를 조정합니다.",
+}
+const RECENT_EDIT_STORAGE_KEY = "catchform.admin.recentEdits"
+const RECENT_EDIT_LIMIT = 50
 function normalizeAdminRole(role:any):AdminRole{
   const normalized=String(role||"").trim().toLowerCase()
   return normalized==="admin"||normalized==="master"?normalized:""
@@ -464,35 +481,56 @@ function OperationPeriodsEditor({periods,onChange,disabled,A,compact=false}:{per
   const update=(id:string,patch:Partial<OperationPeriod>)=>onChange(periods.map(period=>period.id===id?{...period,...patch}:period))
   const remove=(id:string)=>onChange(periods.filter(period=>period.id!==id))
   const add=(type:OperationPeriodType)=>onChange([...periods,makeOperationPeriod(type)])
-  const inputStyle={minWidth:0,width:"100%",height:compact?32:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:compact?11.5:12,boxSizing:"border-box" as const}
-  return <div style={{display:"flex",flexDirection:"column" as const,gap:8,opacity:disabled?0.55:1}}>
-    {periods.length===0&&<div style={{padding:"10px 11px",borderRadius:A.r,border:`1px dashed ${A.border}`,background:A.card2,color:A.t3,fontSize:12,lineHeight:1.5}}>아직 추가된 운영 기간이 없어요.</div>}
-    {periods.map((period,index)=>(
-      <div key={period.id} style={{padding:compact?9:10,borderRadius:A.r,border:`1px solid ${A.border}`,background:compact?A.card:A.card2}}>
-        <div style={{display:"grid",gridTemplateColumns:"86px 1fr auto",gap:7,alignItems:"center",marginBottom:7}}>
-          <select disabled={disabled} value={period.type} onChange={e=>{
-            const type=e.target.value as OperationPeriodType
-            update(period.id,{type,date:type==="single"?(period.date||String(period.start||"").slice(0,10)):"",start:type==="range"?(period.start||period.date||""):"",end:type==="range"?(period.end||period.date||""):""})
-          }} style={inputStyle}>
-            <option value="range">기간</option>
-            <option value="single">단일 날짜</option>
-          </select>
-          <input disabled={disabled} value={period.label||""} onChange={e=>update(period.id,{label:e.target.value})} placeholder={`운영 기간 ${index+1}`} style={inputStyle}/>
-          <button disabled={disabled} onClick={()=>remove(period.id)} style={{height:compact?32:36,padding:"0 9px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.red,fontFamily:FONT,fontSize:compact?11.5:12,cursor:disabled?"default":"pointer"}}>삭제</button>
+  // compact은 파란 안내 박스 안에서 쓰이므로 카드/필드 배경을 뒤집어 대비를 유지한다.
+  const cardBg=compact?A.card:panelFieldBg(A)
+  const fieldBg=compact?panelFieldBg(A):A.card
+  const h=compact?34:38
+  const inputStyle={minWidth:0,width:"100%",height:h,padding:"0 11px",borderRadius:9,border:"none",background:fieldBg,color:A.t1,fontFamily:FONT,fontSize:compact?12:12.5,boxSizing:"border-box" as const}
+  const rowLabel:React.CSSProperties={fontSize:11.5,fontWeight:600,color:A.t3,fontFamily:FONT,width:30,flexShrink:0}
+  return <div style={{display:"flex",flexDirection:"column" as const,gap:9,opacity:disabled?0.55:1}}>
+    {periods.length===0&&<div style={{padding:12,borderRadius:11,border:"none",background:cardBg,color:A.t3,fontSize:12.5,lineHeight:1.5}}>아직 추가된 운영 기간이 없어요.</div>}
+    {periods.map((period,index)=>{
+      const setType=(type:OperationPeriodType)=>update(period.id,{type,date:type==="single"?(period.date||String(period.start||"").slice(0,10)):"",start:type==="range"?(period.start||period.date||""):"",end:type==="range"?(period.end||period.date||""):""})
+      return <div key={period.id} style={{padding:10,borderRadius:11,border:"none",background:cardBg,display:"flex",flexDirection:"column" as const,gap:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <PanelSegment inline value={period.type==="single"?"single":"range"} onChange={v=>setType(v as OperationPeriodType)} A={A}
+            height={compact?26:28} fontSize={12.5} trackBg={A===ALT?"#E7EAEF":A.bg}
+            options={[{value:"range",label:"기간"},{value:"single",label:"단일 날짜"}]}/>
+          <div style={{flex:1}}/>
+          <button disabled={disabled} onClick={()=>remove(period.id)} title="운영 기간 삭제" aria-label="운영 기간 삭제"
+            style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:A.t3,cursor:disabled?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,padding:0}}
+            onMouseEnter={e=>{if(!disabled){(e.currentTarget as HTMLElement).style.background=fieldBg;(e.currentTarget as HTMLElement).style.color=A.red}}}
+            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 7h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              <path d="M9.5 4.5h5a1 1 0 0 1 1 1V7h-7V5.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+              <path d="M6 7.5h12l-.85 11.1a1.5 1.5 0 0 1-1.5 1.4H8.35a1.5 1.5 0 0 1-1.5-1.4L6 7.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+            </svg>
+          </button>
         </div>
+        <input disabled={disabled} value={period.label||""} onChange={e=>update(period.id,{label:e.target.value})} placeholder={`운영 기간 이름 (예: ${index+1}차)`} style={inputStyle}/>
         {period.type==="single"
-          ? <input type="date" disabled={disabled} value={period.date||""} onChange={e=>update(period.id,{date:e.target.value})} style={inputStyle}/>
-          : <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:6}}>
-              <input type="datetime-local" step={60} disabled={disabled} value={operationInputValue(period.start||"","start")} onChange={e=>update(period.id,{start:e.target.value})} style={inputStyle}/>
-              <span style={{fontSize:12,color:A.t3}}>~</span>
-              <input type="datetime-local" step={60} disabled={disabled} value={operationInputValue(period.end||"","end")} onChange={e=>update(period.id,{end:e.target.value})} style={inputStyle}/>
-            </div>}
+          ? <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={rowLabel}>날짜</span>
+              <input type="date" disabled={disabled} value={period.date||""} onChange={e=>update(period.id,{date:e.target.value})} style={inputStyle}/>
+            </div>
+          : <>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={rowLabel}>시작</span>
+                <input type="datetime-local" step={60} disabled={disabled} value={operationInputValue(period.start||"","start")} onChange={e=>update(period.id,{start:e.target.value})} style={inputStyle}/>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={rowLabel}>종료</span>
+                <input type="datetime-local" step={60} disabled={disabled} value={operationInputValue(period.end||"","end")} onChange={e=>update(period.id,{end:e.target.value})} style={inputStyle}/>
+              </div>
+            </>}
       </div>
-    ))}
-    <div style={{display:"flex",gap:7,flexWrap:"wrap" as const}}>
-      <button disabled={disabled} onClick={()=>add("range")} style={{height:compact?30:32,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:compact?11.5:12,cursor:disabled?"default":"pointer"}}>+ 기간 추가</button>
-      <button disabled={disabled} onClick={()=>add("single")} style={{height:compact?30:32,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:compact?11.5:12,cursor:disabled?"default":"pointer"}}>+ 단일 날짜 추가</button>
-    </div>
+    })}
+    <button disabled={disabled} onClick={()=>add("range")}
+      style={{width:"100%",height:compact?34:38,borderRadius:9,border:`1.5px solid ${disabled?A.border2:A.blue}`,background:compact?A.card:A.card,color:disabled?A.t3:A.blue,fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:disabled?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+      기간 추가
+    </button>
   </div>
 }
 function formTrashedAtOf(item:any){
@@ -836,7 +874,7 @@ const DEFAULT_GUIDE_SECTIONS = [
       "왼쪽 하단 '+ 새 폼 만들기' 버튼을 클릭하세요.",
       "브랜드를 선택하세요. (스나이퍼팩토리 / 인사이드아웃)",
       "폼 형식을 선택하세요. (사전알림, 교육과정, 교육사업, 참여기업, 채용, 빈 템플릿)",
-      "헤더, 질문, 동의 항목, CTA 등 각 섹션을 편집하세요.",
+      "기본 정보, 질문, 동의 항목, CTA 등 각 섹션을 편집하세요.",
     ]
   },
   {
@@ -983,11 +1021,6 @@ function makeAutoSlug(prefix="form"){
   return `${safePrefix}-${Date.now()}-${Math.floor(100000+Math.random()*900000)}`
 }
 
-function SelectChevron({color}:{color:string}){
-  return <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}>
-    <path d="m4 6 4 4 4-4" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-}
 
 const DEFOPTS: Opt[] = [
   {label:"스나이퍼팩토리 SNS 계정",value:"스나이퍼팩토리 SNS 계정",isEtc:false},
@@ -1277,7 +1310,7 @@ function headerWithEducationSchedules(header:Cfg["header"],schedules?:EducationS
 function educationScheduleText(schedule:EducationSchedule){
   const range=educationScheduleRange(schedule)
   if(!range)return""
-  if(schedule.type==="single"||range.start===range.end)return`${fmtDateKo(range.start)} · 하루`
+  if(schedule.type==="single"||range.start===range.end)return`${fmtDateKo(range.start)} · 1일`
   const days=Math.round((range.endAt-range.startAt)/(1000*60*60*24))+1
   if(days<1)return`${fmtDateKo(range.start)} ~ ${fmtDateKo(range.end)} · 날짜 확인 필요`
   return`${fmtDateKo(range.start)} ~ ${fmtDateKo(range.end)} · ${durationText(days)}`
@@ -1292,23 +1325,30 @@ function EducationSchedulesEditor({schedules,onChange,A}:{schedules:EducationSch
   const update=(id:string,patch:Partial<EducationSchedule>)=>onChange(schedules.map(schedule=>schedule.id===id?{...schedule,...patch}:schedule))
   const remove=(id:string)=>onChange(schedules.filter(schedule=>schedule.id!==id))
   const add=(type:EducationScheduleType)=>onChange([...schedules,makeEducationSchedule(type)])
-  const inputStyle={minWidth:0,width:"100%",height:42,padding:"0 12px",borderRadius:A.r,border:`1.5px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const}
+  const inputStyle={minWidth:0,width:"100%",height:38,padding:"0 11px",borderRadius:9,border:"none",background:A.card,color:A.t1,fontFamily:FONT,fontSize:12.5,boxSizing:"border-box" as const}
   return <div style={{display:"flex",flexDirection:"column" as const,gap:9}}>
-    {schedules.length===0&&<div style={{padding:"10px 12px",borderRadius:A.r,border:`1px dashed ${A.border}`,background:A.card2,color:A.t3,fontSize:12.5,lineHeight:1.5}}>아직 추가된 교육 일정이 없어요.</div>}
+    {schedules.length===0&&<div style={{padding:"12px",borderRadius:11,border:"none",background:panelFieldBg(A),color:A.t3,fontSize:12.5,lineHeight:1.5}}>아직 추가된 교육 일정이 없어요.</div>}
     {schedules.map((schedule,index)=>{
       const summary=educationScheduleText(schedule)
-      return <div key={schedule.id} style={{padding:10,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card}}>
-        <div style={{display:"grid",gridTemplateColumns:"88px 1fr auto",gap:7,alignItems:"center",marginBottom:8}}>
-          <select value={schedule.type} onChange={e=>{
-            const type=e.target.value as EducationScheduleType
-            update(schedule.id,{type,date:type==="single"?(schedule.date||schedule.start||""):"",start:type==="range"?(schedule.start||schedule.date||""):"",end:type==="range"?(schedule.end||schedule.date||""):""})
-          }} style={inputStyle}>
-            <option value="range">기간</option>
-            <option value="single">단일 날짜</option>
-          </select>
-          <input value={schedule.label||""} onChange={e=>update(schedule.id,{label:e.target.value})} placeholder={`일정 ${index+1}`} style={inputStyle}/>
-          <button onClick={()=>remove(schedule.id)} style={{height:42,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.red,fontFamily:FONT,fontSize:12.5,cursor:"pointer"}}>삭제</button>
+      const setType=(type:EducationScheduleType)=>update(schedule.id,{type,date:type==="single"?(schedule.date||schedule.start||""):"",start:type==="range"?(schedule.start||schedule.date||""):"",end:type==="range"?(schedule.end||schedule.date||""):""})
+      return <div key={schedule.id} style={{padding:10,borderRadius:11,border:"none",background:panelFieldBg(A),display:"flex",flexDirection:"column" as const,gap:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <PanelSegment inline value={schedule.type==="single"?"single":"range"} onChange={v=>setType(v as EducationScheduleType)} A={A}
+            height={28} fontSize={12.5} trackBg={A===ALT?"#E7EAEF":A.bg}
+            options={[{value:"range",label:"기간"},{value:"single",label:"단일 날짜"}]}/>
+          <div style={{flex:1}}/>
+          <button onClick={()=>remove(schedule.id)} title="일정 삭제" aria-label="일정 삭제"
+            style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,padding:0}}
+            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card;(e.currentTarget as HTMLElement).style.color=A.red}}
+            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 7h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              <path d="M9.5 4.5h5a1 1 0 0 1 1 1V7h-7V5.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+              <path d="M6 7.5h12l-.85 11.1a1.5 1.5 0 0 1-1.5 1.4H8.35a1.5 1.5 0 0 1-1.5-1.4L6 7.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+            </svg>
+          </button>
         </div>
+        <input value={schedule.label||""} onChange={e=>update(schedule.id,{label:e.target.value})} placeholder={`일정 이름 (예: ${index+1}회차)`} style={inputStyle}/>
         {schedule.type==="single"
           ? <input type="date" value={schedule.date||""} onChange={e=>update(schedule.id,{date:e.target.value})} style={inputStyle}/>
           : <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:8}}>
@@ -1316,13 +1356,14 @@ function EducationSchedulesEditor({schedules,onChange,A}:{schedules:EducationSch
               <span style={{color:A.t3,fontSize:12,flexShrink:0}}>~</span>
               <input type="date" value={schedule.end||""} onChange={e=>update(schedule.id,{end:e.target.value})} style={inputStyle}/>
             </div>}
-        {summary&&<div style={{marginTop:8,padding:"8px 10px",borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,fontWeight:600,color:A.blue,lineHeight:1.45}}>{summary}</div>}
+        {summary&&<div style={{fontSize:11.5,color:A.t3,lineHeight:1.45,padding:"0 2px"}}>{summary}</div>}
       </div>
     })}
-    <div style={{display:"flex",gap:8,flexWrap:"wrap" as const}}>
-      <button onClick={()=>add("range")} style={{height:34,padding:"0 12px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,cursor:"pointer"}}>+ 기간 추가</button>
-      <button onClick={()=>add("single")} style={{height:34,padding:"0 12px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,cursor:"pointer"}}>+ 단일 날짜 추가</button>
-    </div>
+    <button onClick={()=>add("range")}
+      style={{width:"100%",height:38,borderRadius:9,border:`1.5px solid ${A.blue}`,background:A.card,color:A.blue,fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+      일정 추가
+    </button>
   </div>
 }
 function mergeCfg(raw:any):Cfg {
@@ -1387,11 +1428,89 @@ function applyBrandDefaults(config:Cfg,brand:string):Cfg{
 }
 
 // ─── UI Atoms ─────────────────────────────────────────────────────────────
+// 시안 우측 패널은 테두리 없는 채움형 컨트롤을 쓴다. 라이트는 #F6F7F9, 다크는 card2.
+const panelFieldBg=(A:AT)=>A===ALT?"#F6F7F9":A.card2
+const panelFieldRing=(A:AT)=>`inset 0 0 0 1.5px ${A.blue}`
+function PanelSegment({value,options,onChange,A,height=38,fontSize=12.5,trackBg,inline=false}:{
+  value:string
+  options:{value:string;label:React.ReactNode;icon?:React.ReactNode}[]
+  onChange:(v:string)=>void
+  A:AT
+  height?:number
+  fontSize?:number
+  trackBg?:string
+  inline?:boolean
+}){
+  const count=options.length
+  const activeIdx=options.findIndex(opt=>opt.value===value)
+  return <div style={{position:"relative" as const,display:inline?"inline-grid":"grid",gridAutoFlow:"column" as const,gridAutoColumns:"1fr",alignItems:"center",padding:3,borderRadius:9,flexShrink:0,background:trackBg||(A===ALT?"#F1F3F6":A.bg)}}>
+    {/* 선택 표시(흰 알약) — 버튼마다 배경을 켜는 대신 하나를 좌우로 이동시킨다 */}
+    {activeIdx>=0&&<span aria-hidden="true" style={{
+      position:"absolute" as const,top:3,bottom:3,left:3,
+      width:`calc((100% - 6px) / ${count})`,
+      transform:`translateX(${activeIdx*100}%)`,
+      borderRadius:7,background:A.card,boxShadow:"0 1px 2px rgba(16,24,40,.10)",
+      transition:"transform .22s cubic-bezier(.4,0,.2,1)",pointerEvents:"none" as const,
+    }}/>}
+    {options.map(opt=>{
+      const on=opt.value===value
+      return <button key={opt.value} type="button" onClick={()=>onChange(opt.value)}
+        style={{position:"relative" as const,zIndex:1,minWidth:0,height,borderRadius:7,border:"none",background:"transparent",
+          cursor:"pointer",fontFamily:FONT,fontSize,fontWeight:600,color:on?A.blue:A.t2,
+          display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"0 10px",
+          transition:"color .18s ease",whiteSpace:"nowrap" as const,overflow:"hidden"}}>
+        {opt.icon}
+        <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{opt.label}</span>
+      </button>
+    })}
+  </div>
+}
+function PanelSelect({value,options,onChange,placeholder="선택해주세요",A,height=40,fontSize=13,fontWeight=500,radius=10,width,maxWidth,padX=14}:{value:string;options:{value:string;label:string}[];onChange:(v:string)=>void;placeholder?:string;A:AT;height?:number;fontSize?:number;fontWeight?:number;radius?:number;width?:number|string;maxWidth?:number;padX?:number}){
+  const [open,setOpen]=React.useState(false)
+  const current=options.find(o=>o.value===value)
+  return <div style={{position:"relative" as const,width:width??"100%",maxWidth,flexShrink:0}}>
+    <button type="button" onClick={()=>setOpen(v=>!v)}
+      style={{width:"100%",height,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:`0 ${padX}px`,borderRadius:radius,border:"none",
+        background:panelFieldBg(A),color:current?A.t1:A.t3,fontFamily:FONT,fontSize,fontWeight,cursor:"pointer",textAlign:"left" as const,
+        boxShadow:open?`inset 0 0 0 1.5px ${A.blue}`:"none",transition:"box-shadow .12s"}}>
+      <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{current?current.label:placeholder}</span>
+      <svg width="12" height="12" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A.t3,transform:open?"rotate(180deg)":"none",transition:"transform .15s"}}>
+        <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </button>
+    {open&&<>
+      <div onClick={()=>setOpen(false)} style={{position:"fixed" as const,inset:0,zIndex:59}}/>
+      <div style={{position:"absolute" as const,top:height+6,left:0,minWidth:"100%",zIndex:60,maxHeight:260,overflowY:"auto" as const,padding:6,borderRadius:12,
+        background:A.card,border:A===ALT?"none":`1px solid ${A.border}`,boxShadow:"0 1px 2px rgba(16,24,40,.08), 0 16px 40px -10px rgba(16,24,40,.28)"}}>
+        {options.map(opt=>{
+          const sel=opt.value===value
+          return <button key={opt.value||"__empty"} type="button" onClick={()=>{onChange(opt.value);setOpen(false)}}
+            style={{width:"100%",minHeight:40,display:"flex",alignItems:"center",gap:8,padding:"9px 10px",borderRadius:9,border:"none",
+              background:sel?panelFieldBg(A):"transparent",color:sel?A.t1:A.t2,fontFamily:FONT,fontSize:13,fontWeight:sel?700:500,whiteSpace:"nowrap" as const,cursor:"pointer",textAlign:"left" as const,lineHeight:1.4}}
+            onMouseEnter={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background=panelFieldBg(A)}}
+            onMouseLeave={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background="transparent"}}>
+            <span style={{flex:1,minWidth:0}}>{opt.label}</span>
+            {sel&&<svg width="12" height="12" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A.blue}}><path d="M1.5 5.2 3.8 7.5 8.5 2.8" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+          </button>
+        })}
+      </div>
+    </>}
+  </div>
+}
+function PanelCheckRow({label,on,toggle,A}:{label:string;on:boolean;toggle:()=>void;A:AT}){
+  return <label onClick={toggle} style={{display:"inline-flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:12.5,fontWeight:600,color:A.t1,fontFamily:FONT,userSelect:"none" as const}}>
+    <span style={{width:16,height:16,borderRadius:4,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+      background:on?A.blue:panelFieldBg(A),boxShadow:on?"none":`inset 0 0 0 1.5px ${A.border2}`,transition:"background .12s"}}>
+      {on&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5.2 3.8 7.5 8.5 2.8" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+    </span>
+    {label}
+  </label>
+}
 function TRow({label,on,toggle,A}:{label:string;on:boolean;toggle:()=>void;A:AT}) {
-  return <div onClick={toggle} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,cursor:"pointer",marginBottom:10}}>
-    <span style={{fontSize:13.5,fontWeight:700,color:A.t1,fontFamily:FONT}}>{label}</span>
-    <div style={{width:34,height:20,borderRadius:10,background:on?A.blue:A.border2,position:"relative",transition:"background .2s",flexShrink:0}}>
-      <div style={{position:"absolute",width:14,height:14,borderRadius:"50%",background:"#fff",top:3,left:on?17:3,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,0.2)"}}/>
+  return <div onClick={toggle} style={{height:48,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",borderRadius:10,background:panelFieldBg(A),border:"none",cursor:"pointer",marginBottom:10,boxSizing:"border-box" as const}}>
+    <span style={{fontSize:13.5,fontWeight:600,color:A.t1,fontFamily:FONT}}>{label}</span>
+    <div style={{width:44,height:25,borderRadius:13,background:on?A.blue:(A===ALT?"#DFE3E9":A.border2),position:"relative",transition:"background .2s",flexShrink:0}}>
+      <div style={{position:"absolute",width:19,height:19,borderRadius:"50%",background:"#fff",top:3,left:on?22:3,transition:"left .2s",boxShadow:"0 1px 3px rgba(16,24,40,0.24)"}}/>
     </div>
   </div>
 }
@@ -1399,13 +1518,13 @@ function TIn({value,onChange,placeholder,type="text",A}:{value:string;onChange:(
   const [f,sf]=React.useState(false)
   return <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
     onFocus={()=>sf(true)} onBlur={()=>sf(false)}
-    style={{width:"100%",background:f?A.card:A.card2,border:`1.5px solid ${f?A.blue:A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:13,padding:"8px 10px",outline:"none",boxSizing:"border-box" as const,transition:"all .15s"}}/>
+    style={{width:"100%",height:40,background:panelFieldBg(A),border:"none",borderRadius:9,color:A.t1,fontFamily:FONT,fontSize:12.5,padding:"0 12px",outline:"none",boxSizing:"border-box" as const,boxShadow:f?panelFieldRing(A):"none",transition:"box-shadow .15s"}}/>
 }
-function TArea({value,onChange,placeholder,minH=72,A}:{value:string;onChange:(v:string)=>void;placeholder?:string;minH?:number;A:AT}) {
+function TArea({value,onChange,placeholder,minH=88,A}:{value:string;onChange:(v:string)=>void;placeholder?:string;minH?:number;A:AT}) {
   const [f,sf]=React.useState(false)
   return <textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
     onFocus={()=>sf(true)} onBlur={()=>sf(false)}
-    style={{width:"100%",minHeight:minH,background:f?A.card:A.card2,border:`1.5px solid ${f?A.blue:A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:13,padding:"8px 10px",outline:"none",resize:"vertical" as const,lineHeight:1.6,boxSizing:"border-box" as const}}/>
+    style={{width:"100%",minHeight:minH,background:panelFieldBg(A),border:"none",borderRadius:10,color:A.t1,fontFamily:FONT,fontSize:13,padding:"11px 12px",outline:"none",resize:"vertical" as const,lineHeight:1.6,boxSizing:"border-box" as const,boxShadow:f?panelFieldRing(A):"none",transition:"box-shadow .15s"}}/>
 }
 function Slider({value,min,max,step=1,unit="px",onChange,A}:{value:number;min:number;max:number;step?:number;unit?:string;onChange:(v:number)=>void;A:AT}) {
   return <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -1414,26 +1533,119 @@ function Slider({value,min,max,step=1,unit="px",onChange,A}:{value:number;min:nu
     <span style={{fontSize:14,fontWeight:700,color:A.t3,minWidth:56,textAlign:"right" as const,fontFamily:FONT}}>{value}{unit}</span>
   </div>
 }
+// ─── Color picker ─────────────────────────────────────────────────────────
+const HEX_RE=/^#[0-9a-fA-F]{6}$/
+function hexToRgb(hex:string){
+  const v=HEX_RE.test(hex)?hex:"#000000"
+  return {r:parseInt(v.slice(1,3),16),g:parseInt(v.slice(3,5),16),b:parseInt(v.slice(5,7),16)}
+}
+function rgbToHex(r:number,g:number,b:number){
+  const to=(n:number)=>Math.max(0,Math.min(255,Math.round(n))).toString(16).padStart(2,"0")
+  return `#${to(r)}${to(g)}${to(b)}`
+}
+function rgbToHsv(r:number,g:number,b:number){
+  const R=r/255,G=g/255,B=b/255
+  const max=Math.max(R,G,B),min=Math.min(R,G,B),d=max-min
+  let h=0
+  if(d!==0){
+    if(max===R)h=((G-B)/d)%6
+    else if(max===G)h=(B-R)/d+2
+    else h=(R-G)/d+4
+    h*=60
+    if(h<0)h+=360
+  }
+  return {h,s:max===0?0:d/max,v:max}
+}
+function hsvToHex(h:number,s:number,v:number){
+  const c=v*s,x=c*(1-Math.abs(((h/60)%2)-1)),m=v-c
+  let r=0,g=0,b=0
+  if(h<60){r=c;g=x} else if(h<120){r=x;g=c} else if(h<180){g=c;b=x}
+  else if(h<240){g=x;b=c} else if(h<300){r=x;b=c} else {r=c;b=x}
+  return rgbToHex((r+m)*255,(g+m)*255,(b+m)*255)
+}
+const COLOR_PRESETS=["#3182F6","#529DFF","#EA594D","#0F8A47","#6D4AEA","#F1C153","#15181D","#FFFFFF"]
+
 function CIn({value,onChange,A}:{value:string;onChange:(v:string)=>void;A:AT}) {
   const [hex,sh]=React.useState(value)
+  const [open,setOpen]=React.useState(false)
+  const svRef=React.useRef<HTMLDivElement|null>(null)
+  const hueRef=React.useRef<HTMLDivElement|null>(null)
   React.useEffect(()=>sh(value),[value])
-  return <div style={{display:"flex",alignItems:"center",gap:8,width:"100%",minWidth:0}}>
-    <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(value)?value:"#000000"} onChange={e=>{sh(e.target.value);onChange(e.target.value)}}
-      style={{width:32,height:32,border:`1.5px solid ${A.border}`,borderRadius:A.r,background:"none",cursor:"pointer",padding:2,flexShrink:0,boxSizing:"border-box" as const}}/>
-    <input type="text" value={hex} onChange={e=>{sh(e.target.value);if(/^#[0-9a-fA-F]{6}$/.test(e.target.value))onChange(e.target.value)}}
-      style={{flex:1,minWidth:0,background:A.card2,border:`1.5px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:"Courier New,monospace",fontSize:12,padding:"7px 9px",outline:"none",boxSizing:"border-box" as const}}/>
+
+  const safe=HEX_RE.test(value)?value:"#000000"
+  const rgb=hexToRgb(safe)
+  const hsv=rgbToHsv(rgb.r,rgb.g,rgb.b)
+
+  // 포인터를 누른 채 움직이는 동안 계속 값을 갱신한다.
+  const drag=(ref:React.MutableRefObject<HTMLDivElement|null>,handler:(x:number,y:number,rect:DOMRect)=>void)=>(e:React.PointerEvent)=>{
+    const el=ref.current
+    if(!el)return
+    e.preventDefault()
+    const apply=(cx:number,cy:number)=>handler(cx,cy,el.getBoundingClientRect())
+    apply(e.clientX,e.clientY)
+    const onMove=(ev:PointerEvent)=>apply(ev.clientX,ev.clientY)
+    const onUp=()=>{window.removeEventListener("pointermove",onMove);window.removeEventListener("pointerup",onUp)}
+    window.addEventListener("pointermove",onMove)
+    window.addEventListener("pointerup",onUp)
+  }
+  const clamp01=(n:number)=>Math.max(0,Math.min(1,n))
+  const onSv=drag(svRef,(x,y,r)=>{
+    const next=hsvToHex(hsv.h,clamp01((x-r.left)/r.width),1-clamp01((y-r.top)/r.height))
+    sh(next);onChange(next)
+  })
+  const onHue=drag(hueRef,(x,_y,r)=>{
+    const next=hsvToHex(clamp01((x-r.left)/r.width)*360,hsv.s||1,hsv.v||1)
+    sh(next);onChange(next)
+  })
+
+  return <div style={{position:"relative" as const,display:"flex",alignItems:"center",gap:8,width:"100%",minWidth:0}}>
+    <button type="button" onClick={()=>setOpen(v=>!v)} aria-label="색상 선택"
+      style={{width:34,height:34,flexShrink:0,border:"none",borderRadius:9,padding:3,background:panelFieldBg(A),cursor:"pointer",boxSizing:"border-box" as const,
+        boxShadow:open?`inset 0 0 0 1.5px ${A.blue}`:"none"}}>
+      <span style={{display:"block",width:"100%",height:"100%",borderRadius:6,background:safe,boxShadow:"inset 0 0 0 1px rgba(16,24,40,.12)"}}/>
+    </button>
+    <input type="text" value={hex} onChange={e=>{sh(e.target.value);if(HEX_RE.test(e.target.value))onChange(e.target.value)}}
+      style={{flex:1,minWidth:0,height:34,background:panelFieldBg(A),border:"none",borderRadius:9,color:A.t1,fontFamily:FONT,fontSize:12.5,padding:"0 10px",outline:"none",boxSizing:"border-box" as const}}/>
+    {open&&<>
+      <div onClick={()=>setOpen(false)} style={{position:"fixed" as const,inset:0,zIndex:79}}/>
+      <div style={{position:"absolute" as const,top:42,left:0,zIndex:80,width:236,padding:12,borderRadius:12,background:A.card,
+        border:A===ALT?"none":`1px solid ${A.border}`,boxShadow:"0 1px 2px rgba(16,24,40,.08), 0 16px 40px -10px rgba(16,24,40,.28)"}}>
+        {/* 명도·채도 */}
+        <div ref={svRef} onPointerDown={onSv}
+          style={{position:"relative" as const,width:"100%",height:132,borderRadius:9,cursor:"crosshair",touchAction:"none" as const,
+            background:`linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, ${hsvToHex(hsv.h,1,1)})`}}>
+          <span style={{position:"absolute" as const,left:`${hsv.s*100}%`,top:`${(1-hsv.v)*100}%`,width:14,height:14,marginLeft:-7,marginTop:-7,
+            borderRadius:"50%",border:"2px solid #fff",boxShadow:"0 0 0 1px rgba(16,24,40,.3)",pointerEvents:"none" as const}}/>
+        </div>
+        {/* 색상 */}
+        <div ref={hueRef} onPointerDown={onHue}
+          style={{position:"relative" as const,width:"100%",height:12,marginTop:12,borderRadius:999,cursor:"pointer",touchAction:"none" as const,
+            background:"linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)"}}>
+          <span style={{position:"absolute" as const,left:`${(hsv.h/360)*100}%`,top:"50%",width:16,height:16,marginLeft:-8,marginTop:-8,
+            borderRadius:"50%",background:hsvToHex(hsv.h,1,1),border:"2px solid #fff",boxShadow:"0 1px 3px rgba(16,24,40,.35)",pointerEvents:"none" as const}}/>
+        </div>
+        {/* 프리셋 */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:5,marginTop:12}}>
+          {COLOR_PRESETS.map(c=>(
+            <button key={c} type="button" onClick={()=>{sh(c);onChange(c)}} title={c}
+              style={{width:"100%",aspectRatio:"1",borderRadius:6,background:c,border:"none",cursor:"pointer",padding:0,
+                boxShadow:safe.toLowerCase()===c.toLowerCase()?`inset 0 0 0 1.5px #fff, 0 0 0 2px ${A.blue}`:"inset 0 0 0 1px rgba(16,24,40,.12)"}}/>
+          ))}
+        </div>
+      </div>
+    </>}
   </div>
 }
 function FG({children,title,A,last=false}:{children:React.ReactNode;title?:string;A:AT;last?:boolean}) {
-  return <div style={{marginBottom:last?0:20,paddingBottom:last?0:20,borderBottom:last?"none":`1px solid ${A.border}`}}>
-    {title&&<div style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,marginBottom:12,fontFamily:FONT}}>{title}</div>}
+  return <div style={{marginBottom:last?0:20}}>
+    {title&&<div style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:".4px",marginBottom:8,fontFamily:FONT}}>{title}</div>}
     {children}
   </div>
 }
 function F({children,label,hint,A}:{children:React.ReactNode;label?:string;hint?:string;A:AT}) {
   return <div style={{marginBottom:12}}>
-    {label&&<div style={{fontSize:12.5,fontWeight:600,color:A.t2,marginBottom:8,fontFamily:FONT}}>{label}</div>}
-    {hint&&<div style={{fontSize:11,color:A.t3,marginBottom:5,lineHeight:1.5,fontFamily:FONT}}>{hint}</div>}
+    {label&&<div style={{fontSize:12.5,fontWeight:600,color:A.t1,marginBottom:hint?4:8,fontFamily:FONT}}>{label}</div>}
+    {hint&&<div style={{fontSize:11.5,color:A.t3,marginBottom:7,lineHeight:1.5,fontFamily:FONT}}>{hint}</div>}
     {children}
   </div>
 }
@@ -1503,14 +1715,17 @@ function FieldOptAdder({fieldIdx,onAdd,A}:{fieldIdx:number;onAdd:(lbl:string,val
     onAdd(trimmed,trimmed)
     setLbl("")
   }
-  return <div style={{display:"flex",gap:5,alignItems:"flex-start"}}>
-    <textarea value={lbl} onChange={e=>setLbl(e.target.value)}
-      onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey&&!(e.nativeEvent as any).isComposing){e.preventDefault();add()}}}
-      placeholder={"답변 텍스트 입력\n(Shift+Enter 줄바꿈)"}
-      rows={2}
-      style={{flex:1,background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT2,fontSize:12.5,padding:"7px 9px",outline:"none",resize:"vertical" as const,boxSizing:"border-box" as const,lineHeight:1.6}}/>
-    <button onClick={add}
-      style={{height:32,padding:"0 11px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,cursor:"pointer",fontFamily:FONT2,fontSize:12.5,flexShrink:0,marginTop:1}}>추가</button>
+  return <div>
+    <div style={{display:"flex",gap:6,alignItems:"stretch"}}>
+      <textarea value={lbl} onChange={e=>setLbl(e.target.value)}
+        onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey&&!(e.nativeEvent as any).isComposing){e.preventDefault();add()}}}
+        placeholder="답변 텍스트 입력"
+        rows={1}
+        style={{flex:1,minWidth:0,minHeight:40,background:panelFieldBg(A),border:"none",borderRadius:9,color:A.t1,fontFamily:FONT2,fontSize:12.5,padding:"11px 12px",outline:"none",resize:"vertical" as const,boxSizing:"border-box" as const,lineHeight:1.5}}/>
+      <button onClick={add} disabled={!lbl.trim()}
+        style={{width:56,flexShrink:0,borderRadius:9,border:"none",background:lbl.trim()?A.blue:panelFieldBg(A),color:lbl.trim()?"#fff":A.t3,cursor:lbl.trim()?"pointer":"not-allowed",fontFamily:FONT2,fontSize:12.5,fontWeight:600,transition:"background .12s, color .12s"}}>추가</button>
+    </div>
+    <div style={{marginTop:6,fontSize:11.5,color:A.t3,lineHeight:1.5}}>Enter로 추가, Shift+Enter로 줄바꿈</div>
   </div>
 }
 
@@ -1760,7 +1975,7 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
     setShowLink(false);setLinkUrl("");savedRangeRef.current=null
   }
 
-  const btnS:React.CSSProperties={width:28,height:26,borderRadius:4,border:`1px solid ${A.border}`,background:"transparent",cursor:"pointer",color:A.t1,fontFamily:FONT2,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}
+  const btnS:React.CSSProperties={width:36,height:34,borderRadius:8,border:`1px solid ${A===ALT?"#E3E7EC":A.border}`,background:A.card,cursor:"pointer",color:A.t2,fontFamily:FONT2,fontSize:13,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center"}
   return <div style={{position:"relative"}}>
     <div style={{position:"sticky" as const,top:0,zIndex:5,background:A.card,padding:"0 0 6px",marginBottom:5}}>
       <div style={{display:"flex",gap:4,alignItems:"center"}}>
@@ -1773,7 +1988,7 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
           setShowLink(v=>!v);setLinkUrl("")}} title="링크" style={btnS}>
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M6.5 9.5a4.24 4.24 0 0 0 6 0l2-2a4.24 4.24 0 0 0-6-6L7 3M9.5 6.5a4.24 4.24 0 0 0-6 0l-2 2a4.24 4.24 0 0 0 6 6L9 13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
         </button>
-        <div style={{width:1,height:16,background:A.border,margin:"0 2px"}}/>
+        <div style={{width:1,height:18,background:A.border,margin:"0 2px"}}/>
         <button onMouseDown={e=>{e.preventDefault();const el=edRef.current;if(!el)return;el.focus();
           const sel=window.getSelection();if(!sel||!sel.rangeCount)return;
           const range=sel.getRangeAt(0);const text=sel.toString();
@@ -1785,7 +2000,7 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
         <button onMouseDown={e=>{e.preventDefault();const el=edRef.current;if(!el)return;el.focus();document.execCommand("insertHTML",false,'<hr style="border:none;border-top:1px solid currentColor;opacity:0.2;margin:6px 0"/><br>');onChange(htmlToMd(el.innerHTML))}} title="구분선" style={btnS}>
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 8h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><path d="M4 4h8M4 12h8" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.4"/></svg>
         </button>
-        <span style={{fontSize:11,color:A.t3,marginLeft:2}}>텍스트 선택 후 클릭</span>
+        <span style={{fontSize:12,color:A.t3,marginLeft:2}}>텍스트 선택 후 클릭</span>
       </div>
       {showLink&&<div style={{display:"flex",gap:5,marginTop:6,alignItems:"center"}}>
         <input value={linkUrl} onChange={e=>setLinkUrl(e.target.value)}
@@ -1811,7 +2026,7 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
       onBlur={e=>{setIsFocused(false);onChange(htmlToMd((e.currentTarget as HTMLDivElement).innerHTML))}}
       onInput={()=>{commitHtml();saveSelection()}}
       onKeyDown={e=>{const el=edRef.current;if(el)handleEditorKey(e,el,onChange)}}
-      style={{width:"100%",minHeight:100,background:A.card2,border:`1px solid ${isFocused?A.blue:A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT2,fontSize:13,padding:"8px 10px",outline:"none",lineHeight:1.7,boxSizing:"border-box" as const,wordBreak:"break-word" as const,cursor:"text",transition:"border .15s"}}
+      style={{width:"100%",minHeight:132,background:panelFieldBg(A),border:"none",borderRadius:10,color:A.t1,fontFamily:FONT2,fontSize:13.5,padding:"13px 14px",outline:"none",lineHeight:1.7,boxSizing:"border-box" as const,wordBreak:"break-word" as const,cursor:"text",boxShadow:isFocused?`inset 0 0 0 1.5px ${A.blue}`:"none",transition:"box-shadow .15s"}}
     />
   </div>
 }
@@ -1838,93 +2053,96 @@ function ConsentBodyPreview({body,accentColor,FC,noBorder,noAccordion}:{body:str
 }
 
 // ─── ProgramPicker — category grid → program list ────────────────────────
-const IO_CAT_NAMES = ["인턴형", "프로젝트형"]
-const SF_ETC_CAT_ID = "dc117b4b-1646-4721-9177-6e6e305f6fd0"
-const SF_CAT_NAMES = ["새싹(SeSAC)", "새싹", "KDT", "중소기업 인재키움", "인턴형", "ETC"]
-const SF_CAT_IDS = [SF_ETC_CAT_ID]
 
 function ProgramPicker({progs,cats,brand,value,onChange,A}:{progs:Prog[];cats:Cat[];brand:string;value:string;onChange:(p:Prog)=>void;A:AT}) {
-  const [selCat,setSelCat]=React.useState<string|null>(null)
   const [open,setOpen]=React.useState(false)
   const [query,setQuery]=React.useState("")
 
-  const allowedNames = brand==="INSIDEOUT" ? IO_CAT_NAMES : SF_CAT_NAMES
-  const allowedCatIds = brand==="INSIDEOUT" ? [] : SF_CAT_IDS
-  // category UUID → name 매핑
-  const catNameOf = (catId:string|undefined) => cats.find(c=>c.id===catId)?.name||(catId&&allowedCatIds.includes(catId)?"ETC":"")
-  const isAllowedCat = (catId:string|undefined) => allowedNames.includes(catNameOf(catId))||!!(catId&&allowedCatIds.includes(catId))
-  // 허용된 이름의 카테고리에 속하는 프로그램만
-  const filtered = progs.filter(p=>isAllowedCat(p.category))
-  // unique categories from actual data
-  const catName=catNameOf
-  // allowedNames 순서대로 카테고리 표시 (과정 없어도 보임)
-  const catIds = [
-    ...cats.filter(c=>isAllowedCat(c.id)).map(c=>c.id),
-    ...allowedCatIds.filter(id=>progs.some(p=>p.category===id)&&!cats.some(c=>c.id===id)),
-  ]
-  const inCat = selCat ? filtered.filter(p=>p.category===selCat) : []
-  const inCatFiltered = query.trim() ? inCat.filter(p=>p.title.toLowerCase().includes(query.trim().toLowerCase())) : inCat
+  // 카테고리 목록은 Supabase `categories` 테이블의 brand 컬럼을 그대로 따른다.
+  const brandCats = cats.filter(c=>canonicalBrand(c.brand||"")===canonicalBrand(brand||""))
+  // 아직 해당 브랜드로 등록된 카테고리가 없으면 기존 동작대로 스나이퍼팩토리 기준을 쓴다.
+  const usableCats = brandCats.length ? brandCats : cats.filter(c=>canonicalBrand(c.brand||"")==="SNIPERFACTORY")
+  const allowedCatIdSet = new Set(usableCats.map(c=>c.id))
+  const catNameOf = (catId:string|undefined) => cats.find(c=>c.id===catId)?.name||""
+  const isAllowedCat = (catId:string|undefined) => !!catId && allowedCatIdSet.has(catId)
+  const allPrograms = progs.filter(p=>isAllowedCat(p.category))
   const selected = progs.find(p=>p.id===value)
 
-  const catColor = A.blue
+  const needle=query.trim().toLowerCase()
+  // 유형 단계 없이 전체 과정을 한 목록에 두고, 유형은 그룹 헤더로만 구분한다.
+  const groups = usableCats.map(cat=>({
+    id:cat.id,
+    name:cat.name,
+    items:allPrograms.filter(p=>p.category===cat.id&&(!needle||p.title.toLowerCase().includes(needle))),
+  })).filter(g=>g.items.length>0)
+  const totalHits = groups.reduce((n,g)=>n+g.items.length,0)
+
+  React.useEffect(()=>{if(!open)setQuery("")},[open])
 
   return <div style={{position:"relative" as const}}>
-    {/* Trigger */}
-    <div onClick={()=>setOpen(v=>!v)}
-      style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 11px",borderRadius:A.r,background:A.card2,border:`1.5px solid ${open?catColor:A.border}`,cursor:"pointer",transition:"border .15s"}}>
-      <span style={{fontSize:13,color:selected?A.t1:A.t3,fontFamily:FONT,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,flex:1}}>
+    {/* 트리거 */}
+    <button type="button" onClick={()=>setOpen(v=>!v)}
+      style={{width:"100%",height:46,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"0 14px",borderRadius:10,border:"none",
+        background:panelFieldBg(A),color:selected?A.t1:A.t3,fontFamily:FONT,fontSize:13,fontWeight:500,cursor:"pointer",textAlign:"left" as const,
+        boxShadow:open?`inset 0 0 0 1.5px ${A.blue}`:"none",transition:"box-shadow .12s"}}>
+      <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
         {selected?selected.title:"과정을 선택해 주세요."}
       </span>
-      <span style={{fontSize:11,color:A.t3,flexShrink:0,marginLeft:6}}>{open?"▴":"▾"}</span>
-    </div>
+      <svg width="12" height="12" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A.t3,transform:open?"rotate(180deg)":"none",transition:"transform .15s"}}>
+        <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </button>
 
-    {/* Dropdown panel */}
-    {open&&<div style={{marginTop:4,background:A.card,border:`1.5px solid ${A.border}`,borderRadius:A.r2,overflow:"hidden",boxShadow:A.shadow}}>
-      {/* Category grid */}
-      {!selCat&&<div style={{padding:12}}>
-        <div style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,marginBottom:10}}>유형 선택</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          {catIds.length===0&&<div style={{gridColumn:"1 / -1",padding:"14px 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t3,fontSize:12.5,textAlign:"center" as const}}>선택 가능한 과정 유형을 불러오고 있어요.</div>}
-          {catIds.map(cat=><button key={cat} onClick={()=>setSelCat(cat)}
-            style={{padding:"12px 10px",borderRadius:A.r,border:`1.5px solid ${A.border}`,background:A.card2,cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,transition:"all .12s"}}
-            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=catColor;(e.currentTarget as HTMLElement).style.background=catColor+"12"}}
-            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=A.border;(e.currentTarget as HTMLElement).style.background=A.card2}}>
-            <div style={{fontSize:12.5,fontWeight:600,color:A.t1,marginBottom:3}}>{catName(cat)}</div>
-            <div style={{fontSize:11,color:A.t3}}>{filtered.filter(p=>p.category===cat).length}개 과정</div>
-          </button>)}
+    {open&&<>
+      <div onClick={()=>setOpen(false)} style={{position:"fixed" as const,inset:0,zIndex:59}}/>
+      <div style={{position:"absolute" as const,top:52,left:0,right:0,zIndex:60,borderRadius:12,overflow:"hidden",background:A.card,
+        border:A===ALT?"none":`1px solid ${A.border}`,boxShadow:"0 1px 2px rgba(16,24,40,.08), 0 16px 40px -10px rgba(16,24,40,.28)"}}>
+        {/* 검색 — 유형을 고르지 않아도 전체 과정에서 바로 찾을 수 있다 */}
+        <div style={{padding:10,boxShadow:`inset 0 -1px 0 ${A.border}`}}>
+          <div style={{height:36,display:"flex",alignItems:"center",gap:8,padding:"0 11px",borderRadius:9,background:panelFieldBg(A)}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{color:A.t3,flexShrink:0}}>
+              <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8"/><path d="m20 20-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+            </svg>
+            <input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="과정명 검색"
+              style={{flex:1,minWidth:0,border:"none",outline:"none",background:"transparent",color:A.t1,fontFamily:FONT,fontSize:12.5}}/>
+            {query&&<button type="button" onClick={()=>setQuery("")} aria-label="검색어 지우기"
+              style={{width:18,height:18,flexShrink:0,border:"none",borderRadius:5,background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>
+              <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
+            </button>}
+          </div>
         </div>
-      </div>}
 
-      {/* Program list after cat selected */}
-      {selCat&&<>
-        <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",borderBottom:`1px solid ${A.border}`,background:A.card2}}>
-          <button onClick={()=>{setSelCat(null);setQuery("")}} style={{display:"flex",alignItems:"center",gap:4,background:"transparent",border:"none",cursor:"pointer",color:catColor,fontSize:12,fontWeight:600,fontFamily:FONT,padding:0}}>
-            ← 유형 선택
-          </button>
-          <span style={{fontSize:11,color:A.t3,marginLeft:"auto"}}>{catName(selCat||"")}</span>
+        <div style={{maxHeight:300,overflowY:"auto" as const,padding:6}}>
+          {totalHits===0
+            ? <div style={{padding:"28px 12px",textAlign:"center" as const,color:A.t3,fontSize:12.5,lineHeight:1.6}}>
+                {allPrograms.length===0?"선택 가능한 교육과정이 없어요.":"검색 결과가 없어요."}
+              </div>
+            : groups.map(group=>(
+              <div key={group.id}>
+                <div style={{display:"flex",alignItems:"center",gap:6,padding:"9px 10px 6px"}}>
+                  <span style={{fontSize:11.5,fontWeight:700,color:A.t3,letterSpacing:".3px"}}>{group.name}</span>
+                  <span style={{fontSize:11,fontWeight:600,color:A.t4}}>{group.items.length}</span>
+                </div>
+                {group.items.map(p=>{
+                  const sel=p.id===value
+                  return <button key={p.id} type="button" onClick={()=>{onChange(p);setOpen(false)}}
+                    style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"9px 10px",borderRadius:9,border:"none",
+                      background:sel?panelFieldBg(A):"transparent",color:sel?A.t1:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:sel?700:500,
+                      cursor:"pointer",textAlign:"left" as const,lineHeight:1.45}}
+                    onMouseEnter={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background=panelFieldBg(A)}}
+                    onMouseLeave={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background="transparent"}}>
+                    <span style={{flex:1,minWidth:0}}>{p.title}</span>
+                    {sel&&<svg width="12" height="12" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A.blue}}><path d="M1.5 5.2 3.8 7.5 8.5 2.8" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </button>
+                })}
+              </div>
+            ))}
         </div>
-        <div style={{padding:"8px 10px 4px",borderBottom:`1px solid ${A.border}`}}>
-          <input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="과정명 검색..."
-            style={{width:"100%",background:A.card2,border:`1.5px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:12.5,padding:"6px 10px",outline:"none",boxSizing:"border-box" as const}}/>
-        </div>
-        <div style={{maxHeight:200,overflowY:"auto" as const,padding:6}}>
-          {inCatFiltered.length===0&&<div style={{padding:"12px 10px",fontSize:12.5,color:A.t3,fontFamily:FONT,textAlign:"center" as const}}>검색 결과가 없어요</div>}
-          {inCatFiltered.map(p=>{const sel=p.id===value;return(
-            <div key={p.id} onClick={()=>{onChange(p);setOpen(false);setSelCat(null)}}
-              style={{padding:"9px 12px",borderRadius:A.r,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2,background:sel?catColor+"14":"transparent",border:`1px solid ${sel?catColor+"44":"transparent"}`,transition:"all .1s"}}
-              onMouseEnter={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background=A.card2}}
-              onMouseLeave={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background="transparent"}}>
-              <span style={{fontSize:13,color:A.t1,fontFamily:FONT}}>{p.title}</span>
-              {sel&&<span style={{fontSize:13,color:catColor,fontWeight:600}}>✓</span>}
-            </div>
-          )})}
-        </div>
-      </>}
-    </div>}
+      </div>
+    </>}
   </div>
 }
 
-// ─── Main Component ────────────────────────────────────────────────────────
 export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:string;supabaseAnonKey?:string;formBaseUrl?:string;googleSheetsWebhookUrl?:string}) {
   const {width=1280,height=820,supabaseUrl="",supabaseAnonKey="",formBaseUrl="",googleSheetsWebhookUrl=""}=props
   const supa=React.useMemo(()=>getSB(supabaseUrl,supabaseAnonKey),[supabaseUrl,supabaseAnonKey])
@@ -1958,6 +2176,70 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [dashBrandFilter,setDashBrandFilter]=React.useState("")
   const [dashProgramFilter,setDashProgramFilter]=React.useState("")
   const [dashProgramGroupFilter,setDashProgramGroupFilter]=React.useState("")
+  const [dashShowEmptyGroups,setDashShowEmptyGroups]=React.useState(false)
+  const [showCustomAppType,setShowCustomAppType]=React.useState(false)
+  const [openConsentIdx,setOpenConsentIdx]=React.useState<Record<number,boolean>>({})
+  const [syncAdvOpen,setSyncAdvOpen]=React.useState(false)
+  React.useEffect(()=>{
+    const rgb=adminDark?"255,255,255":"141,149,163"
+    const id="cf-admin-scrollbar-style"
+    let tag=document.getElementById(id) as HTMLStyleElement|null
+    if(!tag){tag=document.createElement("style");tag.id=id;document.head.appendChild(tag)}
+    // 트랙 배경 없이 얇은 디바이더처럼. 실제 노출 두께는 7px - 좌우 테두리 2px = 3px.
+    // 진하기는 --cf-sb-a 로 제어하고, 아래 effect에서 스크롤 시작/종료에 맞춰 페이드시킨다.
+    tag.textContent=`
+      *::-webkit-scrollbar{width:7px;height:7px}
+      *::-webkit-scrollbar-track{background:transparent}
+      *::-webkit-scrollbar-corner{background:transparent}
+      *::-webkit-scrollbar-thumb{background-color:rgba(${rgb},var(--cf-sb-a,0));border:2px solid transparent;background-clip:padding-box;border-radius:999px}
+      *{scrollbar-width:thin;scrollbar-color:rgba(${rgb},var(--cf-sb-a,0)) transparent}
+    `
+  },[adminDark])
+  const scrollbarPeakAlpha=adminDark?0.34:0.5
+  React.useEffect(()=>{
+    const FADE_IN=140, FADE_OUT=320, HOLD=700
+    const anims=new WeakMap<Element,{raf:number;timer:any;alpha:number}>()
+    const animate=(el:HTMLElement,to:number,duration:number)=>{
+      const state=anims.get(el)||{raf:0,timer:0,alpha:0}
+      anims.set(el,state)
+      cancelAnimationFrame(state.raf)
+      const from=state.alpha
+      if(from===to)return
+      const startedAt=performance.now()
+      const step=(now:number)=>{
+        const progress=Math.min(1,(now-startedAt)/duration)
+        const alpha=from+(to-from)*progress
+        state.alpha=alpha
+        el.style.setProperty("--cf-sb-a",String(Math.round(alpha*1000)/1000))
+        if(progress<1)state.raf=requestAnimationFrame(step)
+      }
+      state.raf=requestAnimationFrame(step)
+    }
+    const onScroll=(e:Event)=>{
+      const el=e.target as HTMLElement|null
+      if(!el||el.nodeType!==1||!el.style)return
+      const state=anims.get(el)||{raf:0,timer:0,alpha:0}
+      anims.set(el,state)
+      clearTimeout(state.timer)
+      animate(el,scrollbarPeakAlpha,FADE_IN)
+      state.timer=setTimeout(()=>animate(el,0,FADE_OUT),HOLD)
+    }
+    document.addEventListener("scroll",onScroll,true)
+    return ()=>document.removeEventListener("scroll",onScroll,true)
+  },[scrollbarPeakAlpha])
+  const courseTabsRef=React.useRef<HTMLDivElement|null>(null)
+  const [courseTabsArrows,setCourseTabsArrows]=React.useState({left:false,right:false})
+  const syncCourseTabsArrows=React.useCallback(()=>{
+    const el=courseTabsRef.current
+    if(!el){setCourseTabsArrows({left:false,right:false});return}
+    const max=el.scrollWidth-el.clientWidth
+    setCourseTabsArrows({left:el.scrollLeft>2,right:max>2&&el.scrollLeft<max-2})
+  },[])
+  const scrollCourseTabs=(dir:1|-1)=>{
+    const el=courseTabsRef.current
+    if(!el)return
+    el.scrollBy({left:dir*Math.max(200,Math.round(el.clientWidth*0.7)),behavior:"smooth"})
+  }
   const [dashTopTypeFilter,setDashTopTypeFilter]=React.useState<DashboardFormType|"" >("")
   const [dashTopStatusFilter,setDashTopStatusFilter]=React.useState<DashboardManualStatus|"" >("")
   const [dashQuery,setDashQuery]=React.useState("")
@@ -1965,6 +2247,22 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [dashboardSettings,setDashboardSettings]=React.useState<DashboardSettingsState|null>(null)
   const [dashboardSettingsSaving,setDashboardSettingsSaving]=React.useState(false)
   const [editPasswordPrompt,setEditPasswordPrompt]=React.useState<null|{item:any;password:string;error:string;checking:boolean}>(null)
+  const [recentEditIds,setRecentEditIds]=React.useState<string[]>([])
+  React.useEffect(()=>{
+    try{
+      const raw=window.localStorage.getItem(RECENT_EDIT_STORAGE_KEY)
+      const parsed=raw?JSON.parse(raw):[]
+      if(Array.isArray(parsed))setRecentEditIds(parsed.filter((id:any)=>typeof id==="string"))
+    }catch{}
+  },[])
+  function markFormRecentlyEdited(id:string){
+    if(!id)return
+    setRecentEditIds(prev=>{
+      const next=[id,...prev.filter(item=>item!==id)].slice(0,RECENT_EDIT_LIMIT)
+      try{window.localStorage.setItem(RECENT_EDIT_STORAGE_KEY,JSON.stringify(next))}catch{}
+      return next
+    })
+  }
   const [formTrashOpen,setFormTrashOpen]=React.useState(false)
   const [formTrashItems,setFormTrashItems]=React.useState<any[]>([])
   const [formTrashBusy,setFormTrashBusy]=React.useState("")
@@ -1990,8 +2288,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
   // ── Builder UI state ───────────────────────────────────────────────────
   const [sec,setSec]=React.useState("header")
+  // 동의 탭에 들어올 때마다 아코디언을 모두 접는다.
+  React.useEffect(()=>{if(sec==="consent")setOpenConsentIdx({})},[sec])
   const [pvTab,setPvTab]=React.useState<"form"|"link">("form")
   const [saved,setSaved]=React.useState<any[]>([])
+  React.useEffect(()=>{
+    syncCourseTabsArrows()
+    const el=courseTabsRef.current
+    if(!el)return
+    const observer=typeof ResizeObserver!=="undefined"?new ResizeObserver(()=>syncCourseTabsArrows()):null
+    observer?.observe(el)
+    window.addEventListener("resize",syncCourseTabsArrows)
+    return ()=>{observer?.disconnect();window.removeEventListener("resize",syncCourseTabsArrows)}
+  },[view,dashShowEmptyGroups,dashBrandFilter,dashProgramGroupFilter,cats.length,saved.length,syncCourseTabsArrows])
   const [editorTabs,setEditorTabs]=React.useState<EditorTab[]>([])
   const [activeEditorTabKey,setActiveEditorTabKey]=React.useState("")
   const [saving,setSaving]=React.useState(false)
@@ -2094,6 +2403,18 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [selectedFieldId,setSelectedFieldId]=React.useState<string|null>(null)
   const [editIdx,setEditIdx]=React.useState<number|null>(null)
   const [showAddField,setShowAddField]=React.useState(false)
+  const addFieldBtnRef=React.useRef<HTMLButtonElement|null>(null)
+  const [addFieldMenuTop,setAddFieldMenuTop]=React.useState(118)
+  // 메뉴를 '+ 질문 추가' 버튼 높이에 맞춰 띄우되, 화면 밖으로 넘치지 않게 위아래로 보정한다.
+  function openAddFieldMenu(){
+    const rect=addFieldBtnRef.current?.getBoundingClientRect()
+    if(rect){
+      const min=118
+      const max=Math.max(min,window.innerHeight-240)
+      setAddFieldMenuTop(Math.min(Math.max(rect.top,min),max))
+    }
+    setShowAddField(true)
+  }
   const [panelDragIdx,setPanelDragIdx]=React.useState<number|null>(null)
   const [panelDragOver,setPanelDragOver]=React.useState<number|null>(null)
   const [sectionDragIdx,setSectionDragIdx]=React.useState<number|null>(null)
@@ -2363,7 +2684,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     try{
       const [programRes,categoryRes]:any[]=await Promise.all([
         withTimeout(sb.from("programs").select("*").eq("is_archived",false).order("title"),10000,"프로그램 목록 확인 시간이 초과됐어요."),
-        withTimeout(sb.from("categories").select("id,name"),10000,"카테고리 목록 확인 시간이 초과됐어요."),
+        withTimeout(sb.from("categories").select("id,name,brand,slug").order("name"),10000,"카테고리 목록 확인 시간이 초과됐어요."),
       ])
       if(requestId!==programCatalogRequestRef.current)return
       if(programRes.error)throw programRes.error
@@ -2623,6 +2944,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     finally{setActionLoading("")}
   }
   async function openFormForEdit(item:any){
+    if(item?.id)markFormRecentlyEdited(String(item.id))
     const alreadyOpen=editorTabs.find(tab=>item?.id&&tab.id===item.id)
     if(alreadyOpen){
       applyEditorTab(alreadyOpen,{resetPanel:false})
@@ -3130,6 +3452,41 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       loadList();loadDashboard(supa)
     }catch(error){
       showToast("폼 영구 삭제 실패: "+((error as any)?.message||"오류"),false)
+    }finally{
+      setFormTrashBusy("")
+    }
+  }
+  async function purgeAllFormsFromTrash(){
+    if(!supa)return
+    const targets=formTrashItems.filter((item:any)=>item?.id)
+    if(!targets.length)return
+    if(!confirm(`휴지통의 폼 ${targets.length}개를 모두 영구 삭제할까요? 제출 응답과 QR/분석 기록까지 모두 삭제되며 복구할 수 없어요.`))return
+    setFormTrashBusy("__all__")
+    const failed:string[]=[]
+    try{
+      for(const item of targets){
+        const id=item.id
+        try{
+          const deleteFrom=async(table:string)=>{
+            const {error}=await supa.from(table).delete().eq("form_id",id)
+            if(error)throw error
+          }
+          await deleteFrom("applications")
+          await deleteFrom("company_applications")
+          await deleteFrom("form_response_events")
+          const {error}=await supa.from("form_configs").delete().eq("id",id)
+          if(error)throw error
+          delete fullFormCache.current[id]
+          setEditorTabs(prev=>prev.filter(tab=>tab.id!==id))
+          if(loadedId===id){setLoadedId("");setLoadedName("");setSavedSlug("");setActiveEditorTabKey("");setView("dashboard")}
+          setFormTrashItems(prev=>prev.filter(form=>form.id!==id))
+        }catch(error){
+          failed.push(item.name||"이름 없는 폼")
+        }
+      }
+      if(failed.length)showToast(`${targets.length-failed.length}개를 영구 삭제했고 ${failed.length}개는 실패했어요.`,false)
+      else showToast(`휴지통의 폼 ${targets.length}개를 영구 삭제했어요.`)
+      loadList();loadDashboard(supa)
     }finally{
       setFormTrashBusy("")
     }
@@ -4254,29 +4611,24 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const activeBg=A.card
     const edge=adminDark?"rgba(255,255,255,0.08)":"#D5D9DF"
     const tabBorder="transparent"
-    const inactiveDivider=adminDark?"rgba(255,255,255,0.08)":"rgba(141,149,163,0.28)"
     const homeActive=view==="dashboard"
     const iconColor=(active:boolean)=>active?A.blue:A.t3
     const tabIcon=(active:boolean)=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" style={{flexShrink:0,color:iconColor(active)}}>
-      <rect x="4.5" y="4.5" width="15" height="15" rx="4" fill={active?A.blue:"#E3E7EC"}/>
-      <path d="M9.5 9.5h5M9.5 12.8h5M9.5 16h3" stroke={active?"#fff":A.t3} strokeWidth="1.6" strokeLinecap="round"/>
+      <rect x="4.5" y="4.5" width="15" height="15" rx="4" fill={active?A.blue2:(adminDark?A.card2:"#EDEFF2")}/>
+      <path d="M9.5 9.5h5M9.5 12.8h5M9.5 16h3" stroke={active?A.blue:A.t3} strokeWidth="1.6" strokeLinecap="round"/>
     </svg>
     return <div style={{height:52,background:stripBg,display:"flex",alignItems:"center",gap:6,padding:"0 14px",boxSizing:"border-box" as const,flexShrink:0,overflow:"hidden"}}>
       <button onClick={()=>{rememberActiveEditorTab();setView("dashboard")}} title="폼 리스트"
-        style={{width:36,height:36,border:`1px solid ${homeActive?edge:"transparent"}`,borderRadius:10,background:homeActive?activeBg:"transparent",boxShadow:homeActive?"0 4px 12px -8px rgba(16,24,40,.32)":"none",color:iconColor(homeActive),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>
+        style={{width:36,height:36,border:`1px solid ${homeActive?edge:"transparent"}`,borderRadius:10,background:homeActive?activeBg:"transparent",boxShadow:homeActive?"0 1px 3px rgba(16,24,40,.10)":"none",color:iconColor(homeActive),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3.5 10.5 12 4l8.5 6.5V19a1.2 1.2 0 0 1-1.2 1.2h-4.4v-5.6H9.1v5.6H4.7A1.2 1.2 0 0 1 3.5 19v-8.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round"/></svg>
       </button>
-      <div style={{display:"flex",alignItems:"center",gap:0,overflowX:"auto" as const,overflowY:"hidden" as const,scrollbarWidth:"none" as any,flex:1,minWidth:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,overflowX:"auto" as const,overflowY:"hidden" as const,scrollbarWidth:"none" as any,flex:1,minWidth:0}}>
         {editorTabs.map((tab,index)=>{
           const active=view==="builder"&&tab.key===activeEditorTabKey
-          const prevTab=editorTabs[index-1]
-          const prevActive=!!prevTab&&view==="builder"&&prevTab.key===activeEditorTabKey
-          const showInactiveDivider=index>0&&!active&&!prevActive
           const label=editorTabLabel(tab)
           return <div key={tab.key} role="button" tabIndex={0} onClick={()=>activateEditorTab(tab.key)} onKeyDown={e=>{if(e.key==="Enter"||e.key===" ")activateEditorTab(tab.key)}}
             title={label}
-            style={{height:36,width:186,maxWidth:186,minWidth:144,padding:"0 7px 0 11px",border:`1px solid ${tabBorder}`,borderRadius:12,background:active?activeBg:"transparent",boxShadow:active?"0 6px 18px -12px rgba(16,24,40,.38)":"none",color:active?A.t1:A.t2,fontFamily:FONT,fontSize:13,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,flexShrink:0,position:"relative" as const,outline:"none",transition:"background .12s,box-shadow .12s"}}>
-            {showInactiveDivider&&<span aria-hidden="true" style={{position:"absolute" as const,left:0,top:9,bottom:9,width:1,background:inactiveDivider,borderRadius:999}}/>}
+            style={{height:36,maxWidth:250,padding:"0 8px 0 10px",border:`1px solid ${tabBorder}`,borderRadius:12,background:active?activeBg:"transparent",boxShadow:active?"0 1px 3px rgba(16,24,40,.10)":"none",color:active?A.t1:A.t2,fontFamily:FONT,fontSize:13,fontWeight:active?600:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,flexShrink:0,position:"relative" as const,outline:"none",transition:"background .12s,box-shadow .12s"}}>
             {tabIcon(active)}
             <span style={{minWidth:0,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
               {label}
@@ -4369,7 +4721,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <button onClick={doLogout} style={{height:24,padding:"0 8px",borderRadius:6,border:"none",background:A.card,color:A.t3,cursor:"pointer",fontFamily:FONT,fontSize:11.5,fontWeight:600}}>로그아웃</button>
           </div>
           <button onClick={()=>setShowBrandModal(true)}
-            style={{height:34,padding:"0 14px",borderRadius:8,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+            style={{height:34,padding:"0 14px",borderRadius:8,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,boxShadow:"0 1px 2px rgba(49,130,246,.35)",cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
             새 폼 만들기
           </button>
@@ -4387,37 +4739,43 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             return"draft"
           }
           const statusInfo=(status:DashboardManualStatus)=>{
-            if(status==="active")return{label:"진행중",color:A.green,bg:"rgba(23,201,100,0.10)"}
-            if(status==="closed")return{label:"종료",color:A.t2,bg:A.card2}
-            return{label:"작성중",color:"#8B5CF6",bg:"rgba(139,92,246,0.10)"}
+            if(status==="active")return{label:"진행중",color:adminDark?A.green:"#0F8A47",bg:adminDark?"rgba(34,197,94,0.14)":"#E7F6EE"}
+            if(status==="closed")return{label:"종료",color:adminDark?A.t2:"#6B7280",bg:A.card2}
+            return{label:"작성중",color:adminDark?"#A78BFA":"#6D4AEA",bg:adminDark?"rgba(139,92,246,0.16)":"#F0EDFE"}
           }
           const typeLabel=(type:DashboardFormType)=>DASHBOARD_FORM_TYPES.find(x=>x.value===type)?.label||"기타"
           const brandOf=(item:any)=>canonicalBrand(item.config?.brand||item.brand||"")
-          const categoryNameOf=(prog?:Prog)=>{
-            if(prog?.category===SF_ETC_CAT_ID)return"ETC"
-            const name=cats.find(c=>c.id===prog?.category)?.name||"기타"
-            if(name==="새싹(SeSAC)")return"새싹"
-            if(name==="중소기업 인재키움")return"인재키움"
-            return name
-          }
+          const categoryNameOf=(prog?:Prog)=>cats.find(c=>c.id===prog?.category)?.name||"기타"
           const sidebarItems=saved.filter((item:any)=>!dashBrandFilter||brandOf(item)===dashBrandFilter)
-          const recentItems=[...saved].sort((a:any,b:any)=>new Date(b.updated_at||b.created_at||0).getTime()-new Date(a.updated_at||a.created_at||0).getTime()).slice(0,5)
           const sidebarProgramIds=new Set(sidebarItems.map((item:any)=>item.config?.header?.programId).filter(Boolean))
           const sidebarPrograms=progs.filter(program=>sidebarProgramIds.has(program.id))
-          const sfProgramGroups=["새싹","KDT","인재키움","인턴형","ETC"]
-          const ioProgramGroups=["인턴형","프로젝트형"]
-          const defaultProgramGroups=dashBrandFilter==="SNIPERFACTORY"
-            ?sfProgramGroups
-            :dashBrandFilter==="INSIDEOUT"
-              ?ioProgramGroups
-              :dashBrandFilter==="SFACSPACE"
-                ?[]
-                :[...sfProgramGroups,...ioProgramGroups.filter(group=>!sfProgramGroups.includes(group))]
-          const visibleProgramGroups=sidebarPrograms.reduce((acc:string[],program)=>{
+          // 교육과정 탭은 Supabase `categories` 테이블을 그대로 따라간다.
+          // 행이 추가되면 코드 수정 없이 해당 브랜드 탭에 바로 나타난다.
+          const defaultProgramGroups=cats.reduce((acc:string[],cat)=>{
+            const name=String(cat.name||"").trim()
+            if(!name)return acc
+            if(dashBrandFilter&&canonicalBrand(cat.brand||"")!==dashBrandFilter)return acc
+            if(!acc.includes(name))acc.push(name)
+            return acc
+          },[])
+          const groupCount=(group:string)=>sidebarItems.filter((item:any)=>categoryNameOf(programOf(item))===group).length
+          // 테이블에 없는 카테고리를 쓰는 폼이 있으면 그 탭도 잃지 않도록 뒤에 덧붙인다.
+          const allProgramGroups=sidebarPrograms.reduce((acc:string[],program)=>{
             const key=categoryNameOf(program)
-            if(dashBrandFilter!=="SFACSPACE"&&!acc.includes(key))acc.push(key)
+            if(!acc.includes(key))acc.push(key)
             return acc
           },[...defaultProgramGroups])
+          // 최근 작업(브랜드 미선택)에서는 카테고리가 모두 모여 길어지므로 폼이 있는 것을 앞으로 보낸다.
+          // 브랜드를 고르면 테이블 순서를 그대로 쓴다. (sort는 안정 정렬이라 같은 그룹 안에서는 이름순 유지)
+          const visibleProgramGroups=dashBrandFilter
+            ?allProgramGroups
+            :[...allProgramGroups].sort((a,b)=>(groupCount(a)?0:1)-(groupCount(b)?0:1))
+          // 폼이 하나도 없는 카테고리는 기본으로 접어 탭바가 가로로 길어지지 않게 한다.
+          // 현재 선택된 탭은 0개여도 계속 보여준다.
+          const collapsedProgramGroups=visibleProgramGroups.filter(group=>groupCount(group)===0&&group!==dashProgramGroupFilter)
+          const shownProgramGroups=dashShowEmptyGroups
+            ?visibleProgramGroups
+            :visibleProgramGroups.filter(group=>!collapsedProgramGroups.includes(group))
           const programGroups=sidebarPrograms.reduce((acc:Record<string,Prog[]>,program)=>{
             const key=categoryNameOf(program)
             ;(acc[key]||(acc[key]=[])).push(program)
@@ -4437,14 +4795,24 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               &&(!dashTopStatusFilter||status===dashTopStatusFilter)
               &&(!query||`${item.name||""} ${item.config?.header?.title||""} ${program?.title||""}`.toLowerCase().includes(query))
           })
+          if(!dashBrandFilter){
+            const recentRank=(item:any)=>{
+              const idx=recentEditIds.indexOf(String(item?.id||""))
+              return idx<0?Number.MAX_SAFE_INTEGER:idx
+            }
+            filtered.sort((a:any,b:any)=>{
+              const ra=recentRank(a),rb=recentRank(b)
+              if(ra!==rb)return ra-rb
+              return new Date(b.updated_at||b.created_at||0).getTime()-new Date(a.updated_at||a.created_at||0).getTime()
+            })
+          }
           const maxResponseCount=Math.max(1,...filtered.map((item:any)=>dashResponseCounts[item.id]||0))
           const brandCounts=BRANDS.map(brand=>({
             ...brand,
             count:saved.filter((item:any)=>brandOf(item)===brand.id).length,
           }))
-          const groupCount=(group:string)=>sidebarItems.filter((item:any)=>categoryNameOf(programOf(item))===group).length
           const tableColumns="minmax(240px,1.4fr) minmax(150px,0.9fr) 84px 82px 78px 92px 128px"
-          const sideButton=(active:boolean):React.CSSProperties=>({width:"100%",height:32,padding:"0 8px",borderRadius:A.r,border:"none",background:active?A.blue2:"transparent",color:active?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:active?700:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left" as const})
+          const sideButton=(active:boolean):React.CSSProperties=>({width:"100%",height:32,padding:"0 8px",borderRadius:A.r,border:"none",background:active?A.blue2:"transparent",color:active?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:active?600:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left" as const})
           const sidebarToolButton=(color:string=A.t2):React.CSSProperties=>({width:"100%",height:32,padding:"0 8px",borderRadius:A.r,border:"none",background:"transparent",color,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left" as const})
           const openGuide=()=>{
             setShowGuide(true)
@@ -4457,32 +4825,22 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <aside style={{width:208,flexShrink:0,background:A.bg,display:"flex",flexDirection:"column" as const,minHeight:0}}>
               <div style={{flex:1,minHeight:0,overflowY:"auto" as const,padding:"16px 12px",display:"flex",flexDirection:"column" as const,gap:26}}>
                 <div>
-                  <div style={{padding:"0 8px 9px",fontSize:11,fontWeight:700,letterSpacing:".4px",color:A.t3}}>최근 작업</div>
-                  {recentItems.length===0
-                    ? <div style={{padding:"12px 10px",fontSize:12,color:A.t3,lineHeight:1.5}}>최근에 수정한 폼이 없어요.</div>
-                    : recentItems.map((item:any)=>{
-                      const brand=BRANDS.find(b=>b.id===brandOf(item))
-                      return <button key={item.id} onPointerDown={()=>prefetchFullFormRow(item,true)} onFocus={()=>prefetchFullFormRow(item,true)} onClick={()=>requestOpenFormForEdit(item)}
-                        style={{width:"100%",minHeight:32,padding:"7px 8px",borderRadius:A.r,border:"none",background:"transparent",cursor:"pointer",fontFamily:FONT,display:"flex",alignItems:"center",gap:8,textAlign:"left" as const,color:A.t2}}
-                        onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=A.card2}
-                        onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
-                        <span style={{width:7,height:7,borderRadius:"50%",background:brand?.color||A.blue,flexShrink:0}}/>
-                        <span style={{minWidth:0,flex:1,fontSize:12.5,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name||"이름 없는 폼"}</span>
-                      </button>
-                    })}
+                  <button onClick={()=>{setDashBrandFilter("");setDashProgramGroupFilter("");setDashProgramFilter("")}} style={{...sideButton(!dashBrandFilter),justifyContent:"space-between"}}>
+                    <span style={{display:"flex",alignItems:"center",gap:8}}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{flexShrink:0}}><circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.7"/><path d="M12 7.5V12l3 1.8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      최근 작업
+                    </span>
+                    <span style={{fontSize:11.5,fontWeight:500,color:A.t3}}>{saved.length}</span>
+                  </button>
                 </div>
                 <div>
                   <div style={{padding:"0 8px 7px",fontSize:11,fontWeight:700,letterSpacing:".4px",color:A.t3}}>브랜드</div>
-                  <button onClick={()=>{setDashBrandFilter("");setDashProgramGroupFilter("");setDashProgramFilter("")}} style={{...sideButton(!dashBrandFilter),justifyContent:"space-between"}}>
-                    <span style={{display:"flex",alignItems:"center",gap:8}}><span style={{width:7,height:7,borderRadius:"50%",background:A.t3}}/>전체 브랜드</span>
-                    <span style={{fontSize:11.5,color:!dashBrandFilter?A.blue:A.t3}}>{saved.length}</span>
-                  </button>
                   {brandCounts.map(brand=><button key={brand.id} onClick={()=>{setDashBrandFilter(brand.id);setDashProgramGroupFilter("");setDashProgramFilter("")}} style={{...sideButton(dashBrandFilter===brand.id),justifyContent:"space-between"}}>
                     <span style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
-                      <span style={{width:7,height:7,borderRadius:"50%",background:brand.color,flexShrink:0}}/>
+                      <span style={{width:6,height:6,borderRadius:3,background:brand.color,flexShrink:0}}/>
                       <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{brand.label}</span>
                     </span>
-                    <span style={{fontSize:11.5,color:dashBrandFilter===brand.id?A.blue:A.t3}}>{brand.count}</span>
+                    <span style={{fontSize:11.5,fontWeight:500,color:A.t3}}>{brand.count}</span>
                   </button>)}
                 </div>
               </div>
@@ -4504,28 +4862,48 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               </div>
             </aside>
             <main style={{flex:1,minWidth:0,overflow:"hidden",padding:0,display:"flex",flexDirection:"column" as const,background:A.card}}>
-              <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:22,padding:"0 24px",overflowX:"auto" as const,boxShadow:`inset 0 -1px 0 ${A.border}`}}>
+              <div style={{position:"relative" as const,flexShrink:0,boxShadow:`inset 0 -1px 0 ${A.border}`}}>
+              <style>{`.cf-course-tabs{scrollbar-width:none;-ms-overflow-style:none}.cf-course-tabs::-webkit-scrollbar{display:none;width:0;height:0}`}</style>
+              <div ref={courseTabsRef} onScroll={syncCourseTabsArrows} className="cf-course-tabs" style={{display:"flex",alignItems:"center",gap:22,padding:"0 24px",overflowX:"auto" as const}}>
                 <button onClick={()=>{setDashProgramGroupFilter("");setDashProgramFilter("")}}
-                  style={{height:44,padding:"0 2px",border:"none",borderRadius:0,background:"transparent",color:!dashProgramGroupFilter?A.t1:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const,display:"flex",alignItems:"center",gap:6,boxShadow:!dashProgramGroupFilter?`inset 0 -2px 0 ${A.blue}`:"none"}}>
+                  style={{height:44,padding:"0 2px",border:"none",borderRadius:0,background:"transparent",color:!dashProgramGroupFilter?A.t1:A.t3,fontFamily:FONT,fontSize:13.5,fontWeight:!dashProgramGroupFilter?700:500,cursor:"pointer",whiteSpace:"nowrap" as const,display:"flex",alignItems:"center",gap:7,boxShadow:!dashProgramGroupFilter?`inset 0 -2px 0 ${A.blue}`:"none"}}>
                   <span>전체 교육과정</span>
-                  <span style={{fontSize:11.5,color:!dashProgramGroupFilter?A.blue:A.t3}}>{sidebarItems.length}</span>
+                  <span style={{padding:"1px 6px",borderRadius:5,fontSize:11.5,fontWeight:600,background:!dashProgramGroupFilter?A.blue2:A.card2,color:!dashProgramGroupFilter?A.blue:A.t3}}>{sidebarItems.length}</span>
                 </button>
-                {visibleProgramGroups.map(group=>{
+                {shownProgramGroups.map(group=>{
                   const active=dashProgramGroupFilter===group
                   return <button key={group} onClick={()=>{setDashProgramGroupFilter(group);setDashProgramFilter("")}}
-                    style={{height:44,padding:"0 2px",border:"none",borderRadius:0,background:"transparent",color:active?A.t1:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const,display:"flex",alignItems:"center",gap:6,boxShadow:active?`inset 0 -2px 0 ${A.blue}`:"none",opacity:groupCount(group)===0?0.55:1}}>
+                    style={{height:44,padding:"0 2px",border:"none",borderRadius:0,background:"transparent",color:active?A.t1:A.t3,fontFamily:FONT,fontSize:13.5,fontWeight:active?700:500,cursor:"pointer",whiteSpace:"nowrap" as const,display:"flex",alignItems:"center",gap:7,boxShadow:active?`inset 0 -2px 0 ${A.blue}`:"none",opacity:groupCount(group)===0?0.55:1}}>
                     <span>{group}</span>
-                    <span style={{fontSize:11.5,color:active?A.blue:A.t3}}>{groupCount(group)}</span>
+                    <span style={{padding:"1px 6px",borderRadius:5,fontSize:11.5,fontWeight:600,background:active?A.blue2:A.card2,color:active?A.blue:A.t3}}>{groupCount(group)}</span>
                   </button>
                 })}
+                {collapsedProgramGroups.length>0&&<button onClick={()=>setDashShowEmptyGroups(v=>!v)}
+                  title={dashShowEmptyGroups?"폼이 없는 교육과정 접기":`폼이 없는 교육과정 ${collapsedProgramGroups.length}개 펼치기`}
+                  style={{height:26,padding:"0 8px",border:"none",borderRadius:6,background:A.card2,color:A.t3,fontFamily:FONT,fontSize:11.5,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap" as const,display:"flex",alignItems:"center",gap:4,flexShrink:0,marginLeft:-12}}>
+                  {dashShowEmptyGroups?"접기":`+${collapsedProgramGroups.length}`}
+                  <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{transform:dashShowEmptyGroups?"rotate(180deg)":"none",transition:"transform .15s"}}>
+                    <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>}
+              </div>
+              {(["left","right"] as const).map(side=>{
+                const on=side==="left"?courseTabsArrows.left:courseTabsArrows.right
+                if(!on)return null
+                return <div key={side} style={{position:"absolute" as const,top:0,bottom:1,[side]:0,width:56,display:"flex",alignItems:"center",justifyContent:side==="left"?"flex-start":"flex-end",padding:side==="left"?"0 0 0 6px":"0 6px 0 0",pointerEvents:"none" as const,background:`linear-gradient(to ${side==="left"?"right":"left"}, ${A.card} 42%, ${A.card}00 100%)`}}>
+                  <button onClick={()=>scrollCourseTabs(side==="left"?-1:1)} aria-label={side==="left"?"이전 교육과정 보기":"다음 교육과정 보기"}
+                    style={{pointerEvents:"auto" as const,width:26,height:26,borderRadius:8,border:`1px solid ${A.border}`,background:A.card,color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,boxShadow:"0 1px 3px rgba(16,24,40,.10)"}}>
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{transform:side==="left"?"rotate(90deg)":"rotate(-90deg)"}}>
+                      <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                </div>
+              })}
               </div>
               {dashProgramGroupFilter&&<div style={{flexShrink:0,display:"flex",alignItems:"center",gap:8,padding:"14px 24px 0"}}>
                 <div style={{position:"relative" as const,flexShrink:0}}>
-                  <select value={dashProgramFilter} onChange={e=>setDashProgramFilter(e.target.value)} style={{height:32,minWidth:232,maxWidth:320,padding:"0 34px 0 11px",appearance:"none" as any,WebkitAppearance:"none" as any,borderRadius:A.r,border:"none",background:A.card2,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,outline:"none"}}>
-                    <option value="">{dashProgramGroupFilter} 전체 과정</option>
-                    {[...selectedGroupPrograms].sort((a,b)=>a.title.localeCompare(b.title,"ko")).map(program=><option key={program.id} value={program.id}>{program.title}</option>)}
-                  </select>
-                  <SelectChevron color={A.t2}/>
+                  <PanelSelect value={dashProgramFilter} onChange={setDashProgramFilter} A={A} height={32} fontSize={12.5} fontWeight={600} radius={8} padX={11} width={232} maxWidth={320}
+                    options={[{value:"",label:`${dashProgramGroupFilter} 전체 과정`},...[...selectedGroupPrograms].sort((a,b)=>a.title.localeCompare(b.title,"ko")).map(program=>({value:program.id,label:program.title}))]}/>
                 </div>
                 <button onClick={()=>{setDashProgramGroupFilter("");setDashProgramFilter("")}}
                   style={{height:32,padding:"0 10px",borderRadius:A.r,border:"none",background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
@@ -4537,17 +4915,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 <div>
                   <div style={{display:"flex",alignItems:"baseline",gap:7}}>
                     <span style={{fontSize:17,fontWeight:700,letterSpacing:"-.2px",color:A.t1}}>{dashBrandFilter?brandDisplayName(dashBrandFilter):"전체"} 폼</span>
-                    <span style={{fontSize:13,fontWeight:600,color:A.t3}}>{filtered.length}개</span>
+                    <span style={{fontSize:13,fontWeight:600,color:A.t3}}>{filtered.length}</span>
                   </div>
-                  <div style={{fontSize:12,color:A.t3,marginTop:3}}>폼 이름, 교육과정, 상태를 한 번에 관리합니다.</div>
+                  <div style={{fontSize:12,color:A.t3,marginTop:3}}>필요한 폼을 빠르게 찾고 응답 현황을 확인할 수 있어요.</div>
                 </div>
                 <div style={{flex:1}}/>
                 <div style={{position:"relative" as const,flexShrink:0}}>
-                  <select value={dashTopTypeFilter} onChange={e=>setDashTopTypeFilter(e.target.value as DashboardFormType|"")} style={{height:34,minWidth:140,padding:"0 34px 0 12px",appearance:"none" as any,WebkitAppearance:"none" as any,borderRadius:A.r,border:"none",background:A.card2,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,outline:"none"}}>
-                    <option value="">폼 유형 전체</option>
-                    {DASHBOARD_FORM_TYPES.map(type=><option key={type.value} value={type.value}>{type.label}</option>)}
-                  </select>
-                  <SelectChevron color={A.t2}/>
+                  <PanelSelect value={dashTopTypeFilter} onChange={v=>setDashTopTypeFilter(v as DashboardFormType|"")} A={A} height={34} fontSize={12.5} fontWeight={600} radius={8} padX={12} width={150}
+                    options={[{value:"",label:"폼 유형 전체"},...DASHBOARD_FORM_TYPES.map(t=>({value:t.value,label:t.label}))]}/>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:2,padding:3,borderRadius:9,background:A.card2,flexShrink:0}}>
                   {[
@@ -4558,14 +4933,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   ].map(status=>{
                     const active=dashTopStatusFilter===status.value
                     return <button key={status.value||"all"} onClick={()=>setDashTopStatusFilter(status.value as DashboardManualStatus|"")}
-                      style={{height:28,padding:"0 10px",border:"none",borderRadius:7,background:active?A.card:"transparent",color:active?A.t1:A.t3,fontFamily:FONT,fontSize:12,fontWeight:active?700:600,cursor:"pointer",boxShadow:active?"0 1px 2px rgba(16,24,40,.08)":"none",whiteSpace:"nowrap" as const}}>
+                      style={{height:28,padding:"0 11px",border:"none",borderRadius:7,background:active?A.card:"transparent",color:active?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:active?600:500,cursor:"pointer",boxShadow:active?"0 1px 2px rgba(16,24,40,.10)":"none",whiteSpace:"nowrap" as const}}>
                       {status.label}
                     </button>
                   })}
                 </div>
-                <div style={{width:240,height:34,display:"flex",alignItems:"center",gap:7,padding:"0 11px",borderRadius:A.r,border:"none",background:A.card2,flexShrink:0}}>
+                <div style={{flex:"0 1 250px",minWidth:150,height:34,display:"flex",alignItems:"center",gap:7,padding:"0 11px",borderRadius:A.r,border:"none",background:A.card2,flexShrink:0,transition:"box-shadow .12s, background .12s"}}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{color:A.t3,flexShrink:0}}><circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8"/><path d="m20 20-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-                  <input value={dashQuery} onChange={e=>setDashQuery(e.target.value)} placeholder="폼 이름 · 교육과정 검색" style={{width:"100%",border:"none",outline:"none",background:"transparent",color:A.t1,fontFamily:FONT,fontSize:12.5}}/>
+                  <input value={dashQuery} onChange={e=>setDashQuery(e.target.value)} placeholder="폼 이름 · 교육과정 검색"
+                    onFocus={e=>{const w=e.currentTarget.parentElement as HTMLElement|null;if(w){w.style.background=A.card;w.style.boxShadow=`0 0 0 2px ${A.blue}40`}}}
+                    onBlur={e=>{const w=e.currentTarget.parentElement as HTMLElement|null;if(w){w.style.background=A.card2;w.style.boxShadow="none"}}}
+                    style={{width:"100%",border:"none",outline:"none",background:"transparent",color:A.t1,fontFamily:FONT,fontSize:12.5}}/>
                 </div>
               </div>
               <div style={{flex:1,minHeight:0,background:A.card,overflow:"hidden"}}>
@@ -4587,21 +4965,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     const responseCount=dashResponseCounts[item.id]||0
                     const responsePct=responseCount?Math.max(8,Math.round((responseCount/maxResponseCount)*100)):0
                     return <div key={item.id} onMouseEnter={e=>{prefetchFullFormRow(item);(e.currentTarget as HTMLElement).style.background=adminDark?A.card2:"#F7F9FC"}} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background=A.card} onContextMenu={e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,item,source:"dashboard"})}}
-                      style={{display:"grid",gridTemplateColumns:tableColumns,alignItems:"center",gap:12,minHeight:48,padding:"0 24px",boxShadow:`inset 0 -1px 0 ${A.border}`,fontSize:12.5,color:A.t2,transition:"background .12s"}}>
+                      style={{display:"grid",gridTemplateColumns:tableColumns,alignItems:"center",gap:12,minHeight:48,padding:"0 24px",fontSize:12.5,color:A.t2,transition:"background .12s"}}>
                       <div style={{minWidth:0,paddingRight:12}}>
                         <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
                           <span style={{fontSize:13,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name||"이름 없는 폼"}</span>
                           {locked&&<span title="편집 비밀번호 설정됨" style={{color:A.t3,display:"inline-flex",alignItems:"center",flexShrink:0}}><LockIcon/></span>}
                         </div>
                       </div>
-                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{program?.title||"교육과정 없음"}</span>
+                      <span style={{color:program?.title?A.t2:A.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{program?.title||"교육과정 없음"}</span>
                       <span style={{color:A.t2}}>{typeLabel(type)}</span>
-                      <span><span style={{height:24,display:"inline-flex",alignItems:"center",gap:6,padding:"0 8px",borderRadius:999,background:status.bg,color:status.color,fontSize:11.5,fontWeight:700}}>
-                        <span style={{width:6,height:6,borderRadius:"50%",background:status.color,flexShrink:0}}/>
+                      <span><span style={{display:"inline-flex",alignItems:"center",padding:"3px 8px",borderRadius:6,background:status.bg,color:status.color,fontSize:11.5,fontWeight:600}}>
                         {status.label}
                       </span></span>
                       <div style={{display:"flex",flexDirection:"column" as const,alignItems:"flex-start",gap:4,minWidth:0}}>
-                        <span style={{fontWeight:700,color:A.t1,fontVariantNumeric:"tabular-nums" as const}}>{responseCount}</span>
+                        <span style={{fontSize:13,fontWeight:responseCount?700:500,color:responseCount?A.t1:A.t4,fontVariantNumeric:"tabular-nums" as const}}>{responseCount}</span>
                         <span style={{width:48,height:3,borderRadius:2,background:adminDark?A.card2:"#EFF1F4",overflow:"hidden",display:"block"}}>
                           <span style={{display:"block",width:`${responsePct}%`,height:"100%",borderRadius:999,background:A.blue}}/>
                         </span>
@@ -4623,7 +5000,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 </div>
               </div>
               <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:8,padding:"11px 24px",background:adminDark?A.card2:"#FAFBFC",fontSize:11.5,color:A.t3}}>
-                <span>{filtered.length}개 폼 표시 중</span>
+                <span>{(()=>{const c=(st:DashboardManualStatus)=>filtered.filter((item:any)=>statusOf(item)===st).length
+                  return `총 ${filtered.length}개 · 진행중 ${c("active")} · 작성중 ${c("draft")} · 종료 ${c("closed")}`})()}</span>
                 <div style={{flex:1}}/>
                 <span>우클릭으로 폼 복사 · 이름 변경 · 휴지통 이동</span>
               </div>
@@ -4642,13 +5020,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>폼 제목</div>
               <input value={dashboardSettings.formName} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formName:e.target.value}))} placeholder="폼 제목" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16,boxSizing:"border-box" as const}}/>
               <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>브랜드</div>
-              <select value={dashboardSettings.brand} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,brand:e.target.value as BrandId}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
-                <option value="SNIPERFACTORY">스나이퍼팩토리</option><option value="INSIDEOUT">인사이드아웃</option><option value="SFACSPACE">스팩스페이스</option>
-              </select>
+              <div style={{marginBottom:16}}><PanelSelect value={dashboardSettings.brand} onChange={v=>setDashboardSettings(prev=>prev&&({...prev,brand:v as BrandId}))} A={A} height={38} options={[{value:"SNIPERFACTORY",label:"스나이퍼팩토리"},{value:"INSIDEOUT",label:"인사이드아웃"},{value:"SFACSPACE",label:"스팩스페이스"}]}/></div>
               <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>폼 유형</div>
-              <select value={dashboardSettings.formTypeTag} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formTypeTag:e.target.value as DashboardFormType}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
-                {DASHBOARD_FORM_TYPES.map(type=><option key={type.value} value={type.value}>{type.label}</option>)}
-              </select>
+              <div style={{marginBottom:16}}><PanelSelect value={dashboardSettings.formTypeTag} onChange={v=>setDashboardSettings(prev=>prev&&({...prev,formTypeTag:v as DashboardFormType}))} A={A} height={38} options={DASHBOARD_FORM_TYPES.map(t=>({value:t.value,label:t.label}))}/></div>
               <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>편집 비밀번호</div>
               {!!dashboardSettings.item.config?.dashboard?.editPasswordHash&&!canMasterReset(authRole)&&<input type="password" value={dashboardSettings.currentEditPasswordDraft} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,currentEditPasswordDraft:e.target.value}))} placeholder="변경 또는 해제 시 현재 비밀번호" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:8,boxSizing:"border-box" as const}}/>}
               <input type="password" value={dashboardSettings.editPasswordDraft} disabled={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,editPasswordDraft:e.target.value}))} placeholder={dashboardSettings.item.config?.dashboard?.editPasswordHash?"새 비밀번호 입력 시 변경":"비밀번호 입력 시 편집 보호"} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,opacity:dashboardSettings.clearEditPassword?.55:1}}/>
@@ -4696,37 +5070,66 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
         )}
         {formTrashOpen&&(
-          <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}} onClick={()=>!formTrashBusy&&setFormTrashOpen(false)}>
-            <div style={{width:560,maxWidth:"92vw",maxHeight:"78vh",background:A.card,border:`1px solid ${A.border}`,borderRadius:16,boxShadow:A.shadow,display:"flex",flexDirection:"column" as const,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
-              <div style={{height:58,padding:"0 18px",borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
-                <div style={{width:34,height:34,borderRadius:A.r,background:"rgba(232,92,92,0.10)",color:A.red,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  <svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v8M8 6v8M11 6v8M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                </div>
+          <div style={{position:"absolute" as const,inset:0,background:"rgba(21,24,29,.42)",display:"flex",alignItems:"center",justifyContent:"center",padding:40,zIndex:1000}} onClick={()=>!formTrashBusy&&setFormTrashOpen(false)}>
+            <div style={{width:"100%",maxWidth:560,maxHeight:"100%",background:A.card,border:adminDark?`1px solid ${A.border}`:"none",borderRadius:16,boxShadow:"0 24px 64px -12px rgba(16,24,40,.45)",display:"flex",flexDirection:"column" as const,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+              <div style={{flexShrink:0,display:"flex",alignItems:"flex-start",gap:12,padding:"22px 22px 16px"}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px"}}>폼 휴지통</div>
-                  <div style={{fontSize:12,color:A.t3,marginTop:2}}>삭제한 폼을 다시 복구할 수 있어요.</div>
+                  <div style={{fontSize:12.5,color:A.t3,marginTop:4}}>영구 삭제하기 전까지 보관되며 언제든 복구할 수 있어요.</div>
                 </div>
-                <button onClick={()=>setFormTrashOpen(false)} disabled={!!formTrashBusy} style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,cursor:formTrashBusy?"not-allowed":"pointer",fontSize:18,lineHeight:1}}>×</button>
+                <button onClick={()=>setFormTrashOpen(false)} disabled={!!formTrashBusy}
+                  style={{width:32,height:32,flexShrink:0,border:"none",borderRadius:A.r,background:"transparent",color:A.t3,cursor:formTrashBusy?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
+                  onMouseEnter={e=>{if(!formTrashBusy){(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.color=A.t2}}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}>
+                  <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                </button>
               </div>
-              <div style={{padding:14,overflowY:"auto" as const}}>
+              <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:8,padding:"0 22px 12px"}}>
+                <span style={{fontSize:12,fontWeight:600,color:A.t3}}>{formTrashItems.length}개 항목</span>
+                <div style={{flex:1}}/>
+                {formTrashItems.length>0&&<button onClick={purgeAllFormsFromTrash} disabled={!!formTrashBusy}
+                  style={{height:30,padding:"0 11px",border:"none",borderRadius:A.r,background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:formTrashBusy?"not-allowed":"pointer"}}
+                  onMouseEnter={e=>{if(!formTrashBusy){(e.currentTarget as HTMLElement).style.background=adminDark?"rgba(240,107,107,0.14)":"#FDECEC";(e.currentTarget as HTMLElement).style.color=A.red}}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}>
+                  {formTrashBusy==="__all__"?"비우는 중...":"휴지통 비우기"}
+                </button>}
+              </div>
+              <div style={{flex:1,minHeight:0,overflowY:"auto" as const,padding:"0 22px 8px"}}>
                 {formTrashItems.length===0
                   ? <div style={{padding:"44px 12px",textAlign:"center" as const,color:A.t3,fontSize:13}}>폼 휴지통이 비어 있어요.</div>
                   : formTrashItems.map((item:any)=>{
                     const trashedAt=formTrashedAtOf(item)
-                    const busy=formTrashBusy===item.id
-                    return <div key={item.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,marginBottom:8}}>
+                    const busy=formTrashBusy===item.id||formTrashBusy==="__all__"
+                    const brand=BRANDS.find(b=>b.id===canonicalBrand(item.config?.brand||item.brand||""))
+                    return <div key={item.id}
+                      style={{display:"flex",alignItems:"center",gap:12,padding:"13px 4px",boxShadow:`inset 0 -1px 0 ${A.card2}`}}
+                      onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=adminDark?A.card2:"#FAFBFC"}
+                      onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name||"이름 없는 폼"}</div>
-                        <div style={{fontSize:11.5,color:A.t3,marginTop:4,display:"flex",gap:8,flexWrap:"wrap" as const}}>
-                          <span>{brandDisplayName(item.config?.brand||item.brand||"")}</span>
-                          {trashedAt&&<span>{new Date(trashedAt).toLocaleString("ko-KR")}</span>}
+                        <div style={{fontSize:13.5,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name||"이름 없는 폼"}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:7,marginTop:4}}>
+                          <span style={{width:5,height:5,borderRadius:3,flexShrink:0,background:brand?.color||A.t4}}/>
+                          <span style={{fontSize:11.5,color:A.t3}}>{brandDisplayName(item.config?.brand||item.brand||"")}</span>
+                          {trashedAt&&<><span style={{fontSize:11.5,color:A.t4}}>·</span>
+                          <span style={{fontSize:11.5,color:A.t3}}>{new Date(trashedAt).toLocaleString("ko-KR")}</span></>}
                         </div>
                       </div>
-                      <button onClick={()=>restoreFormFromTrash(item)} disabled={busy} style={{height:34,padding:"0 12px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:busy?"wait":"pointer",flexShrink:0}}>{busy?"처리 중...":"복구"}</button>
-                      <button onClick={()=>purgeFormFromTrash(item)} disabled={busy} style={{height:34,padding:"0 12px",borderRadius:A.r,border:`1px solid ${A.red}44`,background:A.card,color:A.red,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:busy?"wait":"pointer",flexShrink:0}}>영구 삭제</button>
+                      <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                        <button onClick={()=>restoreFormFromTrash(item)} disabled={busy}
+                          style={{height:30,padding:"0 12px",border:"none",borderRadius:A.r,background:A.blue2,color:A.blue,fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:busy?"wait":"pointer"}}>
+                          {formTrashBusy===item.id?"처리 중...":"복구"}
+                        </button>
+                        <button onClick={()=>purgeFormFromTrash(item)} disabled={busy}
+                          style={{height:30,padding:"0 12px",border:"none",borderRadius:A.r,background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:busy?"wait":"pointer"}}
+                          onMouseEnter={e=>{if(!busy){(e.currentTarget as HTMLElement).style.background=adminDark?"rgba(240,107,107,0.14)":"#FDECEC";(e.currentTarget as HTMLElement).style.color=A.red}}}
+                          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}>
+                          영구 삭제
+                        </button>
+                      </div>
                     </div>
                   })}
               </div>
+              <div style={{flexShrink:0,padding:"12px 22px",background:adminDark?A.card2:"#FAFBFC",fontSize:11.5,color:A.t3}}>영구 삭제한 폼은 응답과 QR · 분석 기록까지 함께 삭제되며 복구할 수 없어요.</div>
             </div>
           </div>
         )}
@@ -5053,7 +5456,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   // ── Nav items ─────────────────────────────────────────────────────────
   const NAV=[
     {group:"콘텐츠",items:[
-      {id:"header",label:"헤더"},
+      {id:"header",label:"기본 정보"},
       {id:"notice",label:"안내 문구"},
       {id:"ad",label:"광고",badge:cfg.ad?.enabled?"ON":"OFF"},
       {id:"form",label:"폼 질문"},
@@ -5072,11 +5475,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     ]},
   ]
 
-  const selS:React.CSSProperties={width:"100%",background:A.card2,border:`1.5px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:13,padding:"7px 26px 7px 10px",outline:"none",cursor:"pointer",boxSizing:"border-box" as const,colorScheme:adminDark?"dark" as any:"light" as any}
+  const selS:React.CSSProperties={width:"100%",height:40,background:panelFieldBg(A),border:"none",borderRadius:9,color:A.t1,fontFamily:FONT,fontSize:12.5,padding:"0 30px 0 12px",outline:"none",cursor:"pointer",boxSizing:"border-box" as const,colorScheme:adminDark?"dark" as any:"light" as any}
 
   // ── Panel content ─────────────────────────────────────────────────────
   function renderPanel():React.ReactNode {
-    const pd:React.CSSProperties={padding:"16px 18px 48px"}
+    const pd:React.CSSProperties={padding:"0 20px 22px"}
     switch(sec){
       case "header": return <div style={pd}>
         <FG title="대표 이미지" A={A}>
@@ -5087,8 +5490,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <button onClick={()=>uh("imageUrl","")} style={{position:"absolute",top:6,right:6,width:22,height:22,borderRadius:"50%",background:"rgba(0,0,0,0.65)",border:"none",color:"#fff",cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
             {renderImageCropControls(cfg.header,()=>openImageCropModal("header",cfg.header),()=>setCfg(p=>({...p,header:{...p.header,imageFit:"contain"}})))}
           </div>}
-          <label style={{display:"flex",alignItems:"center",gap:8,padding:"9px 13px",borderRadius:A.r,background:A.card2,border:`1.5px dashed ${A.border2}`,cursor:"pointer",fontSize:13,color:A.t2,fontFamily:FONT}}>
-            <span>↑ 이미지 업로드</span><span style={{marginLeft:"auto",fontSize:11,color:A.t3,fontWeight:400}}>1400 × 400</span><input type="file" accept="image/*" onChange={onImg} style={{display:"none"}}/>
+          <label style={{height:52,display:"flex",alignItems:"center",gap:8,padding:"0 12px",borderRadius:10,background:panelFieldBg(A),border:"none",cursor:"pointer",fontSize:12.5,color:A.t2,fontFamily:FONT,boxSizing:"border-box" as const}}>
+            <span style={{display:"flex",alignItems:"center",gap:7,fontWeight:600}}>
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 12.5V3.5M4.5 7 8 3.5 11.5 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              이미지 업로드
+            </span>
+            <span style={{marginLeft:"auto",fontSize:11.5,color:A.t3,fontWeight:400}}>1400 × 400</span><input type="file" accept="image/*" onChange={onImg} style={{display:"none"}}/>
           </label>
         </FG>
         <FG title="프로그램" A={A}>
@@ -5124,16 +5531,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             const linkedProgram=progs.find(p=>p.id===cfg.header.programId)
             const currentMode=recruitmentPeriodModeOf(cfg)
             return <F label="폼 운영 기간 기준" A={A}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                {(["pre","formal"] as RecruitmentPeriodMode[]).map(mode=>{
-                  const period=recruitmentPeriodOf(linkedProgram,mode)
-                  const selected=currentMode===mode
-                  return <button key={mode} onClick={()=>setRecruitmentPeriodMode(mode)}
-                    style={{minHeight:54,padding:"9px 10px",borderRadius:A.r,border:`1.5px solid ${selected?A.blue:A.border}`,background:selected?A.blue2:A.card2,color:selected?A.blue:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:selected?700:600,cursor:"pointer",textAlign:"left" as const,lineHeight:1.45}}>
-                    <div>{recruitmentPeriodLabel(mode)}</div>
-                    <div style={{fontSize:11,color:selected?A.blue:A.t3,fontWeight:400,marginTop:3,wordBreak:"keep-all" as const,overflowWrap:"break-word" as const}}>{recruitmentPeriodText(period)}</div>
-                  </button>
-                })}
+              <PanelSegment value={currentMode} onChange={v=>setRecruitmentPeriodMode(v as RecruitmentPeriodMode)} A={A}
+                options={(["pre","formal"] as RecruitmentPeriodMode[]).map(mode=>({value:mode,label:recruitmentPeriodLabel(mode)}))}/>
+              <div style={{marginTop:8,fontSize:11.5,color:A.t3,lineHeight:1.5,wordBreak:"keep-all" as const,overflowWrap:"break-word" as const}}>
+                {recruitmentPeriodText(recruitmentPeriodOf(linkedProgram,currentMode))}
               </div>
             </F>
           })()}
@@ -5143,29 +5544,28 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </F>
           <F label="지원 유형" A={A}>
             {cfg.formType==="alert"
-              ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12.5,color:A.t3,fontFamily:FONT}}>
+              ? <div style={{height:42,display:"flex",alignItems:"center",gap:8,padding:"0 12px",borderRadius:10,background:panelFieldBg(A),border:"none",fontSize:12.5,color:A.t3,fontFamily:FONT,boxSizing:"border-box" as const}}>
                   <span style={{padding:"2px 8px",borderRadius:4,background:A.blue2,color:A.blue,fontSize:11,fontWeight:600}}>자동</span> 사전 알림
                 </div>
               : cfg.formType==="kdt"
-              ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12.5,color:A.t3,fontFamily:FONT}}>
+              ? <div style={{height:42,display:"flex",alignItems:"center",gap:8,padding:"0 12px",borderRadius:10,background:panelFieldBg(A),border:"none",fontSize:12.5,color:A.t3,fontFamily:FONT,boxSizing:"border-box" as const}}>
                   <span style={{padding:"2px 8px",borderRadius:4,background:A.blue2,color:A.blue,fontSize:11,fontWeight:600}}>자동</span> 정식 신청
                 </div>
-              : <div style={{display:"flex",flexDirection:"column" as const,gap:6}}>
-                  {([{value:"pre",label:"사전 알림"},{value:"formal",label:"정식 신청"}].concat(
-                    (cfg.header.applicationType&&cfg.header.applicationType!=="pre"&&cfg.header.applicationType!=="formal")
-                      ? [{value:cfg.header.applicationType,label:cfg.header.applicationType}] : []
-                  )).map(opt=>{
-                    const sel=cfg.header.applicationType===opt.value
-                    return <button key={opt.value} onClick={()=>uh("applicationType",opt.value)}
-                      style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",borderRadius:A.r,border:`1.5px solid ${sel?A.blue:A.border}`,background:sel?A.blue2:"transparent",cursor:"pointer",fontFamily:FONT,fontSize:12.5,color:sel?A.blue:A.t1,textAlign:"left" as const,transition:"all .12s"}}>
-                      <div style={{width:14,height:14,borderRadius:"50%",border:`1.5px solid ${sel?A.blue:A.border}`,background:sel?A.blue:"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                        {sel&&<div style={{width:5,height:5,borderRadius:"50%",background:"#fff"}}/>}
-                      </div>
-                      <span style={{fontWeight:sel?600:400}}>{opt.label}</span>
-                    </button>
-                  })}
-                  <TIn value={(cfg.header.applicationType!=="pre"&&cfg.header.applicationType!=="formal")?cfg.header.applicationType||"":""} onChange={v=>uh("applicationType",v)} placeholder="직접 입력 (예: interview)" A={A}/>
-                </div>
+              : (()=>{
+                  const custom=!!cfg.header.applicationType&&cfg.header.applicationType!=="pre"&&cfg.header.applicationType!=="formal"
+                  return <div style={{display:"flex",flexDirection:"column" as const,gap:8}}>
+                    <PanelSegment value={cfg.header.applicationType||""} A={A}
+                      onChange={v=>{setShowCustomAppType(false);uh("applicationType",v)}}
+                      options={[{value:"pre",label:"사전 알림"},{value:"formal",label:"정식 신청"}]}/>
+                    {custom||showCustomAppType
+                      ? <TIn value={custom?cfg.header.applicationType||"":""} onChange={v=>uh("applicationType",v)} placeholder="직접 입력 (예: interview)" A={A}/>
+                      : <button onClick={()=>setShowCustomAppType(true)}
+                          style={{alignSelf:"flex-start" as const,height:28,padding:"0 2px",border:"none",background:"transparent",color:A.t2,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+                          <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                          직접 입력
+                        </button>}
+                  </div>
+                })()
             }
           </F>
         </FG>
@@ -5174,12 +5574,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <EducationSchedulesEditor schedules={educationSchedulesFromHeader(cfg.header)} onChange={setEducationSchedules} A={A}/>
           </F>
           <F label="수강료" A={A}>
-            <TRow label={cfg.header.tuitionFree?"무료 ✓":"유료 ✓"} on={cfg.header.tuitionFree} toggle={()=>uh("tuitionFree",!cfg.header.tuitionFree)} A={A}/>
+            <div style={{marginBottom:8}}>
+              <PanelSegment value={cfg.header.tuitionFree?"free":"paid"} onChange={v=>uh("tuitionFree",v==="free")} A={A}
+                options={[{value:"free",label:"무료"},{value:"paid",label:"유료"}]}/>
+            </div>
             {cfg.header.tuitionFree
               ?<TIn value={cfg.header.tuitionFreeText} onChange={v=>uh("tuitionFreeText",v)} placeholder="수강료 전액 무료" A={A}/>
               :<div style={{display:"flex",alignItems:"center",gap:8}}>
                 <input type="text" value={cfg.header.tuitionAmount} onChange={e=>uh("tuitionAmount",fmtNum(e.target.value))} placeholder="0" inputMode="numeric"
-                  style={{flex:1,background:A.card2,border:`1.5px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:13,padding:"8px 10px",outline:"none",textAlign:"right" as const,boxSizing:"border-box" as const}}/>
+                  style={{flex:1,height:40,background:panelFieldBg(A),border:"none",borderRadius:9,color:A.t1,fontFamily:FONT,fontSize:12.5,padding:"0 12px",outline:"none",textAlign:"right" as const,boxSizing:"border-box" as const}}/>
                 <span style={{color:A.t2,flexShrink:0,fontFamily:FONT,fontSize:13}}>원</span>
               </div>}
           </F>
@@ -5191,24 +5594,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <FG A={A} last>
           <TRow label="안내 문구 표시" on={cfg.header.noticeEnabled} toggle={()=>uh("noticeEnabled",!cfg.header.noticeEnabled)} A={A}/>
           <F label="박스 모양" A={A}>
-            <div style={{display:"flex",gap:8}}>
-              {([["pill","알약형"],["rect","사각형"]] as const).map(([val,label])=>{
-                const cur=(cfg.header.noticeShape||"pill")===val
-                return <button key={val} onClick={()=>uh("noticeShape",val)}
-                  style={{flex:1,height:52,borderRadius:A.r,border:`1.5px solid ${cur?A.blue:A.border}`,background:cur?A.blue2:"transparent",cursor:"pointer",display:"flex",flexDirection:"column" as const,alignItems:"center",justifyContent:"center",gap:5,transition:"all .15s"}}>
-                  {/* Line preview */}
-                  <svg width="44" height="18" viewBox="0 0 44 18" fill="none">
-                    <rect x="1" y="1" width="42" height="16" rx={val==="pill"?8:3} stroke={cur?A.blue:A.t3} strokeWidth="1.5" fill={cur?A.blue+"18":"transparent"}/>
-                    <line x1="10" y1="9" x2="34" y2="9" stroke={cur?A.blue:A.t3} strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                  <span style={{fontSize:11,color:cur?A.blue:A.t2,fontWeight:cur?600:400,fontFamily:FONT}}>{label}</span>
-                </button>
-              })}
-            </div>
+            <PanelSegment value={cfg.header.noticeShape||"pill"} onChange={v=>uh("noticeShape",v as "pill"|"rect")} A={A}
+              options={[
+                {value:"pill",label:"알약형",icon:<svg width="30" height="14" viewBox="0 0 44 18" fill="none" style={{flexShrink:0}}><rect x="1" y="1" width="42" height="16" rx="8" stroke="currentColor" strokeWidth="1.8" fill="transparent"/></svg>},
+                {value:"rect",label:"사각형",icon:<svg width="30" height="14" viewBox="0 0 44 18" fill="none" style={{flexShrink:0}}><rect x="1" y="1" width="42" height="16" rx="3" stroke="currentColor" strokeWidth="1.8" fill="transparent"/></svg>},
+              ]}/>
           </F>
-          <F label="안내 문구" A={A}><ConsentBodyEditor value={cfg.header.noticeText} onChange={v=>uh("noticeText",v)} A={A}/></F>
-          <TRow label="아이콘 표시" on={cfg.header.noticeIconEnabled} toggle={()=>uh("noticeIconEnabled",!cfg.header.noticeIconEnabled)} A={A}/>
+          <div style={{marginBottom:12}}>
+            <PanelCheckRow label="아이콘 표시" on={!!cfg.header.noticeIconEnabled} toggle={()=>uh("noticeIconEnabled",!cfg.header.noticeIconEnabled)} A={A}/>
+          </div>
           {cfg.header.noticeIconEnabled&&<F label="아이콘 텍스트" A={A}><TIn value={cfg.header.noticeIconText} onChange={v=>uh("noticeIconText",v)} A={A}/></F>}
+          <F label="안내 문구" A={A}><ConsentBodyEditor value={cfg.header.noticeText} onChange={v=>uh("noticeText",v)} A={A}/></F>
         </FG>
       </div>
 
@@ -5221,18 +5617,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </FG>
           <FG title="광고 소재" A={A} last>
             <F label="소재 방식" A={A}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                {[
-                  {key:"image" as AdMode,label:"이미지 배너"},
-                  {key:"split" as AdMode,label:"텍스트 + 요소"},
-                ].map(item=>{
-                  const selected=ad.adMode===item.key
-                  return <button key={item.key} onClick={()=>uad("adMode",item.key)}
-                    style={{height:38,borderRadius:A.r,border:`1.5px solid ${selected?A.blue:A.border}`,background:selected?A.blue2:A.card2,color:selected?A.blue:A.t2,fontFamily:FONT,fontSize:13,fontWeight:selected?700:500,cursor:"pointer"}}>
-                    {item.label}
-                  </button>
-                })}
-              </div>
+              <PanelSegment value={ad.adMode} onChange={v=>uad("adMode",v as AdMode)} A={A}
+                options={[{value:"image",label:"이미지 배너"},{value:"split",label:"텍스트 + 요소"}]}/>
             </F>
             {ad.adMode==="image"
               ? <F label="이미지 배너" hint="광고 구좌 전체를 채우는 배너 이미지를 넣습니다." A={A}>
@@ -5313,14 +5699,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           ? (cfg.kdtFields||[]).filter(f=>f.page===pvPage)
           : isMultiPage ? (cfg.form.fields||[]).filter(f=>(f.page||1)===pvPage) : cfg.form.fields||[]
         const pageLabels=["기본 정보","상세 정보","자격 요건 및 동의"]
-        return <div style={{padding:"12px 14px 48px"}}>
+        return <div style={pd}>
           {/* Page tabs — 세로 리스트 */}
-          <div style={{marginBottom:14,background:A.card2,borderRadius:A.r,border:`1px solid ${A.border}`,overflow:"hidden"}}>
+          <div style={{marginBottom:18,padding:10,background:panelFieldBg(A),borderRadius:11,border:"none"}}>
             {/* 헤더 */}
-            <div style={{display:"flex",alignItems:"center",padding:"8px 10px",borderBottom:`1px solid ${A.border}`}}>
-              <span style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:"0.6px",textTransform:"uppercase" as const,flex:1}}>섹션 목록</span>
+            <div style={{display:"flex",alignItems:"center",padding:"0 4px 10px"}}>
+              <span style={{fontSize:12,fontWeight:600,color:A.t3,flex:1}}>섹션 목록</span>
               <button onClick={()=>{if(isKdt){const newPage=formPages+1;setCfg(p=>({...p,kdtFields:[...(p.kdtFields||[]),{id:"kdt_p"+newPage+"_"+Date.now(),label:"새 질문",type:"text" as const,page:newPage,required:false}]}));setPvPage(newPage)}else{addPage();setPvPage(formPages+1)}}}
-                style={{display:"flex",alignItems:"center",gap:4,height:24,padding:"0 8px",borderRadius:A.r,border:`1px dashed ${A.border2}`,background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12,fontWeight:600}}>
+                style={{display:"flex",alignItems:"center",gap:4,height:30,padding:"0 11px",borderRadius:8,border:`1.5px dashed ${A.border2}`,background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12,fontWeight:600}}>
                 <span style={{fontSize:14,lineHeight:1}}>+</span> 섹션 추가
               </button>
             </div>
@@ -5347,10 +5733,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   setSectionDragIdx(null);setSectionDragOver(null);setSectionDragInsertAt(null)
                 }}
                 onDragLeave={()=>{setSectionDragOver(null);setSectionDragInsertAt(null)}}
-                style={{position:"relative" as const,borderBottom:p<formPages?`1px solid ${A.border}`:"none",opacity:isDragging?0.45:1,transition:"opacity .15s"}}>
+                style={{position:"relative" as const,opacity:isDragging?0.45:1,transition:"opacity .15s"}}>
                 {sectionDragInsertAt===i&&sectionDragIdx!==i&&<div style={{position:"absolute" as const,top:-1,left:10,right:10,height:2,borderRadius:1,background:A.blue,zIndex:5,pointerEvents:"none" as const}}/>}
                 {sectionDragInsertAt===i+1&&sectionDragIdx!==i&&i===formPages-1&&<div style={{position:"absolute" as const,bottom:-1,left:10,right:10,height:2,borderRadius:1,background:A.blue,zIndex:5,pointerEvents:"none" as const}}/>}
-                <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 10px",background:isActive?A.blue2:"transparent",cursor:"pointer",transition:"background .1s"}}
+                <div style={{height:42,display:"flex",alignItems:"center",gap:9,padding:"0 11px",borderRadius:9,background:isActive?(adminDark?A.blue2:"#E4EDFC"):"transparent",cursor:"pointer",transition:"background .1s"}}
                   onClick={()=>{setPvPage(p);setEditIdx(null)}}>
                   <div
                     draggable
@@ -5376,7 +5762,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     <DragHandleIcon size={13}/>
                   </div>
                   {/* 활성 인디케이터 */}
-                  <div style={{width:3,height:16,borderRadius:2,background:isActive?A.blue:A.border,flexShrink:0,transition:"background .15s"}}/>
+                  <div style={{width:3,height:15,borderRadius:2,background:isActive?A.blue:A.border2,flexShrink:0,transition:"background .15s"}}/>
                   {/* 이름 — 더블클릭 시 편집 */}
                   <span
                     onDoubleClick={e=>{e.stopPropagation();const el=e.currentTarget;el.contentEditable="true";el.focus();const r=document.createRange();r.selectNodeContents(el);window.getSelection()?.removeAllRanges();window.getSelection()?.addRange(r)}}
@@ -5387,7 +5773,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     {getPageLabel(p)}
                   </span>
                   {/* 필드 개수 뱃지 */}
-                  <span style={{fontSize:11.5,fontWeight:500,color:A.t3,flexShrink:0,background:A.card,padding:"1px 6px",borderRadius:999,border:`1px solid ${A.border}`}}>
+                  <span style={{fontSize:11,fontWeight:600,color:A.t3,flexShrink:0,background:A.card,padding:"2px 8px",borderRadius:999,border:"none"}}>
                     {isKdt?(cfg.kdtFields||[]).filter(f=>f.page===p).length:cfg.form.fields.filter(f=>(f.page||1)===p).length}개
                   </span>
                   {/* 삭제 버튼 */}
@@ -5403,7 +5789,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           {/* Layer list */}
           <div style={{marginBottom:12}}>
             {isKdt&&<div style={{fontSize:11,fontWeight:700,color:A.t3,marginBottom:8}}>{getPageLabel(pvPage)}</div>}
-            {!isKdt&&<div style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,marginBottom:10}}>필드 레이어</div>}
+            {!isKdt&&<div style={{fontSize:12,fontWeight:600,color:A.t3,marginBottom:8}}>필드 레이어</div>}
             {pageFields.length===0&&<div style={{padding:"16px",textAlign:"center" as const,fontSize:12.5,color:A.t3,borderRadius:A.r,border:`1px dashed ${A.border2}`}}>필드를 추가해주세요</div>}
             {pageFields.map((field,idx)=>(
               <div key={(field as any).id||idx}
@@ -5427,9 +5813,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	                    <DragHandleIcon size={13}/>
 	                  </div>
                   <div
-                    style={{flex:1,display:"flex",alignItems:"center",gap:6,padding:"7px 8px",borderRadius:A.r,border:`1px solid ${editIdx===idx?A.blue:"transparent"}`,background:editIdx===idx?A.blue2:"transparent",cursor:"pointer",transition:"all .1s",minWidth:0}}
+                    style={{flex:1,height:48,display:"flex",alignItems:"center",gap:10,padding:"0 8px",borderRadius:10,border:"none",background:editIdx===idx?A.blue2:"transparent",boxShadow:editIdx===idx?`inset 0 0 0 1.5px ${A.blue}`:"none",cursor:"pointer",transition:"all .1s",minWidth:0}}
                     onClick={()=>{setPanelDragIdx(null);setPanelDragOver(null);setOptionDrag(null);setOptionDragOver(null);setEditIdx(editIdx===idx?null:idx)}}>
-                    <div style={{width:22,height:22,borderRadius:5,background:A.card2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:`1px solid ${A.border}`,color:A.t2}}>
+                    <div style={{width:34,height:34,borderRadius:9,background:panelFieldBg(A),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:"none",color:A.t2}}>
                       {FTYPE_ICONS[(field as any).type as string]||FTYPE_ICONS.text}
                     </div>
                     <span style={{flex:1,fontSize:12.5,fontWeight:500,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{(field as any).label||"(라벨 없음)"}</span>
@@ -5438,27 +5824,27 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   {!isKdt&&<button
                     onClick={e=>{e.stopPropagation();duplicateField(cfg.form.fields.indexOf(pageFields[idx] as FormField))}}
                     title="복사"
-                    style={{width:24,height:24,borderRadius:5,border:"none",background:"transparent",cursor:"pointer",color:A.t3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"color .1s"}}
+                    style={{width:26,height:26,borderRadius:7,border:"none",background:"transparent",cursor:"pointer",color:A.t3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"color .1s"}}
                     onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.color=A.blue;(e.currentTarget as HTMLElement).style.background=A.card2}}
                     onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.color=A.t3;(e.currentTarget as HTMLElement).style.background="transparent"}}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </button>}
                   <button
                     onClick={e=>{e.stopPropagation();if(isKdt){const kf=cfg.kdtFields||[];const pf=kf.filter((f:any)=>f.page===pvPage);const globalIdx=kf.indexOf(pf[idx]);setCfg(p=>({...p,kdtFields:p.kdtFields!.filter((_,i)=>i!==globalIdx)}))}else{removeField(cfg.form.fields.indexOf(pageFields[idx] as FormField))};setEditIdx(null)}}
-                    style={{width:24,height:24,borderRadius:5,border:"none",background:"transparent",cursor:"pointer",color:A.t3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"color .1s"}}
+                    style={{width:26,height:26,borderRadius:7,border:"none",background:"transparent",cursor:"pointer",color:A.t3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"color .1s"}}
                     onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.color=A.red;(e.currentTarget as HTMLElement).style.background=A.card2}}
                     onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.color=A.t3;(e.currentTarget as HTMLElement).style.background="transparent"}}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </button>
                 </div>
-                {editIdx===idx&&<div style={{borderRadius:A.r,background:adminDark?"#1E2230":"#F7F8F9",marginBottom:4,overflow:"hidden"}}>
-                  {!isKdt&&<div style={{padding:"10px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                    <span style={{fontSize:12.5,fontWeight:600,color:A.t2}}>유형</span>
-                    <select value={(field as any).type||"text"} onChange={e=>patchActiveField(idx,{type:e.target.value as FieldType})}
-                      style={{background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:12.5,padding:"4px 8px",outline:"none",cursor:"pointer",maxWidth:140}}>
-                      {FTYPES.filter(ft=>!ft.divider).map(ft=><option key={ft.type} value={ft.type}>{ft.label}</option>)}
-                    </select>
+                {editIdx===idx&&<div style={{borderRadius:10,background:A.card,boxShadow:`inset 0 0 0 1px ${A.border}`,marginBottom:6,overflow:"hidden"}}>
+                  {!isKdt&&<div style={{padding:"12px 12px 0"}}>
+                    <F label="유형" A={A}>
+                      <PanelSelect value={(field as any).type||"text"} onChange={v=>patchActiveField(idx,{type:v as FieldType})} A={A} height={40} fontSize={12.5} radius={9} padX={12}
+                        options={FTYPES.filter(ft=>!ft.divider).map(ft=>({value:ft.type,label:ft.label}))}/>
+                    </F>
                   </div>}
+                  {!isDisplayOnlyFieldType((field as any).type)&&<div style={{padding:"0 12px 14px"}}><PanelCheckRow label="필수 입력" on={!!(field as any).required} toggle={()=>patchActiveField(idx,{required:!(field as any).required})} A={A}/></div>}
                   {!isDisplayOnlyFieldType((field as any).type)&&<div style={{padding:"10px 12px"}}><F label="질문 텍스트" A={A}><TArea value={(field as any).label||""} onChange={v=>patchActiveField(idx,{label:v})} minH={36} A={A}/></F></div>}
                   {/* 안내 문구 (helper) — info 제외 */}
                   {!isDisplayOnlyFieldType((field as any).type)&&(()=>{
@@ -5466,9 +5852,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     const helpers:HelperItem[]=rawHelpers.map((h:any)=>typeof h==="string"?{text:h,callout:false}:h)
                     const setHelpers=(arr:HelperItem[])=>patchActiveField(idx,{helpers:arr,helper:arr[0]?.text||""})
                     return <div style={{padding:"10px 12px"}}>
-                      <div style={{fontSize:12.5,fontWeight:600,color:A.t2,marginBottom:8}}>보조 안내 문구
-                        <span style={{fontWeight:400,color:A.t3,marginLeft:5}}>질문 아래 작게 표시</span>
-                      </div>
+                      <div style={{fontSize:12.5,fontWeight:600,color:A.t1,marginBottom:4}}>보조 안내 문구</div>
+                      <div style={{fontSize:11.5,color:A.t3,lineHeight:1.5,marginBottom:8}}>질문 아래 작게 표시됩니다.</div>
                       {helpers.map((h,hi)=>(
                         <div key={hi} style={{marginBottom:8}}>
                           <div style={{display:"flex",gap:5,marginBottom:4}}>
@@ -5479,14 +5864,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                               style={{width:28,height:28,borderRadius:A.r,border:"none",background:"transparent",cursor:"pointer",color:A.red,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0,alignSelf:"flex-start",marginTop:2}}>×</button>
                           </div>
                           <button onClick={()=>{const a=[...helpers];a[hi]={...a[hi],callout:!a[hi].callout};setHelpers(a)}}
-                            style={{display:"flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:A.r,border:`1px solid ${h.callout?A.blue:A.border}`,background:h.callout?A.blue2:"transparent",cursor:"pointer",color:h.callout?A.blue:A.t3,fontFamily:FONT,fontSize:11.5,fontWeight:h.callout?600:400,transition:"all .15s"}}>
+                            style={{display:"flex",alignItems:"center",gap:5,height:28,padding:"0 10px",borderRadius:7,border:"none",background:h.callout?A.blue2:panelFieldBg(A),cursor:"pointer",color:h.callout?A.blue:A.t3,fontFamily:FONT,fontSize:11.5,fontWeight:600,transition:"background .15s, color .15s"}}>
                             <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.4"/><path d="M5 12l2 2 2-2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
                             콜아웃 박스
                           </button>
                         </div>
                       ))}
                       <button onClick={()=>setHelpers([...helpers,{text:"",callout:false}])}
-                        style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:A.r,border:`1px dashed ${A.border2}`,background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12}}>
+                        style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5,width:"100%",height:36,borderRadius:9,border:`1.5px dashed ${A.border2}`,background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600}}>
                         + 안내 문구 추가
                       </button>
                     </div>
@@ -5495,9 +5880,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   {((field as any).type==="text"||(field as any).type==="name"||(field as any).type==="phone"||(field as any).type==="email"||(field as any).type==="textarea")&&
                     <div style={{padding:"10px 12px"}}><F label="예시 텍스트" hint="입력 칸 안에 흐리게 표시됩니다" A={A}><TIn value={(field as any).placeholder||""} onChange={v=>patchActiveField(idx,{placeholder:v})} A={A}/></F></div>}
                   {(field as any).type==="info"&&<div style={{padding:"10px 12px"}}>
-                    <div style={{fontSize:12.5,fontWeight:600,color:A.t2,marginBottom:8}}>내용
-                      <span style={{fontWeight:400,color:A.t3,marginLeft:5}}>볼드·밑줄·링크 지원</span>
-                    </div>
+                    <div style={{fontSize:12.5,fontWeight:600,color:A.t1,marginBottom:4}}>내용</div>
+                    <div style={{fontSize:11.5,color:A.t3,lineHeight:1.5,marginBottom:8}}>볼드 · 밑줄 · 링크를 쓸 수 있어요.</div>
                     <ConsentBodyEditor value={(field as any).placeholder||""} onChange={v=>patchActiveField(idx,{placeholder:v})} A={A}/>
                     <div style={{marginTop:12}}>
                       <div style={{fontSize:12.5,fontWeight:600,color:A.t2,marginBottom:8}}>이미지 <span style={{fontWeight:400,color:A.t3}}>선택</span></div>
@@ -5663,22 +6047,18 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       </div>}
                     </div>
                   })()}
-                  {!isDisplayOnlyFieldType((field as any).type)&&<div style={{padding:"4px 12px"}}><TRow label="필수 입력" on={!!(field as any).required} toggle={()=>patchActiveField(idx,{required:!(field as any).required})} A={A}/></div>}
                   {((field as any).type==="dropdown"||(field as any).type==="button_select"||(field as any).type==="checkbox")&&(()=>{
                     return <div style={{padding:"10px 12px"}}>
                       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:8}}>
                         <div>
-                          <span style={{fontSize:12.5,fontWeight:600,color:A.t2}}>답변 옵션</span>
+                          <span style={{fontSize:12.5,fontWeight:600,color:A.t1}}>답변 옵션</span>
                           <div style={{fontSize:11.5,color:A.t3,lineHeight:1.45,marginTop:3}}>옵션 문구는 더블클릭해서 수정할 수 있어요.</div>
                         </div>
-                        {((field as any).type==="button_select"||(field as any).type==="checkbox")&&<div style={{display:"flex",alignItems:"center",gap:4}}>
-                          <span style={{fontSize:11,color:A.t3}}>열</span>
-                          {[1,2,3].map(c=>{const cur=((field as any).cols||0)===c||(!(field as any).cols&&c===1);return(
-                            <button key={c} onClick={()=>patchActiveField(idx,{cols:c})}
-                              style={{width:24,height:20,borderRadius:4,border:`1px solid ${cur?A.blue:A.border}`,background:cur?A.blue2:"transparent",color:cur?A.blue:A.t3,fontFamily:FONT,fontSize:11,fontWeight:cur?600:400,cursor:"pointer"}}>
-                              {c}
-                            </button>
-                          )})}
+                        {((field as any).type==="button_select"||(field as any).type==="checkbox")&&<div style={{display:"flex",alignItems:"center",gap:7,flexShrink:0}}>
+                          <span style={{fontSize:11.5,fontWeight:600,color:A.t3}}>열</span>
+                          <PanelSegment inline value={String((field as any).cols||1)} onChange={v=>patchActiveField(idx,{cols:Number(v)})} A={A}
+                            height={26} fontSize={12} trackBg={A===ALT?"#E7EAEF":A.bg}
+                            options={[{value:"1",label:"1"},{value:"2",label:"2"},{value:"3",label:"3"}]}/>
                         </div>}
                       </div>
                       <div style={{display:"flex",flexDirection:"column" as const,gap:4,marginBottom:8}}>
@@ -5704,12 +6084,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                               style={{flex:1,fontSize:12.5,color:A.t1,whiteSpace:"pre-wrap" as const,lineHeight:1.4,outline:"none",cursor:"text",borderRadius:3,padding:"1px 2px"}}>{o.label}</span>
                             {!isKdt&&isMultiPage&&<div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
                               <span style={{fontSize:10,color:A.t3}}>→</span>
-                              <select value={o.nextPage||""} onChange={e=>{const newOpts=[...((field as any).opts||[])];newOpts[oi]={...newOpts[oi],nextPage:e.target.value?Number(e.target.value):undefined};patchActiveField(idx,{opts:newOpts})}}
-                                style={{height:22,padding:"0 4px",borderRadius:4,border:`1px solid ${o.nextPage?A.blue:A.border}`,background:o.nextPage?A.blue2:A.card2,color:o.nextPage?A.blue:A.t3,fontFamily:FONT,fontSize:10,cursor:"pointer",outline:"none",maxWidth:80}}>
-                                <option value="">섹션 없음</option>
-                                {Array.from({length:formPages},(_,pi)=>pi+1).map(p=><option key={p} value={p}>{getPageLabel(p)}</option>)}
-                                <option value="9999">설문지 제출</option>
-                              </select>
+                              <PanelSelect value={o.nextPage?String(o.nextPage):""} A={A} height={24} fontSize={10.5} radius={5} padX={6} width={92}
+                                onChange={v=>{const newOpts=[...((field as any).opts||[])];newOpts[oi]={...newOpts[oi],nextPage:v?Number(v):undefined};patchActiveField(idx,{opts:newOpts})}}
+                                options={[{value:"",label:"섹션 없음"},...Array.from({length:formPages},(_,pi)=>pi+1).map(p=>({value:String(p),label:getPageLabel(p)})),{value:"9999",label:"설문지 제출"}]}/>
                             </div>}
                             <button onClick={()=>patchActiveField(idx,{opts:((field as any).opts||[]).filter((_:any,i:number)=>i!==oi)})}
                               style={{fontSize:14,color:A.t3,border:"none",background:"none",cursor:"pointer",padding:0,lineHeight:1,display:"flex",alignItems:"center",flexShrink:0}}>×</button>
@@ -5719,12 +6096,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       <FieldOptAdder fieldIdx={idx} onAdd={(lbl:string,val:string)=>{const cur=(field as any).opts||[];const v=val||lbl;patchActiveField(idx,{opts:[...cur,{label:lbl,value:v,isEtc:lbl==="기타"}]})}} A={A}/>
                     </div>
                   })()}
-                  {!isKdt&&isMultiPage&&<div style={{padding:"10px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                    <span style={{fontSize:12.5,fontWeight:600,color:A.t2,flexShrink:0}}>섹션 지정</span>
-                    <select value={(field as any).page||1} onChange={e=>patchActiveField(idx,{page:Number(e.target.value)})}
-                      style={{flex:1,background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:12.5,padding:"4px 8px",outline:"none",cursor:"pointer",boxSizing:"border-box" as const}}>
-                      {Array.from({length:formPages},(_,i)=>i+1).map(p=><option key={p} value={p}>{getPageLabel(p)}</option>)}
-                    </select>
+                  {!isKdt&&isMultiPage&&<div style={{padding:"0 12px 12px"}}>
+                    <F label="섹션 지정" A={A}>
+                      <PanelSelect value={String((field as any).page||1)} onChange={v=>patchActiveField(idx,{page:Number(v)})} A={A} height={40} fontSize={12.5} radius={9} padX={12}
+                        options={Array.from({length:formPages},(_,i)=>i+1).map(p=>({value:String(p),label:getPageLabel(p)}))}/>
+                    </F>
                   </div>}
                 </div>}
               </div>
@@ -5732,13 +6108,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
           {/* Add field button — 모든 폼 유형 */}
           <div style={{position:"relative" as const,marginBottom:16}}>
-            <button onClick={()=>setShowAddField(v=>!v)}
-              style={{width:"100%",height:34,borderRadius:A.r,border:`1.5px dashed ${A.border2}`,background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            <button ref={addFieldBtnRef} onClick={()=>{if(showAddField)setShowAddField(false);else openAddFieldMenu()}}
+              style={{width:"100%",height:44,borderRadius:11,border:`1.5px dashed ${showAddField?A.blue:A.border2}`,background:showAddField?(adminDark?A.blue2:"#F5F9FF"):"transparent",cursor:"pointer",color:showAddField?A.blue:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"all .12s"}}>
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
               질문 추가
             </button>
-            {showAddField&&<div style={{position:"absolute" as const,top:"100%",left:0,right:0,marginTop:4,background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:8,zIndex:50,boxShadow:A.shadow,display:"grid",gridTemplateColumns:"1fr 1fr",gap:2}}>
-              {FTYPES_DATA.map(ft=>ft.divider?<div key={ft.type} style={{gridColumn:"1 / -1",height:1,background:A.border,margin:"4px 0"}}/>:<button key={ft.type} onClick={()=>{
+            {showAddField&&<>
+            <div onClick={()=>setShowAddField(false)} style={{position:"fixed" as const,inset:0,zIndex:79,background:"transparent"}}/>
+            <div style={{position:"fixed" as const,top:addFieldMenuTop,right:rightPanelW+24,zIndex:80,width:320,maxHeight:`calc(100vh - ${addFieldMenuTop + 24}px)`,overflowY:"auto" as const,background:A.card,border:adminDark?`1px solid ${A.border}`:"none",borderRadius:14,padding:8,boxShadow:"0 1px 2px rgba(16,24,40,.08), 0 16px 40px -10px rgba(16,24,40,.28)",display:"grid",gridTemplateColumns:"1fr 1fr",gap:2,alignContent:"start" as const}}>
+              {FTYPES_DATA.map(ft=>ft.divider?<div key={ft.type} style={{gridColumn:"1 / -1",height:1,background:A.border,margin:"6px 4px"}}/>:<button key={ft.type} onClick={()=>{
                 if(isKdt){
                   const id="kdt_"+Date.now()
                   const adExtra=ft.type==="ad"?{adMode:"image" as AdMode,adMainText:"지금 가장 많이 찾는 프로그램",adSubText:"혜택과 모집 일정을 한눈에 확인해보세요.",adElementText:"자세히 보기",adBg:"#FEE500",adTextColor:"#191919",adHref:"",imageFit:"cover" as const,imagePosX:50,imagePosY:50,imageCropX:0,imageCropY:0,imageCropW:100,imageCropH:100}:{}
@@ -5755,13 +6133,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 }
                 setShowAddField(false)
               }}
-                style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:A.r,border:"none",background:"transparent",cursor:"pointer",color:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:500,textAlign:"left" as const,transition:"background .1s"}}
+                style={{height:40,display:"flex",alignItems:"center",gap:9,padding:"0 10px",borderRadius:9,border:"none",background:"transparent",cursor:"pointer",color:A.t1,fontFamily:FONT,fontSize:13,fontWeight:600,textAlign:"left" as const,transition:"background .1s"}}
                 onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2}}
                 onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
                 <span style={{color:A.t3,display:"flex",alignItems:"center"}}>{FTYPE_ICONS[ft.type]}</span>
                 <span style={{whiteSpace:"nowrap" as const}}>{ft.label}</span>
               </button>)}
-            </div>}
+            </div>
+            </>}
           </div>
           {!isKdt&&<FG title="오류 메시지" A={A} last>
             <F label="중복 신청 안내" A={A}><TArea value={cfg.form.dupText} onChange={v=>uf("dupText",v)} A={A}/></F>
@@ -5770,48 +6149,56 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
 
       case "consent": return <div style={pd}>
+        <div style={{marginBottom:22}}>
         <F label="동의 위치" hint="폼 시작 부분 또는 제출 직전 중 어디에 동의 섹션을 표시할지 선택합니다." A={A}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            {[
-              {key:"start" as ConsentPosition,label:"맨앞"},
-              {key:"end" as ConsentPosition,label:"맨뒤"},
-            ].map(item=>{
-              const selected=(cfg.form.consentPosition||"end")===item.key
-              return <button key={item.key} onClick={()=>setCfg(p=>({...p,form:{...p.form,consentPosition:item.key}}))}
-                style={{height:36,borderRadius:A.r,border:`1.5px solid ${selected?A.blue:A.border}`,background:selected?A.blue2:A.card2,color:selected?A.blue:A.t2,fontFamily:FONT,fontSize:13,fontWeight:selected?700:500,cursor:"pointer"}}>
-                {item.label}
-              </button>
-            })}
-          </div>
+          <PanelSegment value={cfg.form.consentPosition||"end"} A={A}
+            onChange={v=>setCfg(p=>({...p,form:{...p.form,consentPosition:v as ConsentPosition}}))}
+            options={[{value:"start",label:"맨앞"},{value:"end",label:"맨뒤"}]}/>
         </F>
-        {cfg.consents.map((cs,idx)=><FG key={idx} A={A} last={idx===cfg.consents.length-1}>
-          <div style={{display:"flex",alignItems:"center",marginBottom:12}}>
-            <span style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const}}>동의 항목 {idx+1}</span>
+        </div>
+        {cfg.consents.map((cs,idx)=>{
+        const consentOpen=openConsentIdx[idx]===true
+        const consentSummary=consentLabelForType(cs.consentType||consentTypeFromTitle(cs.title))||cs.title||"동의 유형 미선택"
+        return <div key={idx} style={{marginTop:idx>0?18:0,paddingTop:idx>0?18:0,borderTop:idx>0?`1px solid ${A.border}`:"none"}}>
+          <div onClick={()=>setOpenConsentIdx(prev=>({...prev,[idx]:!consentOpen}))}
+            style={{display:"flex",alignItems:"center",gap:8,marginBottom:consentOpen?9:0,cursor:"pointer",userSelect:"none" as const}}>
+            <svg width="11" height="11" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A.t3,transform:consentOpen?"none":"rotate(-90deg)",transition:"transform .15s"}}>
+              <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <span style={{fontSize:12,fontWeight:600,color:A.t3,flexShrink:0}}>동의 항목 {idx+1}</span>
+            {!consentOpen&&<span style={{minWidth:0,fontSize:12.5,fontWeight:600,color:cs.enabled?A.t1:A.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{consentSummary}</span>}
+            {!consentOpen&&!cs.enabled&&<span style={{flexShrink:0,padding:"2px 7px",borderRadius:6,background:panelFieldBg(A),color:A.t3,fontSize:10.5,fontWeight:700,letterSpacing:".3px"}}>OFF</span>}
             <div style={{flex:1}}/>
-            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:A.t2,fontFamily:FONT}}>
-              <span>필수</span>
-              <div onClick={()=>uc(idx,"required",!cs.required)} style={{width:32,height:18,borderRadius:9,background:cs.required?A.blue:A.border2,position:"relative",transition:"background .2s",cursor:"pointer",flexShrink:0}}>
-                <div style={{position:"absolute",width:13,height:13,borderRadius:"50%",background:"#fff",top:2.5,left:cs.required?16:2.5,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,0.2)"}}/>
-              </div>
-            </div>
-            {idx>0&&<button onClick={()=>removeConsent(idx)} style={{fontSize:11,color:A.red,border:"none",background:"transparent",cursor:"pointer",fontFamily:FONT,padding:0,marginLeft:12}}>삭제</button>}
+            <span onClick={e=>e.stopPropagation()} style={{display:"flex",flexShrink:0}}>
+              <PanelCheckRow label="필수 동의" on={!!cs.required} toggle={()=>uc(idx,"required",!cs.required)} A={A}/>
+            </span>
+            {idx===0&&<span title="기본 동의 항목이라 삭제할 수 없어요" style={{width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:11.5,fontWeight:600,color:A.t3,fontFamily:FONT}}>기본</span>}
+            {idx>0&&<button onClick={e=>{e.stopPropagation();removeConsent(idx)}} title="동의 항목 삭제" aria-label="동의 항목 삭제"
+              style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,padding:0}}
+              onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=panelFieldBg(A);(e.currentTarget as HTMLElement).style.color=A.red}}
+              onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 7h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                <path d="M9.5 4.5h5a1 1 0 0 1 1 1V7h-7V5.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+                <path d="M6 7.5h12l-.85 11.1a1.5 1.5 0 0 1-1.5 1.4H8.35a1.5 1.5 0 0 1-1.5-1.4L6 7.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+              </svg>
+            </button>}
           </div>
+          {consentOpen&&<>
           <TRow label="동의 섹션 표시" on={cs.enabled} toggle={()=>uc(idx,"enabled",!cs.enabled)} A={A}/>
           <F label="동의 유형 선택" A={A}>
-            <select value={cs.consentType||""} onChange={e=>{
-              const nextType=e.target.value
-              const ct=CONSENT_TYPES.find(c=>c.key===nextType)
-              const nextPolicyUrl=policyUrlForConsent(nextType,currentBrand)
-              patchConsent(idx,{
-                consentType:nextType,
-                ...(ct?{title:ct.label}:{}),
-                ...(cs.policyMode==="custom"?{}:{policyUrl:nextPolicyUrl}),
-                ...(cs.policyMode==="custom"&&!cs.customPolicyTitle&&ct?{customPolicyTitle:ct.label}:{}),
-              })
-            }} style={{...selS}}>
-              <option value="">— 동의 유형을 선택해주세요 —</option>
-              {CONSENT_TYPES.map(ct=><option key={ct.key} value={ct.key}>{ct.label}</option>)}
-            </select>
+            <PanelSelect value={cs.consentType||""} placeholder="동의 유형을 선택해주세요" height={46} A={A}
+              options={CONSENT_TYPES.map(ct=>({value:ct.key,label:ct.label}))}
+              onChange={nextType=>{
+                const ct=CONSENT_TYPES.find(c=>c.key===nextType)
+                const nextPolicyUrl=policyUrlForConsent(nextType,currentBrand)
+                patchConsent(idx,{
+                  consentType:nextType,
+                  ...(ct?{title:ct.label}:{}),
+                  ...(cs.policyMode==="custom"?{}:{policyUrl:nextPolicyUrl}),
+                  ...(cs.policyMode==="custom"&&!cs.customPolicyTitle&&ct?{customPolicyTitle:ct.label}:{}),
+                })
+              }}/>
           </F>
           <F label="법적 문서" hint="브랜드 기본 문서를 쓰거나, 이 폼 전용 문서를 직접 작성할 수 있어요." A={A}>
             {(()=>{
@@ -5821,32 +6208,27 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               const resolvedUrl=autoUrl||cs.policyUrl||""
               const customBody=String(cs.customPolicyBody||"").trim()
               return <div style={{display:"flex",flexDirection:"column" as const,gap:9,fontFamily:FONT}}>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-                  {([{key:"brand",label:"브랜드 기본 문서"},{key:"custom",label:"직접 작성 문서"}] as {key:ConsentDocMode;label:string}[]).map(item=>{
-                    const selected=policyMode===item.key
-                    return <button key={item.key} onClick={()=>{
-                      if(item.key==="brand"){
-                        patchConsent(idx,{policyMode:"brand",policyUrl:autoUrl||cs.policyUrl||""})
-                      }else{
-                        patchConsent(idx,{
-                          policyMode:"custom",
-                          customPolicyTitle:cs.customPolicyTitle||consentLabelForType(type)||cs.title||"법적 문서",
-                          customPolicyBody:cs.customPolicyBody||cs.body||"",
-                        })
-                      }
-                    }} style={{height:34,borderRadius:A.r,border:`1.5px solid ${selected?A.blue:A.border}`,background:selected?A.blue2:A.card2,color:selected?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:selected?700:500,cursor:"pointer"}}>
-                      {item.label}
-                    </button>
-                  })}
-                </div>
+                <PanelSegment value={policyMode} A={A}
+                  options={[{value:"brand",label:"브랜드 기본 문서"},{value:"custom",label:"직접 작성 문서"}]}
+                  onChange={v=>{
+                    if(v==="brand"){
+                      patchConsent(idx,{policyMode:"brand",policyUrl:autoUrl||cs.policyUrl||""})
+                    }else{
+                      patchConsent(idx,{
+                        policyMode:"custom",
+                        customPolicyTitle:cs.customPolicyTitle||consentLabelForType(type)||cs.title||"법적 문서",
+                        customPolicyBody:cs.customPolicyBody||cs.body||"",
+                      })
+                    }
+                  }}/>
                 {policyMode==="brand"
-                  ? <div style={{border:`1.5px solid ${resolvedUrl?A.border:A.red}`,borderRadius:A.r,background:A.card2,padding:"9px 10px"}}>
-                      <div style={{fontSize:12.5,fontWeight:600,color:resolvedUrl?A.t1:A.red,marginBottom:4}}>
+                  ? <div style={{border:"none",borderRadius:10,background:panelFieldBg(A),padding:"13px 14px",boxShadow:resolvedUrl?"none":`inset 0 0 0 1.5px ${A.red}`}}>
+                      <div style={{fontSize:13,fontWeight:700,color:resolvedUrl?A.t1:A.red}}>
                         {type?consentLabelForType(type):"동의 유형을 먼저 선택해주세요"}
                       </div>
                       {resolvedUrl
-                        ? <a href={resolvedUrl} target="_blank" rel="noopener" style={{fontSize:11.5,color:A.blue,textDecoration:"none",wordBreak:"break-all"}}>{resolvedUrl}</a>
-                        : <div style={{fontSize:11.5,color:A.red}}>동의 유형 선택 시 자동으로 연결됩니다.</div>}
+                        ? <a href={resolvedUrl} target="_blank" rel="noopener" style={{display:"block",marginTop:6,fontSize:12.5,color:A.blue,textDecoration:"none",wordBreak:"break-all"}}>{resolvedUrl}</a>
+                        : <div style={{marginTop:6,fontSize:12.5,color:A.red}}>동의 유형 선택 시 자동으로 연결됩니다.</div>}
                     </div>
                   : <div style={{display:"flex",flexDirection:"column" as const,gap:9}}>
                       <TIn value={cs.customPolicyTitle||consentLabelForType(type)||cs.title||"법적 문서"} onChange={v=>uc(idx,"customPolicyTitle",v)} placeholder="문서 제목" A={A}/>
@@ -5865,9 +6247,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <ConsentBodyEditor value={cs.body} onChange={v=>uc(idx,"body",v)} A={A}/>
           </F>
           <F label="체크박스 라벨" A={A}><TIn value={cs.checkLabel} onChange={v=>uc(idx,"checkLabel",v)} A={A}/></F>
-        </FG>)}
+          </>}
+        </div>})}
         <button onClick={addConsent}
-          style={{width:"100%",padding:"10px",borderRadius:A.r,border:`1px dashed ${A.border2}`,background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginTop:4}}>
+          style={{width:"100%",height:46,borderRadius:11,border:`1.5px dashed ${A.border2}`,background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginTop:18}}>
           <span style={{fontSize:16,lineHeight:1}}>+</span> 동의 항목 추가
         </button>
       </div>
@@ -5875,7 +6258,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       case "login": return <div style={pd}>
         <FG title="로그인 설정" A={A} last>
           <TRow label="로그인 필수" on={cfg.auth.enabled} toggle={()=>ua("enabled",!cfg.auth.enabled)} A={A}/>
-          <F label="로그인 URL" A={A}><TIn value={cfg.auth.loginUrl} onChange={v=>ua("loginUrl",v)} A={A}/></F>
           <F label="에러 메시지" A={A}><TIn value={cfg.auth.errText} onChange={v=>ua("errText",v)} A={A}/></F>
         </FG>
       </div>
@@ -5894,59 +6276,73 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           ?"Google Drive/Docs 오류 페이지가 응답했어요. Apps Script Web App URL이 `https://script.google.com/macros/s/.../exec` 형식인지 확인해주세요."
           :syncMessageRaw
         return <div style={pd}>
-          <FG title="구글 스프레드시트" A={A}>
-            <TRow label="응답 자동 연동" on={!!gs.enabled} toggle={()=>ug("enabled",!gs.enabled)} A={A}/>
-            <F label="연동할 계정" A={A}><TIn value={gs.accountEmail} onChange={v=>ug("accountEmail",v)} placeholder="google@example.com" A={A}/></F>
-            <F label="응답 데이터를 어디로 보낼까요?" A={A}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                {(["existing","new"] as const).map(mode=>{
-                  const on=gs.mode===mode
-                  return <button key={mode} onClick={()=>ug("mode",mode)}
-                    style={{height:42,borderRadius:A.r,border:`1.5px solid ${on?A.blue:A.border}`,background:on?A.blue2:A.card2,color:on?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
-                    {mode==="existing"?"기존 스프레드시트 사용":"새 스프레드시트 생성"}
-                  </button>
-                })}
+          <div style={{display:"flex",flexDirection:"column" as const,gap:16}}>
+            {/* 상태 카드 — 토글 · 설명 · 연동 상태를 한 덩어리로 */}
+            <div style={{padding:14,borderRadius:11,background:panelFieldBg(A)}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                <span style={{fontSize:13.5,fontWeight:700,color:A.t1}}>응답 자동 연동</span>
+                <div onClick={()=>ug("enabled",!gs.enabled)} style={{width:44,height:25,borderRadius:13,background:gs.enabled?A.blue:(A===ALT?"#DFE3E9":A.border2),position:"relative" as const,transition:"background .2s",cursor:"pointer",flexShrink:0}}>
+                  <div style={{position:"absolute" as const,width:19,height:19,borderRadius:"50%",background:"#fff",top:3,left:gs.enabled?22:3,transition:"left .2s",boxShadow:"0 1px 3px rgba(16,24,40,0.24)"}}/>
+                </div>
               </div>
+              <div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,marginTop:6}}>제출된 응답을 구글 스프레드시트로 자동 전송합니다.</div>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginTop:12,paddingTop:12,boxShadow:`inset 0 1px 0 ${A.border}`}}>
+                <span style={{width:6,height:6,borderRadius:3,background:statusColor,flexShrink:0}}/>
+                <span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:600,color:statusColor}}>{statusLabel}</span>
+                <button onClick={()=>sheetOpenUrl?window.open(sheetOpenUrl,"_blank","noopener,noreferrer"):showToast(gs.mode==="new"?"테스트 전송 후 생성된 시트 링크가 저장되면 이동할 수 있어요.":"연결할 시트 링크를 입력하면 바로 이동할 수 있어요.",false)}
+                  style={{height:28,padding:"0 10px",borderRadius:7,border:"none",background:A.card,color:sheetOpenUrl?A.t2:A.t3,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>
+                  시트로 이동
+                </button>
+              </div>
+              <div style={{fontSize:11.5,color:A.t3,lineHeight:1.6,marginTop:8}}>
+                {ready?`마지막 상태: ${lastSyncText}`:"계정 이메일만으로는 연동되지 않아요. 공통 Apps Script URL을 Vercel 환경변수에 넣거나, 고급 설정에서 이 폼에 직접 URL을 입력해야 응답이 시트로 전송됩니다."}
+                {syncMessage&&<div style={{marginTop:4,color:gs.lastSyncStatus==="error"?A.red:A.t3}}>{syncMessage}</div>}
+              </div>
+            </div>
+
+            <F label="전송 대상" A={A}>
+              <PanelSegment value={gs.mode} onChange={v=>ug("mode",v as "existing"|"new")} A={A}
+                options={[{value:"existing",label:"기존 시트"},{value:"new",label:"새로 생성"}]}/>
             </F>
-            <F label={gs.mode==="existing"?"연결할 시트 링크":"생성할 시트 이름"} A={A}>
+
+            <F label="연동 계정" A={A}><TIn value={gs.accountEmail} onChange={v=>ug("accountEmail",v)} placeholder="google@example.com" A={A}/></F>
+
+            <F label={gs.mode==="existing"?"시트 링크":"생성할 시트 이름"} A={A}>
               <TIn value={gs.mode==="existing"?gs.sheetUrl:gs.sheetName} onChange={v=>gs.mode==="existing"?ug("sheetUrl",v):ug("sheetName",v)} placeholder={gs.mode==="existing"?"https://docs.google.com/spreadsheets/d/...":"예) 5월 신청 응답"} A={A}/>
             </F>
-            <F label="Apps Script Web App URL" A={A}>
-              <TIn value={gs.webhookUrl} onChange={v=>ug("webhookUrl",v)} placeholder="https://script.google.com/macros/s/..." A={A}/>
-              {usingGlobalWebhook&&<div style={{fontSize:11.5,color:A.green,lineHeight:1.55,marginTop:6}}>
-                Vercel 공통 URL이 자동 적용 중이에요. 이 칸은 폼별로 다른 URL을 써야 할 때만 입력하면 됩니다.
-              </div>}
-            </F>
-            <F label="연동 상태" A={A}>
-              <div style={{padding:"12px",borderRadius:A.r,border:`1px solid ${statusColor}44`,background:statusColor+"10",display:"grid",gap:8}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,color:statusColor,fontSize:13,fontWeight:600}}>
-                    <span style={{width:8,height:8,borderRadius:999,background:statusColor,display:"inline-block"}} />{statusLabel}
+
+            {/* 고급 설정 — Apps Script URL은 잘못 건드리면 연동이 끊기므로 기본으로 접어둔다 */}
+            <div>
+              <button onClick={()=>setSyncAdvOpen(v=>!v)}
+                style={{width:"100%",height:44,display:"flex",alignItems:"center",gap:8,padding:"0 14px",borderRadius:10,border:"none",background:panelFieldBg(A),color:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
+                <span style={{flex:1,textAlign:"left" as const}}>고급 설정</span>
+                <span style={{fontSize:11.5,color:A.t3,fontWeight:500}}>{usingGlobalWebhook?"공통 URL 자동 적용 중":effectiveWebhookUrl?"폼 전용 URL 사용 중":"URL 미설정"}</span>
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A.t3,transform:syncAdvOpen?"none":"rotate(-90deg)",transition:"transform .15s"}}>
+                  <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+              {syncAdvOpen&&<div style={{marginTop:9}}>
+                <F label="Apps Script Web App URL" A={A}>
+                  <TIn value={gs.webhookUrl} onChange={v=>ug("webhookUrl",v)} placeholder="https://script.google.com/macros/s/..." A={A}/>
+                  <div style={{fontSize:12,color:A.t3,lineHeight:1.6,marginTop:7}}>
+                    {usingGlobalWebhook?"Vercel 공통 URL이 자동 적용 중이에요. 이 폼만 다른 URL을 써야 할 때 입력하세요.":"이 폼만 다른 URL을 써야 할 때 입력하세요."}
                   </div>
-                  <button onClick={()=>sheetOpenUrl?window.open(sheetOpenUrl,"_blank","noopener,noreferrer"):showToast(gs.mode==="new"?"테스트 전송 후 생성된 시트 링크가 저장되면 이동할 수 있어요.":"연결할 시트 링크를 입력하면 바로 이동할 수 있어요.",false)}
-                    disabled={!sheetOpenUrl}
-                    style={{height:30,padding:"0 10px",borderRadius:A.r,border:`1px solid ${sheetOpenUrl?A.border2:A.border}`,background:sheetOpenUrl?A.card:A.card2,color:sheetOpenUrl?A.t1:A.t3,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:sheetOpenUrl?"pointer":"not-allowed"}}>
-                    시트로 이동
-                  </button>
-                </div>
-                <div style={{fontSize:11.5,color:A.t2,lineHeight:1.6}}>
-                  {ready?`마지막 상태: ${lastSyncText}`:"계정 이메일만으로는 연동되지 않아요. 공통 Apps Script URL을 Vercel 환경변수에 넣거나, 이 폼에 직접 URL을 입력해야 제출 응답이 시트로 전송됩니다."}
-                  {syncMessage&&<div style={{marginTop:4,color:gs.lastSyncStatus==="error"?A.red:A.t2}}>{syncMessage}</div>}
-                </div>
-              </div>
-            </F>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                </F>
+              </div>}
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,paddingTop:2}}>
               <button onClick={()=>loadedId?updateCfg(false):setShowSave(true)}
-                style={{height:40,borderRadius:A.r,border:`1px solid ${A.border2}`,background:A.card,color:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
+                style={{height:44,borderRadius:10,border:`1px solid ${A===ALT?"#E3E7EC":A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>
                 설정 저장
               </button>
               <button onClick={testGoogleSheetsIntegration}
-                style={{height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
+                style={{height:44,borderRadius:10,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>
                 테스트 전송
               </button>
             </div>
-          </FG>
-          <div style={{padding:"12px 14px",borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,color:A.blue,fontSize:12.5,lineHeight:1.7,marginBottom:10}}>
+          </div>
+          <div style={{marginTop:16,padding:"12px 14px",borderRadius:10,background:panelFieldBg(A),border:"none",color:A.t2,fontSize:12.5,lineHeight:1.7}}>
             이 설정은 <b>설정 저장</b> 또는 우측 상단 <b>저장</b>을 눌러야 실제 배포된 폼에 반영돼요. 저장 후 <b>테스트 전송</b>을 눌러 시트에 테스트 행이 생기는지 먼저 확인해주세요.
           </div>
         </div>
@@ -5959,12 +6355,26 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <FG title="폼 슬러그" A={A} last>
             <F label="슬러그" A={A}>
               <TIn value={slugDraft} onChange={v=>setSlugDraft(v)} placeholder="my-form-slug" A={A}/>
-              <div style={{marginTop:7,fontSize:11.5,lineHeight:1.5,color:slugHasInvalidChars?A.red:A.t3}}>
+              <div style={{marginTop:8,fontSize:12.5,lineHeight:1.6,color:slugHasInvalidChars?A.red:A.t3}}>
                 한글, 공백, 특수문자는 사용할 수 없어요. 영문, 숫자, 하이픈(-)만 입력해주세요.
               </div>
             </F>
-            {preview&&<F label="미리보기 URL" A={A}><div style={{padding:"9px 10px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:11.5,color:A.t2,wordBreak:"break-all" as const,fontFamily:"Courier New,monospace"}}>{preview}</div></F>}
-            <button onClick={updateFormSlug} style={{width:"100%",height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>
+            {preview&&<F label="미리보기 URL" A={A}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"13px 14px",borderRadius:10,background:panelFieldBg(A),border:"none"}}>
+                <span style={{flex:1,minWidth:0,fontFamily:FONT,fontSize:12.5,color:A.t3,lineHeight:1.6,wordBreak:"break-all" as const}}>{preview}</span>
+                <button onClick={()=>{navigator.clipboard?.writeText(preview).then(()=>showToast("미리보기 URL을 복사했어요.")).catch(()=>showToast("복사에 실패했어요.",false))}}
+                  title="URL 복사" aria-label="URL 복사"
+                  style={{width:30,height:30,flexShrink:0,border:"none",borderRadius:8,background:A.card,color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0}}
+                  onMouseEnter={e=>(e.currentTarget as HTMLElement).style.color=A.blue}
+                  onMouseLeave={e=>(e.currentTarget as HTMLElement).style.color=A.t3}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect x="9" y="9" width="11" height="11" rx="2.6" stroke="currentColor" strokeWidth="1.7"/>
+                    <path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              </div>
+            </F>}
+            <button onClick={updateFormSlug} style={{width:"100%",height:50,borderRadius:11,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:14,fontWeight:700,cursor:"pointer"}}>
               {loadedId?"슬러그 저장":"저장 전 슬러그 적용"}
             </button>
           </FG>
@@ -6056,20 +6466,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         }
         return <div style={pd}>
           <FG title="QR 만들기" A={A}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-              {([{id:"form",label:"폼 QR"},{id:"custom",label:"상세페이지 QR"}] as const).map(item=>{
-                const active=qrMode===item.id
-                return <button key={item.id} onClick={()=>setQrMode(item.id)}
-                  style={{height:38,borderRadius:A.r,border:`1.5px solid ${active?A.blue:A.border}`,background:active?A.blue2:A.card,color:active?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
-                  {item.label}
-                </button>
-              })}
+            <div style={{marginBottom:16}}>
+              <PanelSegment value={qrMode} onChange={v=>setQrMode(v as "form"|"custom")} A={A}
+                options={[{value:"form",label:"폼 QR"},{value:"custom",label:"상세페이지 QR"}]}/>
             </div>
             <F label={qrMode==="form"?"폼 URL":"상세페이지 URL"} A={A}>
               {qrMode==="form"
                 ? formUrl
-                  ? <textarea readOnly value={formUrl} style={{width:"100%",height:56,background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t2,fontFamily:"Courier New,monospace",fontSize:11.5,padding:"8px",outline:"none",resize:"none" as const,boxSizing:"border-box" as const,wordBreak:"break-all" as const}}/>
-                  : <div style={{padding:"10px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12.5,color:A.t3,lineHeight:1.5}}>
+                  ? <div style={{padding:"13px 14px",borderRadius:10,background:panelFieldBg(A),border:"none",fontFamily:FONT,fontSize:12.5,color:A.t3,lineHeight:1.6,wordBreak:"break-all" as const}}>{formUrl}</div>
+                  : <div style={{padding:"13px 14px",borderRadius:10,background:panelFieldBg(A),border:"none",fontSize:12.5,color:A.t3,lineHeight:1.6}}>
                       {!hasBase&&!hasSaved?"배포 페이지 URL과 저장된 슬러그가 필요해요.":!hasBase?"브랜드별 배포 페이지 URL이 필요해요.":"폼을 먼저 저장하면 QR을 만들 수 있어요."}
                     </div>
                 : <TIn value={qrCustomUrl} onChange={setQrCustomUrl} placeholder="https://example.com/detail" A={A}/>}
@@ -6087,33 +6492,33 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
           <FG title="미리보기 / 다운로드" A={A} last>
             <div style={{display:"flex",flexDirection:"column" as const,alignItems:"center",gap:14}}>
-              <div style={{width:236,height:236,borderRadius:A.r2,background:"#fff",border:`1px solid ${A.border}`,boxShadow:A.shadow,display:"flex",alignItems:"center",justifyContent:"center",padding:10,boxSizing:"border-box" as const}}>
+              <div style={{width:"100%",aspectRatio:"1",borderRadius:14,background:adminDark?A.card2:"#FAFBFC",border:"none",boxShadow:`inset 0 0 0 1px ${A.border}`,display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box" as const}}>
                 {qrMatrix
-                  ? <div style={{width:212,height:212}} dangerouslySetInnerHTML={{__html:qrMatrixToSvgMarkup(qrMatrix,212)}}/>
-                  : <div style={{textAlign:"center" as const,color:A.t3,fontSize:12.5,lineHeight:1.6,padding:16}}>
-                      {qrError||"QR 생성 버튼을 누르면 미리보기가 표시됩니다."}
+                  ? <div style={{width:"100%",maxWidth:212,aspectRatio:"1"}} dangerouslySetInnerHTML={{__html:qrMatrixToSvgMarkup(qrMatrix,212)}}/>
+                  : <div style={{textAlign:"center" as const,color:A.t3,fontSize:13,lineHeight:1.6,wordBreak:"keep-all" as const}}>
+                      {qrError||<>QR 생성 버튼을 누르면<br/>미리보기가 표시됩니다.</>}
                     </div>}
               </div>
               <button onClick={onQrGenerate} disabled={!activeQrUrl}
-                style={{width:"100%",height:40,borderRadius:A.r,border:"none",background:activeQrUrl?A.blue:A.border2,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:activeQrUrl?"pointer":"not-allowed"}}>
+                style={{width:"100%",height:48,borderRadius:11,border:"none",background:activeQrUrl?A.blue:A.border2,color:"#fff",fontFamily:FONT,fontSize:13.5,fontWeight:700,cursor:activeQrUrl?"pointer":"not-allowed"}}>
                 {detailQrTargetChanged?"링크 변경 저장":qrMatrix?"QR 다시 생성":"QR 생성"}
               </button>
               {qrError&&<div style={{fontSize:12,color:A.red,lineHeight:1.5,textAlign:"center" as const}}>{qrError}</div>}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,width:"100%"}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:9,width:"100%"}}>
                 {(["png","svg","jpg"] as QrFileFormat[]).map(format=>(
                   <button key={format} onClick={()=>onQrDownload(format)} disabled={!qrMatrix}
-                    style={{height:38,borderRadius:A.r,border:`1px solid ${qrMatrix?A.border2:A.border}`,background:qrMatrix?A.card:A.card2,color:qrMatrix?A.t1:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:qrMatrix?"pointer":"not-allowed",textTransform:"uppercase" as const}}>
+                    style={{height:44,borderRadius:10,border:"none",background:qrMatrix?panelFieldBg(A):(A===ALT?"#F1F3F6":A.card2),color:qrMatrix?A.t1:A.t4,fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:qrMatrix?"pointer":"not-allowed",textTransform:"uppercase" as const}}>
                     {format}
                   </button>
                 ))}
               </div>
-              <div style={{display:"flex",gap:8,width:"100%"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,width:"100%"}}>
                 <button onClick={()=>{if(activeQrUrl){navigator.clipboard.writeText(activeQrUrl);showToast("QR URL 복사 완료!")}}} disabled={!activeQrUrl}
-                  style={{flex:1,height:36,borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:activeQrUrl?A.t2:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:activeQrUrl?"pointer":"not-allowed"}}>
+                  style={{height:44,borderRadius:10,border:`1px solid ${A===ALT?"#E3E7EC":A.border}`,background:A.card,color:activeQrUrl?A.t2:A.t3,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:activeQrUrl?"pointer":"not-allowed"}}>
                   URL 복사
                 </button>
                 <button onClick={()=>activeQrUrl&&window.open(activeQrUrl,"_blank")} disabled={!activeQrUrl}
-                  style={{flex:1,height:36,borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:activeQrUrl?A.t2:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:activeQrUrl?"pointer":"not-allowed"}}>
+                  style={{height:44,borderRadius:10,border:`1px solid ${A===ALT?"#E3E7EC":A.border}`,background:A.card,color:activeQrUrl?A.t2:A.t3,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:activeQrUrl?"pointer":"not-allowed"}}>
                   URL 열기
                 </button>
               </div>
@@ -6148,7 +6553,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <F label="버튼 클릭 후 URL" A={A}><TIn value={cfg.modal.btnUrl} onChange={v=>um("btnUrl",v)} placeholder="https://..." A={A}/></F>
         </FG>
         <FG title="공유 버튼" A={A} last>
-          <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginBottom:8}}>
+          <div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,margin:"6px 0 10px"}}>
             완료 모달에 표시할 공유 버튼을 선택합니다.
           </div>
           {shareOptions.map(({key,label})=>(
@@ -6161,41 +6566,32 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       case "styles": return <div style={pd}>
         <FG title="시니어 모드" A={A}>
           <TRow label="시니어 모드 활성화" on={!!cfg.styles.seniorMode} toggle={()=>us("seniorMode",!cfg.styles.seniorMode)} A={A}/>
-          <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginTop:-2}}>
+          <div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,marginTop:9}}>
             고령자가 더 쉽게 읽고 입력할 수 있도록 폰트와 입력 영역을 키우고, 글씨 색을 검정에 가깝게 표시합니다.
           </div>
         </FG>
         <FG title="폼 테마" A={A}>
-          {cfg.styles.seniorMode&&<div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginBottom:10}}>
+          {cfg.styles.seniorMode&&<div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,marginBottom:10}}>
             시니어 모드가 켜져 있어도 테마와 입력 박스 색은 유지되고, 글자색과 크기만 가독성 중심으로 바뀝니다.
           </div>}
-          <div style={{display:"flex",gap:10}}>
-            {(["dark","light"] as Theme[]).map(t=>{const a=cfg.styles.theme===t;return(
-              <div key={t} onClick={()=>us("theme",t)} style={{flex:1,padding:"12px 10px",borderRadius:A.r,border:`2px solid ${a?A.blue:A.border}`,cursor:"pointer",textAlign:"center" as const,transition:"border .12s"}}>
-                <div style={{width:"100%",height:28,borderRadius:6,background:t==="dark"?"#0B0C0E":"#FFFFFF",border:"1px solid rgba(128,128,128,0.2)",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>
-                  {t==="dark"?<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M13.5 8.5A5.5 5.5 0 0 1 7 2a6 6 0 1 0 6.5 6.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M8 1v1.5M8 13.5V15M15 8h-1.5M2.5 8H1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1M12.6 12.6l-1.1-1.1M4.5 4.5 3.4 3.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
-                </div>
-                <div style={{fontSize:12.5,fontWeight:600,color:a?A.blue:A.t2}}>{t==="dark"?"다크":"라이트"}</div>
-              </div>
-            )})}
-          </div>
+          <PanelSegment value={cfg.styles.theme} onChange={v=>us("theme",v as Theme)} A={A} height={42}
+            options={[
+              {value:"light",label:"라이트",icon:<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M8 1v1.5M8 13.5V15M15 8h-1.5M2.5 8H1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1M12.6 12.6l-1.1-1.1M4.5 4.5 3.4 3.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
+              {value:"dark",label:"다크",icon:<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><path d="M13.5 8.5A5.5 5.5 0 0 1 7 2a6 6 0 1 0 6.5 6.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>},
+            ]}/>
         </FG>
         <FG title="브랜드 컬러" A={A}>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            {[{c:"#529DFF",l:"스나이퍼팩토리"},{c:"#EA594D",l:"인사이드아웃"}].map(({c,l})=>(
-              <button key={c} onClick={()=>{ut("bg",c)}} title={l}
-                style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px 6px 8px",borderRadius:A.r,border:`1.5px solid ${cfg.cta.bg===c?c:A.border}`,background:cfg.cta.bg===c?c+"15":"transparent",cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:cfg.cta.bg===c?600:400,color:cfg.cta.bg===c?c:A.t2,flexShrink:0,transition:"all .15s"}}>
-                <div style={{width:18,height:18,borderRadius:"50%",background:c,flexShrink:0}}/>
-                {l}
-              </button>
-            ))}
-          </div>
+          <PanelSegment value={cfg.cta.bg} onChange={v=>ut("bg",v)} A={A} height={42}
+            options={[{c:"#529DFF",l:"스나이퍼팩토리"},{c:"#EA594D",l:"인사이드아웃"}].map(({c,l})=>({
+              value:c,label:l,
+              icon:<span style={{width:18,height:18,borderRadius:9,background:c,flexShrink:0,display:"block"}}/>,
+            }))}/>
         </FG>
         <FG title="CTA 버튼 색상" A={A}>
           <F label="배경색" A={A}>
             <div style={{display:"flex",gap:6,marginBottom:8}}>
               {[{c:"#529DFF",l:"SF"},{c:"#EA594D",l:"IO"},{c:"#3182F6",l:"기본"}].map(({c,l})=>(
-                <button key={c} onClick={()=>ut("bg",c)} title={l} style={{width:28,height:28,borderRadius:6,background:c,border:`2px solid ${cfg.cta.bg===c?A.t1:"transparent"}`,cursor:"pointer",flexShrink:0}}/>
+                <button key={c} onClick={()=>ut("bg",c)} title={l} style={{width:32,height:32,borderRadius:9,background:c,border:"none",boxShadow:cfg.cta.bg===c?`inset 0 0 0 2px #fff, 0 0 0 2px ${A.blue}`:"none",cursor:"pointer",flexShrink:0}}/>
               ))}
             </div>
             <CIn value={cfg.cta.bg} onChange={v=>ut("bg",v)} A={A}/>
@@ -6233,7 +6629,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const clearError=(id:string)=>setPvFieldErrors(p=>{const n={...p};delete n[id];return n})
 
 
-    return <div style={{flex:1,overflowY:"auto" as const,display:"flex",justifyContent:"center",padding:0,background:"transparent","--link-color":accentBg} as React.CSSProperties}>
+    return <div style={{flex:1,display:"flex",justifyContent:"center",padding:0,background:"transparent","--link-color":accentBg} as React.CSSProperties}>
       <div style={{width:"100%",maxWidth:cfg.styles.maxW,fontFamily:FONT,padding:seniorMode?"44px 34px 48px":"36px 34px 32px",borderRadius:14,background:FC.bg,boxShadow:cfg.styles.theme==="dark"?"0 1px 2px rgba(0,0,0,.18), 0 12px 32px -20px rgba(0,0,0,.6)":ALT.shadow,height:"fit-content",boxSizing:"border-box" as const}}>
         {cfg.header.imageUrl&&<div style={{...imagePreviewBoxStyle(cfg.header,200),borderRadius:fr2,marginBottom:22,background:FC.fieldBg}}>
           <img src={cfg.header.imageUrl} alt="" style={imagePreviewImgStyle(cfg.header)}/>
@@ -6691,7 +7087,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const fr2 = seniorMode?"10px":cfg.styles.theme==="dark"?"6px":"8px"
     const qg = seniorGap(seniorMode,cfg.styles.qGap||20)
     const lg = seniorGap(seniorMode,cfg.styles.labelGap??8)
-    return <div style={{flex:1,overflowY:"auto" as const,display:"flex",justifyContent:"center",padding:0,background:"transparent"}}>
+    return <div style={{flex:1,display:"flex",justifyContent:"center",padding:0,background:"transparent"}}>
       <div style={{width:"100%",maxWidth:cfg.styles.maxW,fontFamily:FONT,padding:seniorMode?"44px 34px 48px":"36px 34px 32px",borderRadius:14,background:FC.bg,boxShadow:cfg.styles.theme==="dark"?"0 1px 2px rgba(0,0,0,.18), 0 12px 32px -20px rgba(0,0,0,.6)":ALT.shadow,height:"fit-content",boxSizing:"border-box" as const}}>
         {/* 헤더 */}
         {cfg.header.title&&<div style={{marginBottom:24}}>
@@ -6872,7 +7268,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <div style={{fontSize:12.5,fontWeight:600,color:A.t1}}>배포 페이지 URL</div>
         </div>
         <div style={{fontSize:12,color:A.t3,marginBottom:10,lineHeight:1.5}}>{usesCatchformDirect?`${brandLabel} 폼은 외부 base URL 없이 캐치폼 직접 링크를 사용합니다.`:`환경변수 ${urlPropName} 에 배포된 페이지 주소를 입력하세요.`}</div>
-        <div style={{padding:"9px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${hasBase?A.blue:A.border}`,fontSize:12,fontFamily:"Courier New,monospace",color:hasBase?A.t1:A.t3}}>
+        <div style={{padding:"9px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${hasBase?A.blue:A.border}`,fontSize:12.5,fontFamily:FONT,lineHeight:1.6,wordBreak:"break-all" as const,color:hasBase?A.t1:A.t3}}>
           {hasBase?base:`미설정 — 환경변수에서 입력`}
         </div>
       </div>
@@ -6885,7 +7281,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </div>
         <div style={{fontSize:12,color:A.t3,marginBottom:10,lineHeight:1.5}}>현재 설정을 Supabase에 저장하면 slug가 생성됩니다.</div>
         {hasSaved
-          ?<div style={{padding:"8px 12px",borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,fontFamily:"Courier New,monospace",color:A.blue}}>✓ {savedSlug}</div>
+          ?<div style={{padding:"8px 12px",borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,fontFamily:FONT,fontWeight:600,color:A.blue}}>✓ {savedSlug}</div>
           :<Btn onClick={()=>setShowSave(true)} variant="blue" sm A={A}>DB에 저장하기</Btn>}
       </div>
 
@@ -6897,7 +7293,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </div>
         {formUrl
           ?<>
-            <textarea readOnly value={formUrl} style={{width:"100%",height:52,background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t2,fontFamily:"Courier New,monospace",fontSize:11,padding:"8px",outline:"none",resize:"none" as const,boxSizing:"border-box" as const,wordBreak:"break-all" as const,marginBottom:10}}/>
+            <textarea readOnly value={formUrl} style={{width:"100%",height:52,background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t2,fontFamily:FONT,fontSize:12,padding:"8px",outline:"none",resize:"none" as const,boxSizing:"border-box" as const,wordBreak:"break-all" as const,marginBottom:10}}/>
             <div style={{display:"flex",gap:6}}>
             <button onClick={()=>{navigator.clipboard.writeText(formUrl);showToast("폼 링크 복사 완료! 🔗")}}
               style={{display:"flex",alignItems:"center",gap:5,height:30,padding:"0 12px",borderRadius:A.r,border:"none",background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:500,transition:"background .1s"}}
@@ -7391,14 +7787,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	        </div>
 	        {topIconButton("refresh","새로고침",loadAnalytics,<path d="M13 3v4H9M3 13V9h4M12.2 8.8A4.5 4.5 0 0 1 4.5 12M3.8 7.2A4.5 4.5 0 0 1 11.5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>)}
 	        {activeAnalyticsTab==="responses"&&<div style={{position:"relative" as const}}>
-	          <select value={analyticsCsvSort} onChange={e=>setAnalyticsCsvSort(e.target.value as "desc"|"asc")} title="시트 다운로드 날짜 정렬"
-	            style={{height:34,minWidth:124,padding:"0 30px 0 10px",appearance:"none" as any,WebkitAppearance:"none" as any,borderRadius:A.r,border:"none",background:A.card2,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,outline:"none",cursor:"pointer"}}>
-	            <option value="desc">날짜 내림차순</option>
-	            <option value="asc">날짜 오름차순</option>
-	          </select>
-	          <SelectChevron color={A.t2}/>
+	          <PanelSelect value={analyticsCsvSort} onChange={v=>setAnalyticsCsvSort(v as "desc"|"asc")} A={A} height={34} fontSize={12.5} fontWeight={600} radius={8} padX={10} width={134}
+	            options={[{value:"desc",label:"날짜 내림차순"},{value:"asc",label:"날짜 오름차순"}]}/>
 	        </div>}
-	        {activeAnalyticsTab==="responses"&&<button onClick={()=>exportAnalyticsCsv(responseRows)} style={{height:34,padding:"0 13px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+	        {activeAnalyticsTab==="responses"&&<button onClick={()=>exportAnalyticsCsv(responseRows)} style={{height:34,padding:"0 13px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,boxShadow:"0 1px 2px rgba(49,130,246,.35)",cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
 	          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>시트 다운로드
 	        </button>}
       </div>
@@ -7406,7 +7798,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         {tabs.map(t=>{const on=activeAnalyticsTab===t.id;return <React.Fragment key={t.id}>
           {t.dividerBefore&&<div style={{width:1,height:18,background:A.border,margin:"0 0 0 -4px"}}/>}
           <button onClick={()=>setAnalyticsTab(t.id)}
-          style={{height:44,padding:"0 2px",borderRadius:0,border:"none",background:"transparent",color:on?A.t1:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:7,boxShadow:on?`inset 0 -2px 0 ${A.blue}`:"none"}}>
+          style={{height:44,padding:"0 2px",borderRadius:0,border:"none",background:"transparent",color:on?A.t1:A.t3,fontFamily:FONT,fontSize:13.5,fontWeight:on?700:500,cursor:"pointer",display:"flex",alignItems:"center",gap:7,boxShadow:on?`inset 0 -2px 0 ${A.blue}`:"none"}}>
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none">{t.icon}</svg>{t.label}
         </button>
         </React.Fragment>})}
@@ -7443,7 +7835,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {analyticsResponseScope==="draft"&&<div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,margin:"-5px 0 14px"}}>작성 중 데이터는 제출 완료 전 자동 저장된 임시 기록입니다. 파일 첨부 내용은 브라우저 보안상 제출 전에는 저장되지 않습니다.</div>}
             {analyticsResponseScope==="submitted"&&duplicateFoldedCount>0&&<div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,margin:"-5px 0 14px"}}>로그인 없이 제출된 응답 중 이름·전화번호·이메일이 모두 같은 응답은 대표 1개로 묶었어요. `중복` 버튼을 누르면 같은 사람이 더 제출한 응답을 펼쳐볼 수 있습니다.</div>}
             {responseRows.length===0?emptyState(analyticsResponseScope==="draft"?"아직 작성 중인 응답이 없습니다.":"아직 제출 완료된 응답이 없습니다."):<div className="catchform-analytics-table-scroll" style={{flex:1,minHeight:0,background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,overflow:"auto",boxShadow:A.shadow}}>
-              <style>{`.catchform-analytics-table-scroll::-webkit-scrollbar{height:7px;width:7px}.catchform-analytics-table-scroll::-webkit-scrollbar-thumb{background:${A.border2};border-radius:999px}.catchform-analytics-table-scroll::-webkit-scrollbar-track{background:transparent}`}</style>
               <table style={{borderCollapse:"collapse",minWidth:analyticsTableMinWidth,width:"100%",fontSize:12.5,tableLayout:"fixed" as const}}>
                 <thead><tr><th style={{position:"sticky" as const,top:0,zIndex:4,width:analyticsControlColumnWidth,minWidth:analyticsControlColumnWidth,padding:"13px 10px",textAlign:"center" as const,borderBottom:`1px solid ${A.border}`,color:A.t3,background:A.card2,fontSize:11.5,fontWeight:600}}><label style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7,cursor:"pointer"}}><input type="checkbox" checked={allResponseRowsSelected} onChange={toggleAllResponseRows} style={{width:15,height:15,accentColor:A.blue,cursor:"pointer"}}/>전체</label></th><th style={{position:"sticky" as const,top:0,zIndex:4,width:analyticsDateColumnWidth,minWidth:analyticsDateColumnWidth,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t3,background:A.card2,fontSize:11.5,fontWeight:600}}>날짜</th>{analyticsColumnMeta.map(({field:f,fileCount,resizable,width:colWidth}:any)=>{return <th key={f.id} style={{position:"sticky" as const,top:0,zIndex:4,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t3,width:colWidth,minWidth:colWidth,maxWidth:colWidth,background:A.card2,fontSize:11.5,fontWeight:600}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
@@ -7983,7 +8374,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           {showAnalyticsTip&&<div style={{position:"absolute" as const,top:"calc(100% + 7px)",left:"50%",transform:"translateX(-50%)",background:A.t1,color:A.card,padding:"5px 8px",borderRadius:6,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const,zIndex:1000,boxShadow:A.shadow}}>응답 및 분석</div>}
         </div>
         <button onClick={onSaveClick} style={{height:34,padding:"0 13px",border:"none",borderRadius:A.r,background:A.card2,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",flexShrink:0}}>저장</button>
-        <button onClick={publishAndOpenForm} style={{height:34,padding:"0 14px",border:"none",borderRadius:A.r,background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+        <button onClick={publishAndOpenForm} style={{height:34,padding:"0 14px",border:"none",borderRadius:A.r,background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,boxShadow:"0 1px 2px rgba(49,130,246,.35)",cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><path d="M6.5 3H3.6A.6.6 0 0 0 3 3.6v8.8a.6.6 0 0 0 .6.6h8.8a.6.6 0 0 0 .6-.6V9.5M9.5 2.5H13.5V6.5M13 3l-5.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           폼 열기
         </button>
@@ -7997,13 +8388,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
           {/* Nav */}
           {NAV.map(grp=>(
-            <div key={grp.group} style={{padding:"0 0 10px",flexShrink:0}}>
+            <div key={grp.group} style={{padding:"0 0 18px",flexShrink:0}}>
               <div style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:".4px",padding:"0 8px 8px"}}>{grp.group}</div>
               {grp.items.map(item=>{const a=sec===item.id;return(
                 <div key={item.id} onClick={()=>setSec(item.id)}
-                  style={{height:34,display:"flex",alignItems:"center",gap:8,padding:"0 8px",borderRadius:A.r,cursor:"pointer",fontSize:12.5,fontWeight:a?700:500,color:a?A.blue:A.t2,background:a?A.blue2:"transparent",marginBottom:2,transition:"all .12s"}}>
+                  style={{height:36,display:"flex",alignItems:"center",gap:8,padding:"0 10px",borderRadius:A.r,cursor:"pointer",fontSize:13,fontWeight:a?700:500,color:a?A.t1:A.t2,background:a?(adminDark?A.card2:"#EDEFF3"):"transparent",marginBottom:2,transition:"all .12s"}}>
                   <span style={{flex:1}}>{item.label}</span>
-                  {"badge" in item&&<span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:999,background:(item as any).badge==="ON"?A.blue2:A.card2,color:(item as any).badge==="ON"?A.blue:A.t3,border:`1px solid ${(item as any).badge==="ON"?A.blue+"33":A.border}`}}>{(item as any).badge}</span>}
+                  {"badge" in item&&<span style={{fontSize:10.5,fontWeight:700,letterSpacing:".3px",padding:"2px 7px",borderRadius:6,background:(item as any).badge==="ON"?A.blue2:(adminDark?A.card2:"#EFF1F4"),color:(item as any).badge==="ON"?A.blue:A.t3}}>{(item as any).badge}</span>}
                 </div>
               )})}
             </div>
@@ -8011,7 +8402,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
           <div style={{flex:1}}/>
           <div style={{paddingTop:14,flexShrink:0}}>
-            <button onClick={()=>setShowBrandModal(true)} style={{width:"100%",height:34,display:"flex",alignItems:"center",justifyContent:"center",gap:6,border:`1px solid ${adminDark?A.border:"#E3E7EC"}`,borderRadius:A.r,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
+            <button onClick={()=>setShowBrandModal(true)} style={{width:"100%",height:34,display:"flex",alignItems:"center",justifyContent:"center",gap:6,border:`1px solid ${adminDark?A.border:"#E3E7EC"}`,borderRadius:A.r,background:A.card,color:adminDark?A.t2:"#3D4552",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
               새 폼 만들기
             </button>
@@ -8020,7 +8411,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
         {/* PREVIEW — 중앙 */}
         <div style={{flex:1,display:"flex",flexDirection:"column" as const,overflow:"hidden",minWidth:0,background:adminDark?A.bg:"#F1F3F6"}}>
-          <div style={{flex:1,overflow:"hidden",display:"flex",padding:"28px 32px",boxSizing:"border-box" as const}}>
+          <div style={{flex:1,overflowY:"auto" as const,display:"flex",alignItems:"flex-start" as const,padding:"28px 32px",boxSizing:"border-box" as const}}>
             {renderPreview()}
           </div>
         </div>
@@ -8055,8 +8446,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.blue+"44"}}
             onMouseLeave={e=>{if(!isResizingRef.current)(e.currentTarget as HTMLElement).style.background="transparent"}}
           />
-          <div style={{padding:"18px 20px 4px",position:"sticky" as const,top:0,background:A.card,zIndex:10}}>
+          <div style={{padding:"18px 20px 14px",position:"sticky" as const,top:0,background:A.card,zIndex:10}}>
             <div style={{fontSize:15,fontWeight:700,color:A.t1,letterSpacing:"-.2px"}}>{NAV.flatMap(g=>g.items).find(i=>i.id===sec)?.label||sec}</div>
+            {PANEL_SUBS[sec]&&<div style={{fontSize:12,color:A.t3,lineHeight:1.5,marginTop:4}}>{PANEL_SUBS[sec]}</div>}
           </div>
           {renderPanel()}
         </div>
@@ -8153,13 +8545,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>폼 제목</div>
             <input value={dashboardSettings.formName} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formName:e.target.value}))} placeholder="폼 제목" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16,boxSizing:"border-box" as const}}/>
             <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>브랜드</div>
-            <select value={dashboardSettings.brand} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,brand:e.target.value as BrandId}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
-              <option value="SNIPERFACTORY">스나이퍼팩토리</option><option value="INSIDEOUT">인사이드아웃</option><option value="SFACSPACE">스팩스페이스</option>
-            </select>
+            <div style={{marginBottom:16}}><PanelSelect value={dashboardSettings.brand} onChange={v=>setDashboardSettings(prev=>prev&&({...prev,brand:v as BrandId}))} A={A} height={38} options={[{value:"SNIPERFACTORY",label:"스나이퍼팩토리"},{value:"INSIDEOUT",label:"인사이드아웃"},{value:"SFACSPACE",label:"스팩스페이스"}]}/></div>
             <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>폼 유형</div>
-            <select value={dashboardSettings.formTypeTag} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formTypeTag:e.target.value as DashboardFormType}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
-              {DASHBOARD_FORM_TYPES.map(type=><option key={type.value} value={type.value}>{type.label}</option>)}
-            </select>
+            <div style={{marginBottom:16}}><PanelSelect value={dashboardSettings.formTypeTag} onChange={v=>setDashboardSettings(prev=>prev&&({...prev,formTypeTag:v as DashboardFormType}))} A={A} height={38} options={DASHBOARD_FORM_TYPES.map(t=>({value:t.value,label:t.label}))}/></div>
             <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>편집 비밀번호</div>
             {!!settingsConfig?.dashboard?.editPasswordHash&&!canMasterReset(authRole)&&<input type="password" value={dashboardSettings.currentEditPasswordDraft} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,currentEditPasswordDraft:e.target.value}))} placeholder="변경 또는 해제 시 현재 비밀번호" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:8,boxSizing:"border-box" as const}}/>}
             <input type="password" value={dashboardSettings.editPasswordDraft} disabled={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,editPasswordDraft:e.target.value}))} placeholder={settingsConfig?.dashboard?.editPasswordHash?"새 비밀번호 입력 시 변경":"비밀번호 입력 시 편집 보호"} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,opacity:dashboardSettings.clearEditPassword?.55:1}}/>
