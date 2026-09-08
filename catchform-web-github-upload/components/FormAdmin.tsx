@@ -287,6 +287,13 @@ const DASHBOARD_FORM_TYPES:{value:DashboardFormType;label:string}[]=[
   {value:"other",label:"기타"},
 ]
 const ANALYTICS_EVENT_LIMIT = 5000
+// 스스로 크롤러임을 밝히는 user-agent 표식. 기록 단계와 조회 단계에서 같은 목록을 쓴다.
+const BOT_UA_PATTERNS = [
+  "facebookexternalhit","facebookcatalog","meta-externalagent","bot","crawler","spider","crawling",
+  "headless","preview","python","curl","wget","http-client","go-http","okhttp","java/",
+  "slackbot","embedly","whatsapp","pinterest","telegrambot","discordbot","twitterbot","linkedinbot",
+  "yandex","baidu","ahrefs","semrush","lighthouse","chrome-lighthouse","gtmetrix","pingdom","uptimerobot",
+]
 const ANALYTICS_EVENT_SELECT = "id,form_id,form_slug,session_id,event_type,page,field_id,field_label,metadata,created_at"
 function legacyDashboardFormType(formType?:Cfg["formType"]):DashboardFormType{
   if(formType==="alert")return"alert"
@@ -4064,6 +4071,23 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(event?.__meta)return event.__meta
     try{return typeof event?.metadata==="string"?JSON.parse(event.metadata||"{}"):(event?.metadata||{})}catch{return{}}
   }
+  // ─── 봇 트래픽 판별 ──────────────────────────────────────────────────────
+  // 광고 링크는 사람이 누르기 전에 메타·메신저·검색 크롤러가 먼저 열어본다.
+  // 이 접속은 폼을 열기만 하고 입력은 하지 않아 참여 수와 완료율을 크게 왜곡한다.
+  // 과거에 쌓인 이벤트에도 user_agent와 로케일이 남아 있어 조회 시점에 걸러내면
+  // 지난 기록까지 소급해서 정상 수치로 볼 수 있다.
+  function isBotAnalyticsEvent(event:any){
+    const meta=analyticsEventMeta(event)
+    // 1단계 — 스스로 크롤러임을 밝히는 user-agent
+    const ua=String(meta.user_agent||"").toLowerCase()
+    if(ua&&BOT_UA_PATTERNS.some(pattern=>ua.includes(pattern)))return true
+    // 2단계 — 한국어 로케일 신호가 전혀 없는 접속 (데이터센터 봇이 실제 기기 UA를 흉내내는 경우)
+    const timezone=String(meta.timezone||"")
+    const language=String(meta.language||"").toLowerCase()
+    if(!timezone&&!language)return false
+    return !timezone.startsWith("Asia/")&&!language.startsWith("ko")
+  }
+
   function analyticsTrashSessionId(prefix="admin_trash"){
     return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2,8)}`
   }
@@ -4089,6 +4113,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     return rawEvents.filter(event=>!analyticsTrashTypes.includes(event.event_type))
       .filter(event=>!activeScope||new Date(event.created_at).getTime()>new Date(activeScope.created_at).getTime())
       .filter(event=>!trashedDraftSessions.has(event.session_id))
+      .filter(event=>!isBotAnalyticsEvent(event))
   }
   function setAnalyticsEventRows(rawEventRows:any[]){
     const rawEvents=normalizeAnalyticsEventRows(rawEventRows)
