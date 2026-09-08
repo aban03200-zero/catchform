@@ -3726,11 +3726,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     // 1단계 — 스스로 크롤러임을 밝히는 user-agent
     const ua=String(meta.user_agent||"").toLowerCase()
     if(ua&&BOT_UA_PATTERNS.some(pattern=>ua.includes(pattern)))return true
-    // 2단계 — 한국어 로케일 신호가 전혀 없는 접속 (데이터센터 봇이 실제 기기 UA를 흉내내는 경우)
+    // 2단계 — 한국 로케일 신호가 전혀 없는 접속 (데이터센터 봇이 실제 기기 UA를 흉내내는 경우)
+    // 시간대는 `Asia/` 접두사가 아니라 `Asia/Seoul`로 정확히 본다.
+    // 접두사로 두면 Asia/Dubai·Asia/Shanghai 같은 다른 아시아 시간대의 봇이 그대로 통과한다.
+    // 해외에 있는 한국 사용자는 기기 언어가 ko로 남아 있어 언어 조건에서 걸러지지 않는다.
     const timezone=String(meta.timezone||"")
     const language=String(meta.language||"").toLowerCase()
     if(!timezone&&!language)return false
-    return !timezone.startsWith("Asia/")&&!language.startsWith("ko")
+    return timezone!=="Asia/Seoul"&&!language.startsWith("ko")
   }
 
   function analyticsTrashSessionId(prefix="admin_trash"){
