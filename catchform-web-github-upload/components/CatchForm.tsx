@@ -683,6 +683,14 @@ function getOperationGate(cfg: Cfg) {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────
+// 스스로 크롤러임을 밝히는 user-agent 표식 (FormAdmin의 BOT_UA_PATTERNS와 같은 목록)
+const CATCHFORM_BOT_UA_PATTERNS = [
+    "facebookexternalhit","facebookcatalog","meta-externalagent","bot","crawler","spider","crawling",
+    "headless","preview","python","curl","wget","http-client","go-http","okhttp","java/",
+    "slackbot","embedly","whatsapp","pinterest","telegrambot","discordbot","twitterbot","linkedinbot",
+    "yandex","baidu","ahrefs","semrush","lighthouse","chrome-lighthouse","gtmetrix","pingdom","uptimerobot",
+]
+
 export function CatchForm(props: {
     supabaseUrl?: string
     supabaseAnonKey?: string
@@ -1002,7 +1010,17 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         }
     }
 
+    // 크롤러가 광고 링크를 미리 열어보는 접속은 참여로 기록하지 않는다.
+    // (자기 신고형 user-agent만 차단하고, 나머지 판별은 관리자 조회 시점에서 처리한다.)
+    const isBotClient = () => {
+        if (typeof navigator === "undefined") return false
+        const ua = (navigator.userAgent || "").toLowerCase()
+        if (!ua) return false
+        return CATCHFORM_BOT_UA_PATTERNS.some(pattern => ua.includes(pattern))
+    }
+
     const trackEvent = (eventType: string, extra?: { page?: number; field?: any; metadata?: any; keepalive?: boolean }) => {
+        if (isBotClient()) return
         const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search || "") : new URLSearchParams()
         const basePayload = {
             form_id: formId || params.get("cf_form_id") || params.get("fid") || params.get("f") || null,
