@@ -77,6 +77,7 @@ type Cfg = {
         noticeEnabled: boolean; noticeIconEnabled: boolean; noticeIconText: string; noticeText: string
         noticeShape?: "pill"|"rect"
         applicationType?: string
+        applicationTypeIsConversion?: boolean
         imageFit?: "contain"|"cover"; imagePosX?: number; imagePosY?: number
         imageCropX?: number; imageCropY?: number; imageCropW?: number; imageCropH?: number; imageNaturalW?: number; imageNaturalH?: number
     }
@@ -854,6 +855,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const [geoMeta, setGeoMeta] = React.useState<Record<string, string>>({})
     const [geoLoaded, setGeoLoaded] = React.useState(false)
     const trackingSessionRef = React.useRef("")
+    const visitorIdRef = React.useRef<string>("")
     const touchedFieldRef = React.useRef<Record<string, boolean>>({})
     const lastTouchedFieldRef = React.useRef<any>(null)
     const startedTrackedRef = React.useRef(false)
@@ -865,7 +867,11 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const operationGate = React.useMemo(() => getOperationGate(cfg), [cfg.dashboard?.operationStart, cfg.dashboard?.operationEnd, cfg.dashboard?.operationPeriods, cfg.dashboard?.alwaysOpen])
     const formDisabled = !!operationGate
     const [showOperationModal, setShowOperationModal] = React.useState(!!operationGate)
-    const isFormalApplication = String(cfg.header?.applicationType || "").trim().toLowerCase() === "formal"
+    // 전환(메타 픽셀 Lead)으로 볼 조건.
+    // 기본 유형 `formal`이거나, 직접 입력한 유형에 관리자가 `전환`을 체크한 경우.
+    const isFormalApplication =
+        String(cfg.header?.applicationType || "").trim().toLowerCase() === "formal"
+        || !!cfg.header?.applicationTypeIsConversion
 
     const draftKey = React.useMemo(() => {
         const raw = formId || formSlug || cfg.header?.programId || cfg.header?.title || "form"
@@ -901,6 +907,25 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const clearDraft = React.useCallback(() => {
         try { window.localStorage.removeItem(draftKey) } catch {}
     }, [draftKey])
+
+    // 세션 ID는 sessionStorage라 탭을 닫거나 인앱 브라우저에서 나갔다 들어오면 새로 발급된다.
+    // 그래서 같은 사람의 재진입이 매번 새 참여로 잡힌다.
+    // 방문자 ID는 localStorage에 두어 브라우저 단위로 유지하고, 실제 인원을 셀 수 있게 한다.
+    const getVisitorId = () => {
+        if (visitorIdRef.current) return visitorIdRef.current
+        const key = "catchform_visitor"
+        try {
+            const prev = window.localStorage.getItem(key)
+            if (prev) { visitorIdRef.current = prev; return prev }
+            const next = `cfv_${Date.now()}_${Math.random().toString(36).slice(2)}`
+            window.localStorage.setItem(key, next)
+            visitorIdRef.current = next
+            return next
+        } catch {
+            // 사생활 보호 모드 등으로 localStorage를 못 쓰면 세션 단위로만 집계된다.
+            return ""
+        }
+    }
 
     const getTrackingSessionId = () => {
         if (trackingSessionRef.current) return trackingSessionRef.current
@@ -1030,7 +1055,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             page: extra?.page ?? page,
             field_id: extra?.field?.id || null,
             field_label: extra?.field?.label || null,
-            metadata: { ...getTrackingMeta(), ...(extra?.metadata || {}) }
+            metadata: { ...getTrackingMeta(), visitor_id: getVisitorId(), ...(extra?.metadata || {}) }
         }
         const statusMode = eventType === "draft_saved" || eventType === "leave"
         const statusKey = statusMode ? [basePayload.form_id || basePayload.form_slug || "form", basePayload.session_id || "session", eventType].join(":") : ""
@@ -1682,7 +1707,10 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
     const sendGoogleSheetsIntegration = async (payload: Record<string, any>, formData: Array<{question: string; answer: any; answerKey: string}>, formConfigId: string | null) => {
         const gs = cfg.integrations?.googleSheets
-        const webhookUrl = String(gs?.webhookUrl || googleSheetsWebhookUrl || publicEnv.googleSheetsWebhookUrl || "").trim()
+        // 폼별 전용 URL은 더 이상 쓰지 않는다.
+        // 관리자가 잘못 넣거나 옛 배포가 만료돼도 그 폼만 조용히 실패하는 일이 반복돼,
+        // 공통 환경변수 하나만 바라보도록 통일했다. (저장된 webhookUrl 값은 무시)
+        const webhookUrl = String(googleSheetsWebhookUrl || publicEnv.googleSheetsWebhookUrl || "").trim()
         if (!gs?.enabled || !webhookUrl) return
         const answerRow = formData.reduce((acc: Record<string, any>, item) => {
             acc[item.question || item.answerKey] = sheetAnswer(item.answer)
@@ -1709,7 +1737,10 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             schema: "analytics_export_v1",
             mode: gs.mode || "existing",
             accountEmail: gs.accountEmail || "",
-            sheetUrl: gs.sheetUrl || "",
+            // `새로 생성` 모드에서는 시트 링크를 보내지 않는다.
+            // Apps Script가 mode를 보지 않고 sheetUrl이 있으면 그 시트를 열어버려서,
+            // 기존 시트로 쓰다가 새로 생성으로 바꾸면 옛 시트에 행이 계속 쌓였다.
+            sheetUrl: (gs.mode || "existing") === "existing" ? (gs.sheetUrl || "") : "",
             sheetName: gs.sheetName || cfg.header?.title || "CatchForm Responses",
             formId: formConfigId || formId || "",
             formSlug: formSlug || "",

@@ -35,7 +35,7 @@ type FormField = { id:string; type:FieldType; label:string; placeholder?:string;
 type FormAdConfig = { enabled:boolean; adMode:AdMode; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string }
 type QrLink = { code:string; url:string; label?:string; type?:string; createdAt?:string }
 type Cfg = {
-  header: { imageUrl:string; programId:string; programUnlinked?:boolean; recruitmentPeriodMode?:RecruitmentPeriodMode; overline:string; title:string; educationStart:string; educationEnd:string; educationSchedules?:EducationSchedule[]; tuitionFree:boolean; tuitionFreeText:string; tuitionAmount:string; stipend:string; noticeEnabled:boolean; noticeIconEnabled:boolean; noticeIconText:string; noticeText:string; noticeShape?:"pill"|"rect"; applicationType?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
+  header: { imageUrl:string; programId:string; programUnlinked?:boolean; recruitmentPeriodMode?:RecruitmentPeriodMode; overline:string; title:string; educationStart:string; educationEnd:string; educationSchedules?:EducationSchedule[]; tuitionFree:boolean; tuitionFreeText:string; tuitionAmount:string; stipend:string; noticeEnabled:boolean; noticeIconEnabled:boolean; noticeIconText:string; noticeText:string; noticeShape?:"pill"|"rect"; applicationType?:string; applicationTypeIsConversion?:boolean; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
   ad?: FormAdConfig
   form: { fields:FormField[]; showNum:boolean; dupText:string; pages:number; pageLabels?:string[]; consentPosition?:ConsentPosition }
   consents: { enabled:boolean; required:boolean; title:string; consentType?:string; body:string; checkLabel:string; policyUrl:string; policyMode?:ConsentDocMode; customPolicyTitle?:string; customPolicyBody?:string }[]
@@ -256,7 +256,7 @@ const CATCHFORM_DIRECT_FORM_BASE_URL = "https://catchform.vercel.app/form"
 const FORM_SUMMARY_SELECT = "id,name,slug,updated_at,brand,config_brand:config->>brand,header_title:config->header->>title,program_id:config->header->>programId,recruitment_period_mode:config->header->>recruitmentPeriodMode,form_type:config->>formType,dashboard_meta:config->dashboard"
 const FULL_FORM_PREFETCH_LIMIT = 8
 const FULL_FORM_PREFETCH_CONCURRENCY = 2
-const DEFAULT_GOOGLE_SHEETS = {enabled:false,mode:"existing" as const,accountEmail:"",sheetUrl:"",sheetName:"",webhookUrl:"",lastSyncStatus:"idle" as const,lastSyncAt:"",lastSyncMessage:""}
+const DEFAULT_GOOGLE_SHEETS = {enabled:false,mode:"existing" as const,accountEmail:"",sheetUrl:"",sheetName:"",createdSheetName:"",webhookUrl:"",lastSyncStatus:"idle" as const,lastSyncAt:"",lastSyncMessage:""}
 const DEFAULT_MODAL_SHARE_BUTTONS:ModalShareButtons = {kakao:true,instagram:true,threads:true,x:true,link:true}
 const DEFAULT_FORM_AD:FormAdConfig = {
   enabled:false,
@@ -472,6 +472,24 @@ function dashboardWithOperationPeriods(dashboard:DashboardMeta|undefined,periods
   const primary=primaryOperationRange(operationPeriods)
   return{...(dashboard||{}),operationPeriods,operationStart:primary.start,operationEnd:primary.end}
 }
+// 운영 중인 폼의 종료일까지 남은 일수. 상시 운영이거나 종료일이 없으면 null.
+// 여러 기간이 있으면 지금 진행 중인 기간의 종료일을 본다.
+const CLOSING_SOON_DAYS = 7
+function daysUntilOperationEnd(dashboard?:DashboardMeta|null,fallback?:{start?:string;end?:string}):number|null{
+  if(dashboard?.alwaysOpen)return null
+  const ranges=validOperationPeriods(operationPeriodsFromDashboard(dashboard,fallback))
+  if(!ranges.length)return null
+  const now=Date.now()
+  const current=ranges
+    .filter(range=>(!range.startAt||now>=range.startAt)&&range.endAt&&now<=range.endAt)
+    .sort((a,b)=>(a.endAt||0)-(b.endAt||0))[0]
+  if(!current?.endAt)return null
+  // 경과 시간이 아니라 달력 날짜 차이로 센다. 오늘 안에 끝나면 0(D-DAY), 내일이면 1(D-1).
+  const endDay=new Date(current.endAt); endDay.setHours(0,0,0,0)
+  const today=new Date(); today.setHours(0,0,0,0)
+  return Math.round((endDay.getTime()-today.getTime())/86400000)
+}
+
 function operationStatusOfDashboard(dashboard?:DashboardMeta|null,fallback?:{start?:string;end?:string}):{status:DashboardManualStatus;hasOperationPeriod:boolean}{
   if(dashboard?.alwaysOpen)return{status:"active",hasOperationPeriod:true}
   const periods=operationPeriodsFromDashboard(dashboard,fallback)
@@ -594,6 +612,36 @@ async function sha256Text(value:string){
   if(typeof crypto==="undefined"||!crypto.subtle)throw new Error("이 브라우저에서는 비밀번호 보호를 사용할 수 없어요.")
   const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value))
   return Array.from(new Uint8Array(digest)).map(v=>v.toString(16).padStart(2,"0")).join("")
+}
+
+// ─── 편집 비밀번호 해시 ────────────────────────────────────────────────────
+// form_configs는 공개 폼이 읽어야 해서 anon 키로 열려 있고, config 안의 해시도 같이 노출된다.
+// 소금 없는 SHA-256 한 번은 짧은 비밀번호를 사실상 즉시 되돌릴 수 있으므로 PBKDF2로 늘린다.
+// 형식: pbkdf2$<반복수>$<salt hex>$<hash hex>
+const EDIT_PW_ITERATIONS = 210000
+const toHex=(buf:ArrayBuffer)=>Array.from(new Uint8Array(buf)).map(v=>v.toString(16).padStart(2,"0")).join("")
+const fromHex=(hex:string)=>new Uint8Array((hex.match(/.{1,2}/g)||[]).map(b=>parseInt(b,16)))
+async function pbkdf2Hex(password:string,salt:Uint8Array,iterations:number){
+  const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(password),"PBKDF2",false,["deriveBits"])
+  const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt:salt as unknown as BufferSource,iterations,hash:"SHA-256"},key,256)
+  return toHex(bits)
+}
+async function hashEditPassword(password:string){
+  if(typeof crypto==="undefined"||!crypto.subtle)throw new Error("이 브라우저에서는 비밀번호 보호를 사용할 수 없어요.")
+  const salt=crypto.getRandomValues(new Uint8Array(16))
+  return `pbkdf2$${EDIT_PW_ITERATIONS}$${toHex(salt.buffer)}$${await pbkdf2Hex(password,salt,EDIT_PW_ITERATIONS)}`
+}
+// 기존에 저장된 SHA-256 해시도 계속 검증한다. 새로 설정하는 비밀번호만 PBKDF2로 저장된다.
+async function matchesEditPassword(password:string,stored:string){
+  const value=String(stored||"")
+  if(!value)return true
+  if(value.startsWith("pbkdf2$")){
+    const [,iterRaw,saltHex,hashHex]=value.split("$")
+    const iterations=Number(iterRaw)
+    if(!iterations||!saltHex||!hashHex)return false
+    return await pbkdf2Hex(password,fromHex(saltHex),iterations)===hashHex
+  }
+  return await sha256Text(password)===value
 }
 
 type QrFileFormat = "png"|"svg"|"jpg"
@@ -2184,9 +2232,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [dashProgramFilter,setDashProgramFilter]=React.useState("")
   const [dashProgramGroupFilter,setDashProgramGroupFilter]=React.useState("")
   const [dashShowEmptyGroups,setDashShowEmptyGroups]=React.useState(false)
+  const [closingSoonOpen,setClosingSoonOpen]=React.useState(false)
   const [showCustomAppType,setShowCustomAppType]=React.useState(false)
   const [openConsentIdx,setOpenConsentIdx]=React.useState<Record<number,boolean>>({})
-  const [syncAdvOpen,setSyncAdvOpen]=React.useState(false)
   React.useEffect(()=>{
     const rgb=adminDark?"255,255,255":"141,149,163"
     const id="cf-admin-scrollbar-style"
@@ -2410,6 +2458,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [selectedFieldId,setSelectedFieldId]=React.useState<string|null>(null)
   const [editIdx,setEditIdx]=React.useState<number|null>(null)
   const [showAddField,setShowAddField]=React.useState(false)
+  const [sheetRenamePrompt,setSheetRenamePrompt]=React.useState<{from:string;to:string}|null>(null)
   const addFieldBtnRef=React.useRef<HTMLButtonElement|null>(null)
   const [addFieldMenuTop,setAddFieldMenuTop]=React.useState(118)
   // 메뉴를 '+ 질문 추가' 버튼 높이에 맞춰 띄우되, 화면 밖으로 넘치지 않게 위아래로 보정한다.
@@ -2441,7 +2490,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [pvKdtDrops,setPvKdtDrops]=React.useState<Record<string,boolean>>({})
 
   // ── Toast ─────────────────────────────────────────────────────────────
-  const [toast,setToast]=React.useState<{msg:string;ok:boolean;undo?:()=>void}|null>(null)
+  const [toast,setToast]=React.useState<{msg:string;ok:boolean;undo?:()=>void;action?:{label:string;onClick:()=>void}}|null>(null)
   const [toastLeaving,setToastLeaving]=React.useState(false)
   const toastRef=React.useRef<any>(null)
   const [deletedField,setDeletedField]=React.useState<{field:FormField;idx:number}|null>(null)
@@ -2467,9 +2516,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       window.removeEventListener("drop",clear)
     }
   },[optionDrag])
-  function showToast(msg:string,ok=true,undo?:()=>void){
+  function showToast(msg:string,ok=true,undo?:()=>void,action?:{label:string;onClick:()=>void}){
     setToastLeaving(false)
-    setToast({msg,ok,undo})
+    setToast({msg,ok,undo,action})
     clearTimeout(toastRef.current)
     toastRef.current=setTimeout(()=>{
       setToastLeaving(true)
@@ -2834,12 +2883,25 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setDashHasMore(true)
     setDashNextOffset(0)
     try{
+      // 첫 페이지만 받고 로딩을 끝내면, 아직 안 받은 폼은 목록에도 검색에도 안 나온다.
+      // (검색은 이미 받아온 목록을 로컬에서 거르는 방식이라 더 그렇다.)
+      // 그래서 남은 페이지까지 이어서 받은 뒤에 로딩을 끝낸다.
       const refreshLimit=silent?Math.max(DASHBOARD_PAGE_SIZE,dashNextOffset||0):DASHBOARD_PAGE_SIZE
       const all=await fetchFormSummaries(sb,refreshLimit,0)
+      if(all.length===refreshLimit){
+        // 페이지를 다 돌 때까지 이어붙인다. 무한 루프를 막기 위해 상한을 둔다.
+        for(let offset=all.length,guard=0;guard<40;guard++){
+          const next=await fetchFormSummaries(sb,DASHBOARD_PAGE_SIZE,offset)
+          if(!next.length)break
+          all.push(...next)
+          offset+=next.length
+          if(next.length<DASHBOARD_PAGE_SIZE)break
+        }
+      }
       const trashed=all.filter(isFormTrashed)
       const active=all.filter((item:any)=>!isFormTrashed(item))
       setDashNextOffset(all.length)
-      setDashHasMore(all.length===refreshLimit)
+      setDashHasMore(false)
       setFormTrashItems(trashed)
       setSnList(active.filter((x:any)=>(x.config?.brand||x.brand)==="SNIPERFACTORY"))
       setIoList(active.filter((x:any)=>(x.config?.brand||x.brand)==="INSIDEOUT"))
@@ -2984,7 +3046,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     try{
       const summaryHash=editPasswordPrompt.item.config?.dashboard?.editPasswordHash||""
       const expected=summaryHash||((await getFullFormRow(editPasswordPrompt.item)).config?.dashboard?.editPasswordHash||"")
-      if(expected&&await sha256Text(editPasswordPrompt.password)!==expected){
+      if(expected&&!(await matchesEditPassword(editPasswordPrompt.password,expected))){
         setEditPasswordPrompt(prev=>prev&&({...prev,checking:false,error:"비밀번호가 맞지 않아요."}))
         return
       }
@@ -3022,7 +3084,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(expected){
       const password=window.prompt("편집 비밀번호를 입력해주세요.")
       if(password===null)return
-      if(!password||await sha256Text(password)!==expected){showToast("편집 비밀번호가 맞지 않아요.",false);return}
+      if(!password||!(await matchesEditPassword(password,expected))){showToast("편집 비밀번호가 맞지 않아요.",false);return}
     }
     setView("builder")
   }
@@ -3090,12 +3152,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const changingEditPassword=!!dashboardSettings.editPasswordDraft||dashboardSettings.clearEditPassword
       if(changingEditPassword&&previousEditPasswordHash&&!canMasterReset(authRole)){
         if(!dashboardSettings.currentEditPasswordDraft)throw new Error("현재 편집 비밀번호를 입력해주세요.")
-        if(await sha256Text(dashboardSettings.currentEditPasswordDraft)!==previousEditPasswordHash)throw new Error("현재 편집 비밀번호가 맞지 않아요.")
+        if(!(await matchesEditPassword(dashboardSettings.currentEditPasswordDraft,previousEditPasswordHash)))throw new Error("현재 편집 비밀번호가 맞지 않아요.")
       }
       if(dashboardSettings.clearEditPassword)editPasswordHash=""
       else if(dashboardSettings.editPasswordDraft){
         if(dashboardSettings.editPasswordDraft.length<4)throw new Error("편집 비밀번호는 4자 이상으로 입력해주세요.")
-        editPasswordHash=await sha256Text(dashboardSettings.editPasswordDraft)
+        editPasswordHash=await hashEditPassword(dashboardSettings.editPasswordDraft)
       }
       next.dashboard={
         ...nextDashboard,
@@ -3386,7 +3448,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(!passwordHash)return true
     const password=window.prompt(`"${name}"을 삭제하려면 편집 비밀번호를 입력해주세요.`)
     if(password===null)return false
-    if(!password||await sha256Text(password)!==passwordHash){
+    if(!password||!(await matchesEditPassword(password,passwordHash))){
       showToast("편집 비밀번호가 맞지 않아 삭제할 수 없어요.",false)
       return false
     }
@@ -3658,12 +3720,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       await supa.from("form_configs").update({config:nextCfg,brand:dbBrandValue(currentBrand),updated_at:new Date().toISOString()}).eq("id",loadedId)
     }
   }
-  async function testGoogleSheetsIntegration(){
+  async function testGoogleSheetsIntegration(sheetAction:""|"rename"|"new"=""){
     const gs={...DEFAULT_GOOGLE_SHEETS,...(cfg.integrations?.googleSheets||{})}
-    const webhookUrl=String(gs.webhookUrl||googleSheetsWebhookUrl||"").trim()
+    // `새로 생성`으로 이미 시트를 만든 뒤 이름을 바꿨다면, 이름만 바꿀지 새로 만들지 먼저 묻는다.
+    // Apps Script는 폼 ID로 만든 시트를 기억하므로, 묻지 않으면 이름을 바꿔도 옛 시트에 계속 쌓인다.
+    if(!sheetAction&&gs.mode==="new"&&gs.createdSheetName&&String(gs.sheetName||"").trim()&&gs.createdSheetName!==String(gs.sheetName||"").trim()){
+      setSheetRenamePrompt({from:gs.createdSheetName,to:String(gs.sheetName||"").trim()})
+      return
+    }
+    // 폼별 전용 URL은 쓰지 않는다. 공통 환경변수 하나만 바라본다.
+    const webhookUrl=String(googleSheetsWebhookUrl||"").trim()
     if(!loadedId){showToast("폼을 먼저 저장한 뒤 연동 테스트를 해주세요.",false);return}
     if(!gs.enabled){showToast("응답 자동 연동을 먼저 켜주세요.",false);return}
-    if(!webhookUrl){showToast("Apps Script Web App URL을 입력해주세요.",false);return}
+    if(!webhookUrl){showToast("연동 서버 주소가 설정되지 않았어요. 관리자에게 문의해주세요.",false);return}
     setActionLoading("구글 시트 연동을 테스트하는 중이에요.")
     try{
       const payload={
@@ -3672,7 +3741,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         schema:"analytics_export_v1",
         mode:gs.mode||"existing",
         accountEmail:gs.accountEmail||"",
-        sheetUrl:gs.sheetUrl||"",
+        // `새로 생성` 모드에서는 시트 링크를 보내지 않는다.
+        // Apps Script가 mode를 보지 않고 sheetUrl이 있으면 그 시트를 열어버려서,
+        // 기존 시트로 쓰다가 새로 생성으로 바꾸면 옛 시트에 행이 계속 쌓였다.
+        sheetUrl:(gs.mode||"existing")==="existing"?(gs.sheetUrl||""):"",
+        ...(sheetAction?{sheetAction}:{}),
         sheetName:gs.sheetName||cfg.header?.title||"CatchForm Responses",
         formId:loadedId,
         formSlug:savedSlug||saveSlug||"",
@@ -3700,9 +3773,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         {
           webhookUrl,
           ...(returnedSheetUrl?{sheetUrl:returnedSheetUrl}:{}),
+          ...(gs.mode==="new"?{createdSheetName:String(gs.sheetName||"").trim()}:{}),
         }
       )
-      showToast("테스트 전송 요청 완료! 시트를 확인해주세요.")
+      // 새로 만든 시트를 바로 열 수 있도록 토스트에 버튼을 붙인다.
+      const openUrl=returnedSheetUrl||googleSheetOpenUrl({...gs,...(returnedSheetUrl?{sheetUrl:returnedSheetUrl}:{})})
+      showToast("테스트 전송 요청 완료! 시트를 확인해주세요.",true,undefined,
+        openUrl?{label:"시트 열기",onClick:()=>window.open(openUrl,"_blank","noopener,noreferrer")}:undefined)
       loadList()
     }catch(e){
       const msg=(e as any)?.message||"테스트 전송 실패"
@@ -4839,7 +4916,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             ...brand,
             count:saved.filter((item:any)=>brandOf(item)===brand.id).length,
           }))
-          const tableColumns="minmax(240px,1.4fr) minmax(150px,0.9fr) 84px 82px 78px 92px 128px"
+          const tableColumns="minmax(240px,1.8fr) 60px 84px 82px 78px 92px 158px"
           const sideButton=(active:boolean):React.CSSProperties=>({width:"100%",height:32,padding:"0 8px",borderRadius:A.r,border:"none",background:active?A.blue2:"transparent",color:active?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:active?600:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left" as const})
           const sidebarToolButton=(color:string=A.t2):React.CSSProperties=>({width:"100%",height:32,padding:"0 8px",borderRadius:A.r,border:"none",background:"transparent",color,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left" as const})
           const openGuide=()=>{
@@ -4890,8 +4967,62 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               </div>
             </aside>
             <main style={{flex:1,minWidth:0,overflow:"hidden",padding:0,display:"flex",flexDirection:"column" as const,background:A.card}}>
+              {/* 마감 임박 알림 — 운영 종료가 CLOSING_SOON_DAYS 이내로 남은 폼을 탭 위에 띄운다.
+                  여러 건일 때 우측 버튼 하나로는 어느 폼을 여는지 알 수 없어, 펼쳐서 각 폼을 따로 열도록 한다. */}
+              {(()=>{
+                const closing=sidebarItems
+                  .map((item:any)=>({item,days:daysUntilOperationEnd(item.config?.dashboard,recruitmentPeriodOf(programOf(item),recruitmentPeriodModeOf(item.config)))}))
+                  .filter((entry:any)=>entry.days!==null&&entry.days<=CLOSING_SOON_DAYS&&!isFormTrashed(entry.item))
+                  .sort((a:any,b:any)=>a.days-b.days)
+                if(!closing.length)return null
+                const head=closing[0]
+                const nameOf=(entry:any)=>String(entry.item.name||entry.item.config?.header?.title||"이름 없는 폼")
+                const dayOf=(entry:any)=>entry.days<=0?"D-DAY":`D-${entry.days}`
+                const accent=adminDark?"#F5B546":"#B26A00"
+                const badge={flexShrink:0,height:20,padding:"0 8px",borderRadius:999,display:"inline-flex",alignItems:"center",lineHeight:1,fontSize:11.5,fontWeight:700,
+                  background:adminDark?"rgba(245,158,11,0.2)":"#FBE7C2",color:adminDark?"#F5B546":"#9A5B00"} as React.CSSProperties
+                return <div style={{flexShrink:0,padding:"18px 24px 16px"}}>
+                  <div style={{borderRadius:12,background:adminDark?"rgba(245,158,11,0.12)":"#FFF7E8",boxShadow:`inset 0 0 0 1px ${adminDark?"rgba(245,158,11,0.28)":"#F6E3BE"}`}}>
+                    <div onClick={()=>setClosingSoonOpen(v=>!v)}
+                      style={{display:"flex",alignItems:"center",gap:14,padding:"12px 14px 12px 16px",cursor:"pointer",userSelect:"none" as const}}>
+                      <span style={{flexShrink:0,fontSize:12.5,fontWeight:700,color:accent}}>마감 임박</span>
+                      <span style={{minWidth:0,display:"flex",alignItems:"center",gap:10,flex:1,overflow:"hidden"}}>
+                        {closingSoonOpen
+                          ? <span style={{fontSize:12.5,color:A.t3}}>{closing.length}건</span>
+                          : <>
+                              <span style={{minWidth:0,fontSize:13,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{nameOf(head)}</span>
+                              {/* 배지는 명시적 높이와 line-height가 있어야 텍스트와 세로 중심이 맞는다. */}
+                              <span style={badge}>{dayOf(head)}</span>
+                              {closing.length>1&&<span style={{flexShrink:0,fontSize:12.5,color:A.t3}}>외 {closing.length-1}건</span>}
+                            </>}
+                      </span>
+                      <span style={{flexShrink:0,width:26,height:26,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",color:accent}}>
+                        <svg width="11" height="11" viewBox="0 0 10 10" fill="none" style={{transform:closingSoonOpen?"rotate(180deg)":"none",transition:"transform .15s"}}>
+                          <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </span>
+                    </div>
+                    {closingSoonOpen&&<div style={{padding:"0 10px 10px"}}>
+                      {closing.map((entry:any,i:number)=>(
+                        <div key={entry.item.id||i}
+                          style={{display:"flex",alignItems:"center",gap:10,minHeight:40,padding:"0 6px",borderRadius:8,
+                            boxShadow:i===0?`inset 0 1px 0 ${adminDark?"rgba(245,158,11,0.22)":"#F1DCB4"}`:"none"}}>
+                          <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:500,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{nameOf(entry)}</span>
+                          <span style={badge}>{dayOf(entry)}</span>
+                          <button onPointerDown={()=>prefetchFullFormRow(entry.item,true)} onClick={()=>requestOpenFormForEdit(entry.item)}
+                            style={{flexShrink:0,height:28,padding:"0 11px",borderRadius:7,border:"none",background:A.card,color:A.t2,
+                              fontFamily:FONT,fontSize:12,fontWeight:600,cursor:"pointer",boxShadow:"0 1px 2px rgba(16,24,40,.08)"}}>
+                            폼 열기
+                          </button>
+                        </div>
+                      ))}
+                    </div>}
+                  </div>
+                </div>
+              })()}
               <div style={{position:"relative" as const,flexShrink:0,boxShadow:`inset 0 -1px 0 ${A.border}`}}>
               <style>{`.cf-course-tabs{scrollbar-width:none;-ms-overflow-style:none}.cf-course-tabs::-webkit-scrollbar{display:none;width:0;height:0}`}</style>
+              <style>{`.cf-tip{position:relative}.cf-tip::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);padding:5px 8px;border-radius:6px;background:${adminDark?"#2A2F3A":"#15181D"};color:#fff;font-size:11.5px;font-weight:600;line-height:1;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .12s;z-index:20}.cf-tip:hover::after{opacity:1}`}</style>
               <div ref={courseTabsRef} onScroll={syncCourseTabsArrows} className="cf-course-tabs" style={{display:"flex",alignItems:"center",gap:22,padding:"0 24px",overflowX:"auto" as const}}>
                 <button onClick={()=>{setDashProgramGroupFilter("");setDashProgramFilter("")}}
                   style={{height:44,padding:"0 2px",border:"none",borderRadius:0,background:"transparent",color:!dashProgramGroupFilter?A.t1:A.t3,fontFamily:FONT,fontSize:13.5,fontWeight:!dashProgramGroupFilter?700:500,cursor:"pointer",whiteSpace:"nowrap" as const,display:"flex",alignItems:"center",gap:7,boxShadow:!dashProgramGroupFilter?`inset 0 -2px 0 ${A.blue}`:"none"}}>
@@ -5000,7 +5131,18 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                           {locked&&<span title="편집 비밀번호 설정됨" style={{color:A.t3,display:"inline-flex",alignItems:"center",flexShrink:0}}><LockIcon/></span>}
                         </div>
                       </div>
-                      <span style={{color:program?.title?A.t2:A.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{program?.title||"교육과정 없음"}</span>
+                      {/* 전체 189개 중 연결된 폼은 46개(24%)뿐이라, 매 행에 배지를 찍으면 정보량 없이 무게만 늘어난다.
+                          배지는 더 자주 스캔하는 상태 열에만 남기고 여기는 아이콘 하나로 낮춘다. */}
+                      <span style={{display:"flex",alignItems:"center",color:program?A.blue:A.t4}}>
+                        {program
+                          ? <span className="cf-tip" data-tip={program.title||"교육과정 연결됨"} style={{display:"inline-flex",alignItems:"center"}}>
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-label="교육과정 연결됨">
+                                <path d="M10 13a5 5 0 0 0 7.54.54l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                <path d="M14 11a5 5 0 0 0-7.54-.54l-2 2a5 5 0 0 0 7.07 7.07l1.14-1.14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </span>
+                          : <span title="연결된 교육과정 없음" style={{fontSize:13}}>–</span>}
+                      </span>
                       <span style={{color:A.t2}}>{typeLabel(type)}</span>
                       <span><span style={{display:"inline-flex",alignItems:"center",padding:"3px 8px",borderRadius:6,background:status.bg,color:status.color,fontSize:11.5,fontWeight:600}}>
                         {status.label}
@@ -5013,8 +5155,25 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       </div>
                       <span style={{fontSize:12.5,color:A.t3,fontVariantNumeric:"tabular-nums" as const}}>{item.updated_at?new Date(item.updated_at).toLocaleDateString("ko-KR"):"-"}</span>
                       <div style={{display:"flex",justifyContent:"flex-end",gap:4}}>
-                        <button onClick={()=>openFormAnalytics(item)} title="응답 및 분석" style={{width:28,height:28,borderRadius:7,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 20V11M10 20V4M16 20v-6M22 20H2" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/></svg></button>
-                        <button onClick={()=>openDashboardSettings(item)} title="폼 설정" style={{width:28,height:28,borderRadius:7,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><GearIcon size={14}/></button>
+                        <button onClick={()=>openFormAnalytics(item)} className="cf-tip" data-tip="응답 및 분석" aria-label="응답 및 분석" style={{width:28,height:28,borderRadius:7,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.color=A.t1}}
+                          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 20V11M10 20V4M16 20v-6M22 20H2" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/></svg></button>
+                        <button onClick={()=>openDashboardSettings(item)} className="cf-tip" data-tip="폼 설정" aria-label="폼 설정" style={{width:28,height:28,borderRadius:7,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.color=A.t1}}
+                          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}><GearIcon size={14}/></button>
+                        <button onClick={()=>{
+                          const slug=String(item.slug||item.config?.slug||"").trim()
+                          if(!slug){showToast("슬러그가 저장된 폼만 바로 열 수 있어요.",false);return}
+                          window.open(buildPublicFormUrl(slug),"_blank","noopener,noreferrer")
+                        }} className="cf-tip" data-tip="폼 열기" aria-label="폼 열기" style={{width:28,height:28,borderRadius:7,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.color=A.t1}}
+                          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M14 4h6v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M20 4l-8.5 8.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                            <path d="M18 14.5V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
                         <button onPointerDown={()=>prefetchFullFormRow(item,true)} onFocus={()=>prefetchFullFormRow(item,true)} onClick={()=>requestOpenFormForEdit(item)} title="편집" style={{height:28,padding:"0 11px",borderRadius:7,border:`1px solid ${adminDark?A.border:"#E3E7EC"}`,background:A.card,color:A.t2,cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:600}}>편집</button>
                       </div>
                     </div>
@@ -5296,6 +5455,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <span style={{width:16,height:16,borderRadius:8,background:toast.ok?A.green:A.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:10,fontWeight:700,color:"#fff"}}>{toast.ok?"✓":"!"}</span><span>{toast.msg}</span>
           {toast.undo&&<button onClick={toast.undo}
             style={{marginLeft:8,padding:"2px 10px",borderRadius:5,border:"none",background:"rgba(255,255,255,.1)",cursor:"pointer",color:"#fff",fontFamily:FONT,fontSize:12,fontWeight:600}}>실행 취소</button>}
+          {toast.action&&<button onClick={()=>{toast.action?.onClick();setToast(null)}}
+            style={{marginLeft:10,flexShrink:0,height:26,padding:"0 11px",borderRadius:6,border:"none",background:"rgba(255,255,255,.16)",cursor:"pointer",color:"#fff",fontFamily:FONT,fontSize:12,fontWeight:600}}>{toast.action.label}</button>}
         </div>
       )}
       {/* GUIDE MODAL */}
@@ -5583,10 +5744,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   const custom=!!cfg.header.applicationType&&cfg.header.applicationType!=="pre"&&cfg.header.applicationType!=="formal"
                   return <div style={{display:"flex",flexDirection:"column" as const,gap:8}}>
                     <PanelSegment value={cfg.header.applicationType||""} A={A}
-                      onChange={v=>{setShowCustomAppType(false);uh("applicationType",v)}}
+                      onChange={v=>{setShowCustomAppType(false);setCfg(p=>({...p,header:{...p.header,applicationType:v,applicationTypeIsConversion:false}}))}}
                       options={[{value:"pre",label:"사전 알림"},{value:"formal",label:"정식 신청"}]}/>
                     {custom||showCustomAppType
-                      ? <TIn value={custom?cfg.header.applicationType||"":""} onChange={v=>uh("applicationType",v)} placeholder="직접 입력 (예: interview)" A={A}/>
+                      ? <div style={{display:"flex",alignItems:"center",gap:10}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <TIn value={custom?cfg.header.applicationType||"":""} onChange={v=>uh("applicationType",v)} placeholder="직접 입력 (예: interview)" A={A}/>
+                          </div>
+                          {/* 직접 입력한 유형도 전환(메타 픽셀 Lead)으로 볼지 폼 작성자가 직접 정한다. */}
+                          <span style={{flexShrink:0}} title="체크하면 이 폼의 제출을 광고 전환으로 집계합니다.">
+                            <PanelCheckRow label="전환" on={!!cfg.header.applicationTypeIsConversion}
+                              toggle={()=>uh("applicationTypeIsConversion",!cfg.header.applicationTypeIsConversion)} A={A}/>
+                          </span>
+                        </div>
                       : <button onClick={()=>setShowCustomAppType(true)}
                           style={{alignSelf:"flex-start" as const,height:28,padding:"0 2px",border:"none",background:"transparent",color:A.t2,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
                           <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
@@ -6292,8 +6462,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
       case "integrations": {
         const gs={...DEFAULT_GOOGLE_SHEETS,...(cfg.integrations?.googleSheets||{})}
-        const effectiveWebhookUrl=String(gs.webhookUrl||googleSheetsWebhookUrl||"").trim()
-        const usingGlobalWebhook=!String(gs.webhookUrl||"").trim()&&!!googleSheetsWebhookUrl
+        const effectiveWebhookUrl=String(googleSheetsWebhookUrl||"").trim()
         const ready=!!gs.enabled&&!!effectiveWebhookUrl
         const statusLabel=!gs.enabled?"연동 꺼짐":!effectiveWebhookUrl?"설정 필요":gs.lastSyncStatus==="sent"?"전송 요청 완료":gs.lastSyncStatus==="error"?"최근 전송 실패":"연동 대기"
         const statusColor=!gs.enabled?A.t3:!effectiveWebhookUrl?A.red:gs.lastSyncStatus==="error"?A.red:A.green
@@ -6303,75 +6472,80 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         const syncMessage=/<!doctype html|<html[\s>]|Google Drive|unable to open the file|Page Not Found/i.test(syncMessageRaw)
           ?"Google Drive/Docs 오류 페이지가 응답했어요. Apps Script Web App URL이 `https://script.google.com/macros/s/.../exec` 형식인지 확인해주세요."
           :syncMessageRaw
+        // 시트가 실제로 연결된 상태인지 (기존 시트는 링크, 새로 생성은 만들어진 기록으로 판단)
+        const sheetLinked=gs.mode==="existing"?!!String(gs.sheetUrl||"").trim():!!gs.createdSheetName
+        const stepTargetDone=!!gs.mode
+        const stepInputDone=gs.mode==="existing"?!!String(gs.sheetUrl||"").trim():!!String(gs.sheetName||"").trim()
+        const actionLabel=gs.mode==="existing"?(sheetLinked?"연결 확인":"시트 연결하기"):(sheetLinked?"테스트 전송":"시트 만들기")
+        // 세로 스테퍼 — 좌측에 번호와 연결선을 두고, 컨트롤은 다른 패널과 같은 형태를 유지한다.
+        const stepRow=(n:number,title:string,done:boolean,hint:string,body:React.ReactNode,last=false)=>(
+          <div style={{display:"flex",gap:12}}>
+            <div style={{width:22,flexShrink:0,display:"flex",flexDirection:"column" as const,alignItems:"center"}}>
+              <span style={{width:22,height:22,borderRadius:11,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                fontSize:11,fontWeight:700,fontFamily:FONT,
+                background:done?A.blue:"transparent",color:done?"#fff":A.t3,
+                boxShadow:done?"none":`inset 0 0 0 1.5px ${A===ALT?"#DFE3E9":A.border2}`}}>
+                {done?"✓":n}
+              </span>
+              {!last&&<span style={{flex:1,width:1.5,marginTop:4,marginBottom:4,borderRadius:1,background:A===ALT?"#E7EAEF":A.border,minHeight:12}}/>}
+            </div>
+            <div style={{flex:1,minWidth:0,paddingBottom:last?0:18}}>
+              <div style={{fontSize:12.5,fontWeight:700,color:A.t1,marginTop:3,marginBottom:hint?4:9}}>{title}</div>
+              {hint&&<div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginBottom:9}}>{hint}</div>}
+              {body}
+            </div>
+          </div>
+        )
         return <div style={pd}>
-          <div style={{display:"flex",flexDirection:"column" as const,gap:16}}>
-            {/* 상태 카드 — 토글 · 설명 · 연동 상태를 한 덩어리로 */}
-            <div style={{padding:14,borderRadius:11,background:panelFieldBg(A)}}>
+          <div style={{display:"flex",flexDirection:"column" as const,gap:14}}>
+            {/* 켜고 끄기 — 꺼져 있으면 아래 단계는 의미가 없으므로 감춘다 */}
+            <div style={{padding:14,borderRadius:12,background:panelFieldBg(A),marginBottom:4}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
                 <span style={{fontSize:13.5,fontWeight:700,color:A.t1}}>응답 자동 연동</span>
                 <div onClick={()=>ug("enabled",!gs.enabled)} style={{width:44,height:25,borderRadius:13,background:gs.enabled?A.blue:(A===ALT?"#DFE3E9":A.border2),position:"relative" as const,transition:"background .2s",cursor:"pointer",flexShrink:0}}>
                   <div style={{position:"absolute" as const,width:19,height:19,borderRadius:"50%",background:"#fff",top:3,left:gs.enabled?22:3,transition:"left .2s",boxShadow:"0 1px 3px rgba(16,24,40,0.24)"}}/>
                 </div>
               </div>
-              <div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,marginTop:6}}>제출된 응답을 구글 스프레드시트로 자동 전송합니다.</div>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginTop:12,paddingTop:12,boxShadow:`inset 0 1px 0 ${A.border}`}}>
-                <span style={{width:6,height:6,borderRadius:3,background:statusColor,flexShrink:0}}/>
-                <span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:600,color:statusColor}}>{statusLabel}</span>
-                <button onClick={()=>sheetOpenUrl?window.open(sheetOpenUrl,"_blank","noopener,noreferrer"):showToast(gs.mode==="new"?"테스트 전송 후 생성된 시트 링크가 저장되면 이동할 수 있어요.":"연결할 시트 링크를 입력하면 바로 이동할 수 있어요.",false)}
-                  style={{height:28,padding:"0 10px",borderRadius:7,border:"none",background:A.card,color:sheetOpenUrl?A.t2:A.t3,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>
-                  시트로 이동
-                </button>
-              </div>
-              <div style={{fontSize:11.5,color:A.t3,lineHeight:1.6,marginTop:8}}>
-                {ready?`마지막 상태: ${lastSyncText}`:"계정 이메일만으로는 연동되지 않아요. 공통 Apps Script URL을 Vercel 환경변수에 넣거나, 고급 설정에서 이 폼에 직접 URL을 입력해야 응답이 시트로 전송됩니다."}
-                {syncMessage&&<div style={{marginTop:4,color:gs.lastSyncStatus==="error"?A.red:A.t3}}>{syncMessage}</div>}
+              <div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,marginTop:6}}>
+                {gs.enabled?"제출된 응답이 아래 시트에 한 줄씩 쌓입니다.":"켜면 제출된 응답을 구글 시트로 자동 전송합니다."}
               </div>
             </div>
 
-            <F label="전송 대상" A={A}>
-              <PanelSegment value={gs.mode} onChange={v=>ug("mode",v as "existing"|"new")} A={A}
-                options={[{value:"existing",label:"기존 시트"},{value:"new",label:"새로 생성"}]}/>
-            </F>
+            {gs.enabled&&<div>
+              {stepRow(1,"어디에 보낼지 고르기",stepTargetDone,"",
+                <PanelSegment value={gs.mode} onChange={v=>ug("mode",v as "existing"|"new")} A={A}
+                  options={[{value:"existing",label:"기존 시트"},{value:"new",label:"새로 생성"}]}/>)}
 
-            <F label="연동 계정" A={A}><TIn value={gs.accountEmail} onChange={v=>ug("accountEmail",v)} placeholder="google@example.com" A={A}/></F>
+              {gs.mode!=="existing"&&stepRow(2,"시트를 공유받을 계정",!!String(gs.accountEmail||"").trim(),
+                "새로 만드는 시트는 연동 서버 계정 소유가 됩니다. 여기 적은 계정에 편집 권한을 줍니다.",
+                <TIn value={gs.accountEmail} onChange={v=>ug("accountEmail",v)} placeholder="google@example.com" A={A}/>)}
 
-            <F label={gs.mode==="existing"?"시트 링크":"생성할 시트 이름"} A={A}>
-              <TIn value={gs.mode==="existing"?gs.sheetUrl:gs.sheetName} onChange={v=>gs.mode==="existing"?ug("sheetUrl",v):ug("sheetName",v)} placeholder={gs.mode==="existing"?"https://docs.google.com/spreadsheets/d/...":"예) 5월 신청 응답"} A={A}/>
-            </F>
+              {stepRow(gs.mode==="existing"?2:3,gs.mode==="existing"?"시트 링크 붙여넣기":"만들 시트 이름 정하기",stepInputDone,
+                gs.mode==="existing"?"응답을 쌓을 구글 스프레드시트 주소를 넣어주세요.":"",
+                <TIn value={gs.mode==="existing"?gs.sheetUrl:gs.sheetName}
+                  onChange={v=>gs.mode==="existing"?ug("sheetUrl",v):ug("sheetName",v)}
+                  placeholder={gs.mode==="existing"?"https://docs.google.com/spreadsheets/d/...":"예) 5월 신청 응답"} A={A}/>)}
 
-            {/* 고급 설정 — Apps Script URL은 잘못 건드리면 연동이 끊기므로 기본으로 접어둔다 */}
-            <div>
-              <button onClick={()=>setSyncAdvOpen(v=>!v)}
-                style={{width:"100%",height:44,display:"flex",alignItems:"center",gap:8,padding:"0 14px",borderRadius:10,border:"none",background:panelFieldBg(A),color:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
-                <span style={{flex:1,textAlign:"left" as const}}>고급 설정</span>
-                <span style={{fontSize:11.5,color:A.t3,fontWeight:500}}>{usingGlobalWebhook?"공통 URL 자동 적용 중":effectiveWebhookUrl?"폼 전용 URL 사용 중":"URL 미설정"}</span>
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A.t3,transform:syncAdvOpen?"none":"rotate(-90deg)",transition:"transform .15s"}}>
-                  <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-              {syncAdvOpen&&<div style={{marginTop:9}}>
-                <F label="Apps Script Web App URL" A={A}>
-                  <TIn value={gs.webhookUrl} onChange={v=>ug("webhookUrl",v)} placeholder="https://script.google.com/macros/s/..." A={A}/>
-                  <div style={{fontSize:12,color:A.t3,lineHeight:1.6,marginTop:7}}>
-                    {usingGlobalWebhook?"Vercel 공통 URL이 자동 적용 중이에요. 이 폼만 다른 URL을 써야 할 때 입력하세요.":"이 폼만 다른 URL을 써야 할 때 입력하세요."}
+              {stepRow(gs.mode==="existing"?3:4,"연결하고 확인하기",sheetLinked&&gs.lastSyncStatus==="sent","",
+                <div>
+                  <button onClick={()=>{if(!loadedId){setShowSave(true);return}updateCfg(false);testGoogleSheetsIntegration()}}
+                    disabled={!stepInputDone}
+                    style={{width:"100%",height:44,borderRadius:10,border:"none",background:stepInputDone?A.blue:(A===ALT?"#E7EAEF":A.border2),color:stepInputDone?"#fff":A.t3,
+                      fontFamily:FONT,fontSize:13,fontWeight:700,cursor:stepInputDone?"pointer":"not-allowed"}}>
+                    {actionLabel}
+                  </button>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:12}}>
+                    <span style={{width:6,height:6,borderRadius:3,background:statusColor,flexShrink:0}}/>
+                    <span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:600,color:statusColor}}>{statusLabel}</span>
+                    {sheetOpenUrl&&<button onClick={()=>window.open(sheetOpenUrl,"_blank","noopener,noreferrer")}
+                      style={{flexShrink:0,height:28,padding:"0 10px",borderRadius:7,border:"none",background:panelFieldBg(A),color:A.t2,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                      시트 열기
+                    </button>}
                   </div>
-                </F>
-              </div>}
-            </div>
-
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,paddingTop:2}}>
-              <button onClick={()=>loadedId?updateCfg(false):setShowSave(true)}
-                style={{height:44,borderRadius:10,border:`1px solid ${A===ALT?"#E3E7EC":A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>
-                설정 저장
-              </button>
-              <button onClick={testGoogleSheetsIntegration}
-                style={{height:44,borderRadius:10,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>
-                테스트 전송
-              </button>
-            </div>
-          </div>
-          <div style={{marginTop:16,padding:"12px 14px",borderRadius:10,background:panelFieldBg(A),border:"none",color:A.t2,fontSize:12.5,lineHeight:1.7}}>
-            이 설정은 <b>설정 저장</b> 또는 우측 상단 <b>저장</b>을 눌러야 실제 배포된 폼에 반영돼요. 저장 후 <b>테스트 전송</b>을 눌러 시트에 테스트 행이 생기는지 먼저 확인해주세요.
+                  {(ready?lastSyncText:"")&&<div style={{fontSize:11.5,color:A.t3,lineHeight:1.6,marginTop:6}}>마지막 전송: {lastSyncText}</div>}
+                  {syncMessage&&<div style={{fontSize:11.5,lineHeight:1.6,marginTop:6,color:gs.lastSyncStatus==="error"?A.red:A.t3}}>{syncMessage}</div>}
+                </div>,true)}
+            </div>}
           </div>
         </div>
       }
@@ -7479,6 +7653,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     }
     const completedSessions=sessions.filter(evs=>evs.some(e=>e.event_type==="completed")).length
     const sessionCount=sessions.length||rows.length
+    // 참여는 세션(탭) 단위라 인앱 브라우저 재진입이 매번 새로 잡힌다.
+    // 방문자는 localStorage의 visitor_id 기준이라 같은 브라우저의 재방문을 한 명으로 센다.
+    // 2026-09-08 이전 이벤트에는 visitor_id가 없어, 값이 하나도 없으면 카드를 감춘다.
+    const visitorIds=new Set<string>()
+    let visitorTrackedSessions=0
+    sessions.forEach(evs=>{
+      const id=evs.map(e=>String(analyticsEventMeta(e).visitor_id||"")).find(Boolean)
+      if(id){visitorIds.add(id);visitorTrackedSessions+=1}
+    })
+    const visitorCount=visitorIds.size
+    const visitorCoverage=sessionCount?visitorTrackedSessions/sessionCount:0
     const completionRate=sessionCount?Math.min(100,Math.round(((completedSessions||rows.length)/sessionCount)*10000)/100):0
     const durations=sessions.map(evs=>{const done=evs.find(e=>e.event_type==="completed");return done&&evs[0]?Math.max(0,(new Date(done.created_at).getTime()-new Date(evs[0].created_at).getTime())/1000):0}).filter(Boolean)
     const avgSec=durations.length?Math.round(durations.reduce((a,b)=>a+b,0)/durations.length):0
@@ -7999,6 +8184,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <div style={{fontSize:18,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:16}}>기간별 인사이트</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14,marginBottom:16}}>
 	              {metric(<path d="M5 3l7 5-7 5V3z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/>,String(sessionCount),"참여",chartBlue)}
+	              {visitorCount>0&&metric(<><circle cx="8" cy="5.5" r="2.6" stroke="currentColor" strokeWidth="1.6"/><path d="M3 13a5 5 0 0 1 10 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></>,String(visitorCount),visitorCoverage<0.9?"방문자 (집계 중)":"방문자",chartPurple)}
 	              {metric(<path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>,`${completionRate}%`,"완료율",chartGreen)}
 	              {metric(<><circle cx="8" cy="8" r="5" stroke="currentColor" strokeWidth="1.6"/><path d="M8 5v3l2 1.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></>,avgTime,"평균 세션시간",chartYellow)}
             </div>
@@ -8604,21 +8790,56 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       })()}
 
       {/* UPDATE MODAL */}
+      {sheetRenamePrompt&&(
+        <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1001}} onClick={()=>setSheetRenamePrompt(null)}>
+          <div style={{width:400,padding:24,borderRadius:16,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:17,fontWeight:700,color:A.t1,marginBottom:6,letterSpacing:"-.2px"}}>시트 이름이 바뀌었어요</div>
+            <div style={{fontSize:13,color:A.t2,lineHeight:1.65,marginBottom:14}}>
+              이미 만들어둔 시트가 있어요. 이름만 바꿀지, 새 시트를 만들지 골라주세요.
+            </div>
+            <div style={{padding:"12px 14px",borderRadius:10,background:panelFieldBg(A),marginBottom:18,fontSize:12.5,lineHeight:1.7}}>
+              <div style={{color:A.t3}}>지금 시트</div>
+              <div style={{color:A.t1,fontWeight:600,marginBottom:6}}>{sheetRenamePrompt.from}</div>
+              <div style={{color:A.t3}}>입력한 이름</div>
+              <div style={{color:A.t1,fontWeight:600}}>{sheetRenamePrompt.to}</div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
+              <button onClick={()=>{setSheetRenamePrompt(null);testGoogleSheetsIntegration("rename")}}
+                style={{height:42,borderRadius:10,border:`1px solid ${A===ALT?"#E3E7EC":A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>
+                이름만 변경
+              </button>
+              <button onClick={()=>{setSheetRenamePrompt(null);testGoogleSheetsIntegration("new")}}
+                style={{height:42,borderRadius:10,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                새 시트 생성
+              </button>
+            </div>
+            <div style={{marginTop:10,fontSize:11.5,color:A.t3,lineHeight:1.6}}>
+              새로 만들면 이전 시트는 그대로 남아요. 필요 없으면 직접 지워주세요.
+            </div>
+          </div>
+        </div>
+      )}
       {showUpdateModal&&(
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setShowUpdateModal(false)}>
           <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:cfg.header.programUnlinked?500:320,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
             <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:8}}>수정 사항 저장</div>
             <div style={{fontSize:13.5,color:A.t2,marginBottom:6}}><span style={{fontWeight:600,color:A.t1}}>"{loadedName}"</span>에 변경 사항을 덮어쓰시겠어요?</div>
             <div style={{fontSize:12,color:A.t3,marginBottom:22,lineHeight:1.5}}>기존 설정이 수정된 내용으로 교체됩니다.</div>
-            {cfg.header.programUnlinked&&<div style={{padding:"12px 12px 11px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`}}>
-              <div style={{fontSize:12,fontWeight:700,color:A.blue,marginBottom:5}}>폼 운영 기간</div>
-              <div style={{fontSize:11.5,color:A.t2,lineHeight:1.5,marginBottom:8}}>교육과정 연동을 하지 않는 폼은 운영 기간을 설정해야 합니다.</div>
-              <OperationPeriodsEditor compact periods={operationPeriodsFromDashboard(cfg.dashboard)} onChange={setOperationPeriods} A={A}/>
+            {cfg.header.programUnlinked&&<div style={{marginBottom:16}}>
+              <div style={{fontSize:12,fontWeight:600,color:A.t3,marginBottom:9}}>폼 운영 기간</div>
+              <div style={{fontSize:11.5,color:A.t2,lineHeight:1.5,marginBottom:9}}>교육과정 연동을 하지 않는 폼은 운영 기간을 설정해야 합니다.</div>
+              <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:8}}>
+                <input type="checkbox" checked={!!cfg.dashboard?.alwaysOpen}
+                  onChange={e=>setCfg(p=>({...p,dashboard:{...(p.dashboard||{}),alwaysOpen:e.target.checked,...(e.target.checked?{manualStatus:""}:{})}}))}/>
+                상시 운영
+              </label>
+              <div style={{fontSize:11.5,color:A.t3,lineHeight:1.5,marginBottom:9}}>체크하면 기간과 관계없이 진행중으로 표시됩니다. 체크를 꺼도 설정해둔 기간은 유지됩니다.</div>
+              <OperationPeriodsEditor periods={operationPeriodsFromDashboard(cfg.dashboard)} disabled={!!cfg.dashboard?.alwaysOpen} onChange={setOperationPeriods} A={A}/>
             </div>}
             <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-              <Btn onClick={()=>{setShowUpdateModal(false);setShowSave(true)}} sm A={A}>새 이름으로 저장</Btn>
-              <Btn onClick={()=>setShowUpdateModal(false)} sm A={A}>취소</Btn>
-              <Btn onClick={updateCfg} variant="blue" sm A={A}>수정 저장</Btn>
+              <button onClick={()=>{setShowUpdateModal(false);setShowSave(true)}} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>새 이름으로 저장</button>
+              <button onClick={()=>setShowUpdateModal(false)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
+              <button onClick={()=>updateCfg()} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>수정 저장</button>
             </div>
           </div>
         </div>
@@ -8639,15 +8860,21 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <input value={saveSlug} onChange={e=>setSaveSlug(e.target.value)} placeholder="uxui-9th-open"
                 style={{width:"100%",background:A.card2,border:`1.5px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:13,padding:"8px 11px",outline:"none",boxSizing:"border-box" as const}}/>
             </div>
-            {cfg.header.programUnlinked&&<div style={{padding:"12px 12px 11px",marginBottom:14,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`}}>
-              <div style={{fontSize:12,fontWeight:700,color:A.blue,marginBottom:5}}>폼 운영 기간</div>
-              <div style={{fontSize:11.5,color:A.t2,lineHeight:1.5,marginBottom:8}}>교육과정 연동을 하지 않는 폼은 운영 기간을 설정해야 합니다.</div>
-              <OperationPeriodsEditor compact periods={operationPeriodsFromDashboard(cfg.dashboard)} onChange={setOperationPeriods} A={A}/>
+            {cfg.header.programUnlinked&&<div style={{marginBottom:14}}>
+              <div style={{fontSize:12,fontWeight:600,color:A.t3,marginBottom:9}}>폼 운영 기간</div>
+              <div style={{fontSize:11.5,color:A.t2,lineHeight:1.5,marginBottom:9}}>교육과정 연동을 하지 않는 폼은 운영 기간을 설정해야 합니다.</div>
+              <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:8}}>
+                <input type="checkbox" checked={!!cfg.dashboard?.alwaysOpen}
+                  onChange={e=>setCfg(p=>({...p,dashboard:{...(p.dashboard||{}),alwaysOpen:e.target.checked,...(e.target.checked?{manualStatus:""}:{})}}))}/>
+                상시 운영
+              </label>
+              <div style={{fontSize:11.5,color:A.t3,lineHeight:1.5,marginBottom:9}}>체크하면 기간과 관계없이 진행중으로 표시됩니다. 체크를 꺼도 설정해둔 기간은 유지됩니다.</div>
+              <OperationPeriodsEditor periods={operationPeriodsFromDashboard(cfg.dashboard)} disabled={!!cfg.dashboard?.alwaysOpen} onChange={setOperationPeriods} A={A}/>
             </div>}
             {saveErr&&<div style={{fontSize:12,color:A.red,marginBottom:10,padding:"8px 10px",borderRadius:A.r,background:"rgba(232,92,92,0.06)",border:"1px solid rgba(232,92,92,0.18)"}}>{saveErr}</div>}
             <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-              <Btn onClick={()=>setShowSave(false)} sm A={A}>취소</Btn>
-              <Btn onClick={saveCfg} variant="blue" disabled={saving} sm A={A}>{saving?"저장 중...":"저장"}</Btn>
+              <button onClick={()=>setShowSave(false)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
+              <button onClick={saveCfg} disabled={saving} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:saving?"default":"pointer",opacity:saving?0.7:1}}>{saving?"저장 중...":"저장"}</button>
             </div>
           </div>
         </div>
@@ -8735,6 +8962,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <span style={{width:16,height:16,borderRadius:8,background:toast.ok?A.green:A.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:10,fontWeight:700,color:"#fff"}}>{toast.ok?"✓":"!"}</span><span>{toast.msg}</span>
           {toast.undo&&<button onClick={toast.undo}
             style={{marginLeft:8,padding:"2px 10px",borderRadius:5,border:"none",background:"rgba(255,255,255,.1)",cursor:"pointer",color:"#fff",fontFamily:FONT,fontSize:12,fontWeight:600}}>실행 취소</button>}
+          {toast.action&&<button onClick={()=>{toast.action?.onClick();setToast(null)}}
+            style={{marginLeft:10,flexShrink:0,height:26,padding:"0 11px",borderRadius:6,border:"none",background:"rgba(255,255,255,.16)",cursor:"pointer",color:"#fff",fontFamily:FONT,fontSize:12,fontWeight:600}}>{toast.action.label}</button>}
         </div>
       )}
 

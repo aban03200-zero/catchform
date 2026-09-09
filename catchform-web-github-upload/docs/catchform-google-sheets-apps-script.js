@@ -61,11 +61,22 @@ function getSpreadsheet_(payload) {
 
   var key = getSheetPropertyKey_(payload);
   var props = PropertiesService.getScriptProperties();
-  if (key) {
+  // sheetAction: 관리자가 시트 이름을 바꿨을 때 무엇을 할지 캐치폼이 지정합니다.
+  //   "new"    - 기억해둔 시트를 버리고 새로 만듭니다.
+  //   "rename" - 기억해둔 시트의 이름만 바꿉니다.
+  //   (없음)   - 기존 동작. 기억해둔 시트를 그대로 씁니다.
+  var sheetAction = String(payload.sheetAction || "");
+  if (key && sheetAction === "new") props.deleteProperty(key);
+
+  if (key && sheetAction !== "new") {
     var savedId = props.getProperty(key);
     if (savedId) {
       try {
         var saved = SpreadsheetApp.openById(savedId);
+        if (sheetAction === "rename") {
+          var newName = String(payload.sheetName || "").trim();
+          if (newName && saved.getName() !== newName) saved.rename(newName);
+        }
         ensureSpreadsheetAccess_(saved, payload);
         return saved;
       } catch (err) {
@@ -74,7 +85,8 @@ function getSpreadsheet_(payload) {
     }
   }
 
-  if (payload.sheetUrl) {
+  // mode가 "new"인데 sheetUrl이 남아 있으면 기존 시트를 열어버리므로, existing일 때만 사용합니다.
+  if (payload.sheetUrl && (payload.mode || "existing") === "existing") {
     var byUrl = SpreadsheetApp.openByUrl(payload.sheetUrl);
     ensureSpreadsheetAccess_(byUrl, payload);
     return byUrl;
