@@ -9,7 +9,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 // ─── Types ────────────────────────────────────────────────────────────────
 type Theme = "dark" | "light"
 type Opt = { label: string; value: string; isEtc: boolean; nextPage?: number }
-type Cat = { id: string; name: string }
+type Cat = { id: string; name: string; brand?: string; slug?: string }
 type Prog = { id: string; title: string; slug?: string; category?: string; [key:string]:any }
 type BrandId = "SNIPERFACTORY"|"INSIDEOUT"|"SFACSPACE"
 type DashboardFormType = "alert"|"application"|"recruit"|"survey"|"evaluation"|"other"
@@ -20,9 +20,9 @@ type OperationPeriodType = "range"|"single"
 type OperationPeriod = { id:string; type:OperationPeriodType; label?:string; start?:string; end?:string; date?:string; enabled?:boolean }
 type EducationScheduleType = "range"|"single"
 type EducationSchedule = { id:string; type:EducationScheduleType; label?:string; start?:string; end?:string; date?:string }
-type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; operationPeriods?:OperationPeriod[]; alwaysOpen?:boolean; manualStatus?:DashboardManualStatus; isPublished?:boolean; publishedAt?:string; editPasswordHash?:string; formTrashedAt?:string }
+type DashboardMeta = { formTypeTag?:DashboardFormType; operationStart?:string; operationEnd?:string; operationPeriods?:OperationPeriod[]; alwaysOpen?:boolean; manualStatus?:DashboardManualStatus; isPublished?:boolean; publishedAt?:string; editPasswordHash?:string; formTrashedAt?:string; conversionCheckOff?:boolean }
 type AdminRole = ""|"admin"|"master"
-type DashboardSettingsState = {item:any;formName:string;brand:BrandId;formTypeTag:DashboardFormType;operationStart:string;operationEnd:string;operationPeriods:OperationPeriod[];alwaysOpen:boolean;manualStatus:DashboardManualStatus;currentEditPasswordDraft:string;editPasswordDraft:string;clearEditPassword:boolean}
+type DashboardSettingsState = {item:any;formName:string;brand:BrandId;formTypeTag:DashboardFormType;operationStart:string;operationEnd:string;operationPeriods:OperationPeriod[];alwaysOpen:boolean;manualStatus:DashboardManualStatus;currentEditPasswordDraft:string;editPasswordDraft:string;clearEditPassword:boolean;conversionCheckOff:boolean}
 type KdtFieldType = FieldType|"section_desc"
 type ConsentDocMode = "brand"|"custom"
 type KdtField = { id:string; label:string; type:KdtFieldType; required?:boolean; page?:number; options?:string[]; placeholder?:string; desc?:string; [key:string]:any }
@@ -35,7 +35,7 @@ type FormField = { id:string; type:FieldType; label:string; placeholder?:string;
 type FormAdConfig = { enabled:boolean; adMode:AdMode; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string }
 type QrLink = { code:string; url:string; label?:string; type?:string; createdAt?:string }
 type Cfg = {
-  header: { imageUrl:string; programId:string; programUnlinked?:boolean; recruitmentPeriodMode?:RecruitmentPeriodMode; overline:string; title:string; educationStart:string; educationEnd:string; educationSchedules?:EducationSchedule[]; tuitionFree:boolean; tuitionFreeText:string; tuitionAmount:string; stipend:string; noticeEnabled:boolean; noticeIconEnabled:boolean; noticeIconText:string; noticeText:string; noticeShape?:"pill"|"rect"; applicationType?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
+  header: { imageUrl:string; programId:string; programUnlinked?:boolean; recruitmentPeriodMode?:RecruitmentPeriodMode; overline:string; title:string; educationStart:string; educationEnd:string; educationSchedules?:EducationSchedule[]; tuitionFree:boolean; tuitionFreeText:string; tuitionAmount:string; stipend:string; noticeEnabled:boolean; noticeIconEnabled:boolean; noticeIconText:string; noticeText:string; noticeShape?:"pill"|"rect"; applicationType?:string; applicationTypeIsConversion?:boolean; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
   ad?: FormAdConfig
   form: { fields:FormField[]; showNum:boolean; dupText:string; pages:number; pageLabels?:string[]; consentPosition?:ConsentPosition }
   consents: { enabled:boolean; required:boolean; title:string; consentType?:string; body:string; checkLabel:string; policyUrl:string; policyMode?:ConsentDocMode; customPolicyTitle?:string; customPolicyBody?:string }[]
@@ -43,7 +43,7 @@ type Cfg = {
   modal: { title:string; body:string; btnLabel:string; btnUrl:string; btnReplace:boolean; shareButtons?:Partial<ModalShareButtons> }
   styles: { theme:Theme; fieldH:number; qGap:number; maxW:number; labelGap?:number; seniorMode?:boolean }
   auth: { enabled:boolean; loginUrl:string; errText:string }
-  integrations?: { googleSheets?: { enabled:boolean; mode:"existing"|"new"; accountEmail:string; sheetUrl:string; sheetName:string; webhookUrl:string; lastSyncStatus?:"idle"|"sent"|"error"; lastSyncAt?:string; lastSyncMessage?:string }; qrLinks?:QrLink[] }
+  integrations?: { googleSheets?: { enabled:boolean; mode:"existing"|"new"; accountEmail:string; sheetUrl:string; sheetName:string; tabName?:string; tabGid?:string; createdSheetName?:string; webhookUrl:string; lastSyncStatus?:"idle"|"sent"|"error"; lastSyncAt?:string; lastSyncMessage?:string }; qrLinks?:QrLink[] }
   dashboard?: DashboardMeta
   brand: string
   formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"
@@ -54,12 +54,12 @@ type EditorTab = { key:string; id:string; name:string; slug:string; brand:string
 // ─── Admin UI theme (Toss-style) ─────────────────────────────────────────
 type AT = { bg:string; card:string; card2:string; border:string; border2:string; blue:string; blue2:string; t1:string; t2:string; t3:string; t4:string; green:string; red:string; shadow:string; r:string; r2:string }
 const ALT: AT = {
-  bg:"#F7F8FA", card:"#FFFFFF", card2:"#F2F4F6",
-  border:"#E5E8EB", border2:"#D1D5DB",
-  blue:"#3182F6", blue2:"rgba(49,130,246,0.08)",
-  t1:"#191919", t2:"#6B7280", t3:"#B0B8C1", t4:"#E5E8EB",
-  green:"#17C964", red:"#E85C5C",
-  shadow:"0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)",
+  bg:"#F6F7F9", card:"#FFFFFF", card2:"#F1F3F6",
+  border:"#EDEFF3", border2:"#D5D9DF",
+  blue:"#3182F6", blue2:"#EAF2FE",
+  t1:"#15181D", t2:"#5A6270", t3:"#9AA1AD", t4:"#C4CAD4",
+  green:"#2FBF71", red:"#E5484D",
+  shadow:"0 1px 2px rgba(16,24,40,.06), 0 12px 32px -20px rgba(16,24,40,.28)",
   r:"8px", r2:"12px",
 }
 const ADK: AT = {
@@ -138,8 +138,8 @@ if(typeof document!=="undefined"&&!document.getElementById("pretendard-cdn")){
 if(typeof document!=="undefined"&&!document.getElementById("catchform-keyframes")){
   const s=document.createElement("style");s.id="catchform-keyframes";
   s.textContent=`
-    @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(16px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-    @keyframes toastOut{from{opacity:1;transform:translateX(-50%) translateY(0)}to{opacity:0;transform:translateX(-50%) translateY(16px)}}
+    @keyframes toastIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes toastOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-10px)}}
     @keyframes actionSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
     @keyframes skeletonPulse{0%,100%{opacity:1}50%{opacity:0.4}}
   `;
@@ -150,6 +150,23 @@ const seniorFontSize = (enabled:boolean, size:number) => enabled ? Math.round(si
 const seniorFieldHeight = (enabled:boolean, height:number) => enabled ? Math.max(56, Math.round(height * 1.24)) : height
 const seniorGap = (enabled:boolean, gap:number) => enabled ? Math.round(gap * 1.16) : gap
 const DASHBOARD_PAGE_SIZE = 60
+// 편집 화면 우측 패널 제목 아래 설명 (시안 PANELS.sub 기준)
+const PANEL_SUBS:Record<string,string> = {
+  header:"폼 상단에 노출되는 대표 이미지와 제목, 운영 기간을 설정합니다.",
+  notice:"제목 아래 회색 박스에 들어가는 안내 문장입니다.",
+  ad:"대표 이미지와 제목 아래, 질문 시작 전에 배너를 노출합니다.",
+  form:"단계별 질문을 추가하고 순서를 바꿉니다.",
+  consent:"개인정보 수집·이용 동의 항목을 관리합니다.",
+  login:"응답 전 로그인을 요구할 수 있습니다.",
+  integrations:"응답이 접수될 때 외부 도구로 전달합니다.",
+  slug:"폼 공개 주소를 정합니다.",
+  qr:"현장 배포용 QR 코드를 만들고 다운로드합니다.",
+  cta:"단계 이동과 제출 버튼의 문구와 색을 정합니다.",
+  modal:"제출 후 보여줄 화면을 설정합니다.",
+  styles:"폼 전체의 색과 모서리, 폰트를 조정합니다.",
+}
+const RECENT_EDIT_STORAGE_KEY = "catchform.admin.recentEdits"
+const RECENT_EDIT_LIMIT = 50
 function normalizeAdminRole(role:any):AdminRole{
   const normalized=String(role||"").trim().toLowerCase()
   return normalized==="admin"||normalized==="master"?normalized:""
@@ -239,7 +256,7 @@ const CATCHFORM_DIRECT_FORM_BASE_URL = "https://catchform.vercel.app/form"
 const FORM_SUMMARY_SELECT = "id,name,slug,updated_at,brand,config_brand:config->>brand,header_title:config->header->>title,program_id:config->header->>programId,recruitment_period_mode:config->header->>recruitmentPeriodMode,form_type:config->>formType,dashboard_meta:config->dashboard"
 const FULL_FORM_PREFETCH_LIMIT = 8
 const FULL_FORM_PREFETCH_CONCURRENCY = 2
-const DEFAULT_GOOGLE_SHEETS = {enabled:false,mode:"existing" as const,accountEmail:"",sheetUrl:"",sheetName:"",webhookUrl:"",lastSyncStatus:"idle" as const,lastSyncAt:"",lastSyncMessage:""}
+const DEFAULT_GOOGLE_SHEETS = {enabled:false,mode:"existing" as const,accountEmail:"",sheetUrl:"",sheetName:"",tabName:"",tabGid:"",createdSheetName:"",webhookUrl:"",lastSyncStatus:"idle" as const,lastSyncAt:"",lastSyncMessage:""}
 const DEFAULT_MODAL_SHARE_BUTTONS:ModalShareButtons = {kakao:true,instagram:true,threads:true,x:true,link:true}
 const DEFAULT_FORM_AD:FormAdConfig = {
   enabled:false,
@@ -270,6 +287,12 @@ const DASHBOARD_FORM_TYPES:{value:DashboardFormType;label:string}[]=[
   {value:"other",label:"기타"},
 ]
 const ANALYTICS_EVENT_LIMIT = 5000
+// 자동 저장(draft_saved)은 한 세션이 수십 건씩 남겨서 이벤트 대부분을 차지한다.
+// 이걸 최신순 한 덩어리로 같이 받으면 상한을 draft가 다 먹어버려서 started/completed 같은
+// 지표 이벤트가 잘리고 완료 수가 실제보다 적게 나온다. 그래서 둘을 나눠서 받는다.
+const ANALYTICS_DRAFT_EVENT_LIMIT = 3000
+const ANALYTICS_EVENT_PAGE_SIZE = 1000
+const ANALYTICS_EVENT_MAX_PAGES = 40
 // 스스로 크롤러임을 밝히는 user-agent 표식. 기록 단계와 조회 단계에서 같은 목록을 쓴다.
 const BOT_UA_PATTERNS = [
   "facebookexternalhit","facebookcatalog","meta-externalagent","bot","crawler","spider","crawling",
@@ -455,6 +478,29 @@ function dashboardWithOperationPeriods(dashboard:DashboardMeta|undefined,periods
   const primary=primaryOperationRange(operationPeriods)
   return{...(dashboard||{}),operationPeriods,operationStart:primary.start,operationEnd:primary.end}
 }
+// 운영 중인 폼의 종료일까지 남은 일수. 상시 운영이거나 종료일이 없으면 null.
+// 여러 기간이 있으면 지금 진행 중인 기간의 종료일을 본다.
+// 참여는 충분히 모였는데 제출까지 가는 비율이 낮은 폼을 대시보드에서 알려준다.
+// 표본이 적으면 비율이 요동치므로 최소 참여 수를 함께 본다.
+const LOW_CONVERSION_MIN_SESSIONS = 30
+const LOW_CONVERSION_RATE = 15
+const LOW_CONVERSION_WINDOW_DAYS = 30
+const CLOSING_SOON_DAYS = 7
+function daysUntilOperationEnd(dashboard?:DashboardMeta|null,fallback?:{start?:string;end?:string}):number|null{
+  if(dashboard?.alwaysOpen)return null
+  const ranges=validOperationPeriods(operationPeriodsFromDashboard(dashboard,fallback))
+  if(!ranges.length)return null
+  const now=Date.now()
+  const current=ranges
+    .filter(range=>(!range.startAt||now>=range.startAt)&&range.endAt&&now<=range.endAt)
+    .sort((a,b)=>(a.endAt||0)-(b.endAt||0))[0]
+  if(!current?.endAt)return null
+  // 경과 시간이 아니라 달력 날짜 차이로 센다. 오늘 안에 끝나면 0(D-DAY), 내일이면 1(D-1).
+  const endDay=new Date(current.endAt); endDay.setHours(0,0,0,0)
+  const today=new Date(); today.setHours(0,0,0,0)
+  return Math.round((endDay.getTime()-today.getTime())/86400000)
+}
+
 function operationStatusOfDashboard(dashboard?:DashboardMeta|null,fallback?:{start?:string;end?:string}):{status:DashboardManualStatus;hasOperationPeriod:boolean}{
   if(dashboard?.alwaysOpen)return{status:"active",hasOperationPeriod:true}
   const periods=operationPeriodsFromDashboard(dashboard,fallback)
@@ -471,35 +517,56 @@ function OperationPeriodsEditor({periods,onChange,disabled,A,compact=false}:{per
   const update=(id:string,patch:Partial<OperationPeriod>)=>onChange(periods.map(period=>period.id===id?{...period,...patch}:period))
   const remove=(id:string)=>onChange(periods.filter(period=>period.id!==id))
   const add=(type:OperationPeriodType)=>onChange([...periods,makeOperationPeriod(type)])
-  const inputStyle={minWidth:0,width:"100%",height:compact?32:36,padding:"0 8px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:compact?11.5:12,boxSizing:"border-box" as const}
-  return <div style={{display:"flex",flexDirection:"column" as const,gap:8,opacity:disabled?0.55:1}}>
-    {periods.length===0&&<div style={{padding:"10px 11px",borderRadius:A.r,border:`1px dashed ${A.border}`,background:A.card2,color:A.t3,fontSize:12,lineHeight:1.5}}>아직 추가된 운영 기간이 없어요.</div>}
-    {periods.map((period,index)=>(
-      <div key={period.id} style={{padding:compact?9:10,borderRadius:A.r,border:`1px solid ${A.border}`,background:compact?A.card:A.card2}}>
-        <div style={{display:"grid",gridTemplateColumns:"86px 1fr auto",gap:7,alignItems:"center",marginBottom:7}}>
-          <select disabled={disabled} value={period.type} onChange={e=>{
-            const type=e.target.value as OperationPeriodType
-            update(period.id,{type,date:type==="single"?(period.date||String(period.start||"").slice(0,10)):"",start:type==="range"?(period.start||period.date||""):"",end:type==="range"?(period.end||period.date||""):""})
-          }} style={inputStyle}>
-            <option value="range">기간</option>
-            <option value="single">단일 날짜</option>
-          </select>
-          <input disabled={disabled} value={period.label||""} onChange={e=>update(period.id,{label:e.target.value})} placeholder={`운영 기간 ${index+1}`} style={inputStyle}/>
-          <button disabled={disabled} onClick={()=>remove(period.id)} style={{height:compact?32:36,padding:"0 9px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.red,fontFamily:FONT,fontSize:compact?11.5:12,cursor:disabled?"default":"pointer"}}>삭제</button>
+  // compact은 파란 안내 박스 안에서 쓰이므로 카드/필드 배경을 뒤집어 대비를 유지한다.
+  const cardBg=compact?A.card:panelFieldBg(A)
+  const fieldBg=compact?panelFieldBg(A):A.card
+  const h=compact?34:38
+  const inputStyle={minWidth:0,width:"100%",height:h,padding:"0 11px",borderRadius:9,border:"none",background:fieldBg,color:A.t1,fontFamily:FONT,fontSize:compact?12:12.5,boxSizing:"border-box" as const}
+  const rowLabel:React.CSSProperties={fontSize:11.5,fontWeight:600,color:A.t3,fontFamily:FONT,width:30,flexShrink:0}
+  return <div style={{display:"flex",flexDirection:"column" as const,gap:9,opacity:disabled?0.55:1}}>
+    {periods.length===0&&<div style={{padding:12,borderRadius:11,border:"none",background:cardBg,color:A.t3,fontSize:12.5,lineHeight:1.5}}>아직 추가된 운영 기간이 없어요.</div>}
+    {periods.map((period,index)=>{
+      const setType=(type:OperationPeriodType)=>update(period.id,{type,date:type==="single"?(period.date||String(period.start||"").slice(0,10)):"",start:type==="range"?(period.start||period.date||""):"",end:type==="range"?(period.end||period.date||""):""})
+      return <div key={period.id} style={{padding:10,borderRadius:11,border:"none",background:cardBg,display:"flex",flexDirection:"column" as const,gap:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <PanelSegment inline value={period.type==="single"?"single":"range"} onChange={v=>setType(v as OperationPeriodType)} A={A}
+            height={compact?26:28} fontSize={12.5} trackBg={A===ALT?"#E7EAEF":A.bg}
+            options={[{value:"range",label:"기간"},{value:"single",label:"단일 날짜"}]}/>
+          <div style={{flex:1}}/>
+          <button disabled={disabled} onClick={()=>remove(period.id)} title="운영 기간 삭제" aria-label="운영 기간 삭제"
+            style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:A.t3,cursor:disabled?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,padding:0}}
+            onMouseEnter={e=>{if(!disabled){(e.currentTarget as HTMLElement).style.background=fieldBg;(e.currentTarget as HTMLElement).style.color=A.red}}}
+            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 7h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              <path d="M9.5 4.5h5a1 1 0 0 1 1 1V7h-7V5.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+              <path d="M6 7.5h12l-.85 11.1a1.5 1.5 0 0 1-1.5 1.4H8.35a1.5 1.5 0 0 1-1.5-1.4L6 7.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+            </svg>
+          </button>
         </div>
+        <input disabled={disabled} value={period.label||""} onChange={e=>update(period.id,{label:e.target.value})} placeholder={`운영 기간 이름 (예: ${index+1}차)`} style={inputStyle}/>
         {period.type==="single"
-          ? <input type="date" disabled={disabled} value={period.date||""} onChange={e=>update(period.id,{date:e.target.value})} style={inputStyle}/>
-          : <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:6}}>
-              <input type="datetime-local" step={60} disabled={disabled} value={operationInputValue(period.start||"","start")} onChange={e=>update(period.id,{start:e.target.value})} style={inputStyle}/>
-              <span style={{fontSize:12,color:A.t3}}>~</span>
-              <input type="datetime-local" step={60} disabled={disabled} value={operationInputValue(period.end||"","end")} onChange={e=>update(period.id,{end:e.target.value})} style={inputStyle}/>
-            </div>}
+          ? <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={rowLabel}>날짜</span>
+              <input type="date" disabled={disabled} value={period.date||""} onChange={e=>update(period.id,{date:e.target.value})} style={inputStyle}/>
+            </div>
+          : <>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={rowLabel}>시작</span>
+                <input type="datetime-local" step={60} disabled={disabled} value={operationInputValue(period.start||"","start")} onChange={e=>update(period.id,{start:e.target.value})} style={inputStyle}/>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={rowLabel}>종료</span>
+                <input type="datetime-local" step={60} disabled={disabled} value={operationInputValue(period.end||"","end")} onChange={e=>update(period.id,{end:e.target.value})} style={inputStyle}/>
+              </div>
+            </>}
       </div>
-    ))}
-    <div style={{display:"flex",gap:7,flexWrap:"wrap" as const}}>
-      <button disabled={disabled} onClick={()=>add("range")} style={{height:compact?30:32,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:compact?11.5:12,cursor:disabled?"default":"pointer"}}>+ 기간 추가</button>
-      <button disabled={disabled} onClick={()=>add("single")} style={{height:compact?30:32,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:compact?11.5:12,cursor:disabled?"default":"pointer"}}>+ 단일 날짜 추가</button>
-    </div>
+    })}
+    <button disabled={disabled} onClick={()=>add("range")}
+      style={{width:"100%",height:compact?34:38,borderRadius:9,border:`1.5px solid ${disabled?A.border2:A.blue}`,background:compact?A.card:A.card,color:disabled?A.t3:A.blue,fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:disabled?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+      기간 추가
+    </button>
   </div>
 }
 function formTrashedAtOf(item:any){
@@ -556,6 +623,36 @@ async function sha256Text(value:string){
   if(typeof crypto==="undefined"||!crypto.subtle)throw new Error("이 브라우저에서는 비밀번호 보호를 사용할 수 없어요.")
   const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value))
   return Array.from(new Uint8Array(digest)).map(v=>v.toString(16).padStart(2,"0")).join("")
+}
+
+// ─── 편집 비밀번호 해시 ────────────────────────────────────────────────────
+// form_configs는 공개 폼이 읽어야 해서 anon 키로 열려 있고, config 안의 해시도 같이 노출된다.
+// 소금 없는 SHA-256 한 번은 짧은 비밀번호를 사실상 즉시 되돌릴 수 있으므로 PBKDF2로 늘린다.
+// 형식: pbkdf2$<반복수>$<salt hex>$<hash hex>
+const EDIT_PW_ITERATIONS = 210000
+const toHex=(buf:ArrayBuffer)=>Array.from(new Uint8Array(buf)).map(v=>v.toString(16).padStart(2,"0")).join("")
+const fromHex=(hex:string)=>new Uint8Array((hex.match(/.{1,2}/g)||[]).map(b=>parseInt(b,16)))
+async function pbkdf2Hex(password:string,salt:Uint8Array,iterations:number){
+  const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(password),"PBKDF2",false,["deriveBits"])
+  const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt:salt as unknown as BufferSource,iterations,hash:"SHA-256"},key,256)
+  return toHex(bits)
+}
+async function hashEditPassword(password:string){
+  if(typeof crypto==="undefined"||!crypto.subtle)throw new Error("이 브라우저에서는 비밀번호 보호를 사용할 수 없어요.")
+  const salt=crypto.getRandomValues(new Uint8Array(16))
+  return `pbkdf2$${EDIT_PW_ITERATIONS}$${toHex(salt.buffer)}$${await pbkdf2Hex(password,salt,EDIT_PW_ITERATIONS)}`
+}
+// 기존에 저장된 SHA-256 해시도 계속 검증한다. 새로 설정하는 비밀번호만 PBKDF2로 저장된다.
+async function matchesEditPassword(password:string,stored:string){
+  const value=String(stored||"")
+  if(!value)return true
+  if(value.startsWith("pbkdf2$")){
+    const [,iterRaw,saltHex,hashHex]=value.split("$")
+    const iterations=Number(iterRaw)
+    if(!iterations||!saltHex||!hashHex)return false
+    return await pbkdf2Hex(password,fromHex(saltHex),iterations)===hashHex
+  }
+  return await sha256Text(password)===value
 }
 
 type QrFileFormat = "png"|"svg"|"jpg"
@@ -843,7 +940,7 @@ const DEFAULT_GUIDE_SECTIONS = [
       "왼쪽 하단 '+ 새 폼 만들기' 버튼을 클릭하세요.",
       "브랜드를 선택하세요. (스나이퍼팩토리 / 인사이드아웃)",
       "폼 형식을 선택하세요. (사전알림, 교육과정, 교육사업, 참여기업, 채용, 빈 템플릿)",
-      "헤더, 질문, 동의 항목, CTA 등 각 섹션을 편집하세요.",
+      "기본 정보, 질문, 동의 항목, CTA 등 각 섹션을 편집하세요.",
     ]
   },
   {
@@ -990,11 +1087,6 @@ function makeAutoSlug(prefix="form"){
   return `${safePrefix}-${Date.now()}-${Math.floor(100000+Math.random()*900000)}`
 }
 
-function SelectChevron({color}:{color:string}){
-  return <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}>
-    <path d="m4 6 4 4 4-4" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-}
 
 const DEFOPTS: Opt[] = [
   {label:"스나이퍼팩토리 SNS 계정",value:"스나이퍼팩토리 SNS 계정",isEtc:false},
@@ -1284,7 +1376,7 @@ function headerWithEducationSchedules(header:Cfg["header"],schedules?:EducationS
 function educationScheduleText(schedule:EducationSchedule){
   const range=educationScheduleRange(schedule)
   if(!range)return""
-  if(schedule.type==="single"||range.start===range.end)return`${fmtDateKo(range.start)} · 하루`
+  if(schedule.type==="single"||range.start===range.end)return`${fmtDateKo(range.start)} · 1일`
   const days=Math.round((range.endAt-range.startAt)/(1000*60*60*24))+1
   if(days<1)return`${fmtDateKo(range.start)} ~ ${fmtDateKo(range.end)} · 날짜 확인 필요`
   return`${fmtDateKo(range.start)} ~ ${fmtDateKo(range.end)} · ${durationText(days)}`
@@ -1299,23 +1391,30 @@ function EducationSchedulesEditor({schedules,onChange,A}:{schedules:EducationSch
   const update=(id:string,patch:Partial<EducationSchedule>)=>onChange(schedules.map(schedule=>schedule.id===id?{...schedule,...patch}:schedule))
   const remove=(id:string)=>onChange(schedules.filter(schedule=>schedule.id!==id))
   const add=(type:EducationScheduleType)=>onChange([...schedules,makeEducationSchedule(type)])
-  const inputStyle={minWidth:0,width:"100%",height:42,padding:"0 12px",borderRadius:A.r,border:`1.5px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const}
+  const inputStyle={minWidth:0,width:"100%",height:38,padding:"0 11px",borderRadius:9,border:"none",background:A.card,color:A.t1,fontFamily:FONT,fontSize:12.5,boxSizing:"border-box" as const}
   return <div style={{display:"flex",flexDirection:"column" as const,gap:9}}>
-    {schedules.length===0&&<div style={{padding:"10px 12px",borderRadius:A.r,border:`1px dashed ${A.border}`,background:A.card2,color:A.t3,fontSize:12.5,lineHeight:1.5}}>아직 추가된 교육 일정이 없어요.</div>}
+    {schedules.length===0&&<div style={{padding:"12px",borderRadius:11,border:"none",background:panelFieldBg(A),color:A.t3,fontSize:12.5,lineHeight:1.5}}>아직 추가된 교육 일정이 없어요.</div>}
     {schedules.map((schedule,index)=>{
       const summary=educationScheduleText(schedule)
-      return <div key={schedule.id} style={{padding:10,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card}}>
-        <div style={{display:"grid",gridTemplateColumns:"88px 1fr auto",gap:7,alignItems:"center",marginBottom:8}}>
-          <select value={schedule.type} onChange={e=>{
-            const type=e.target.value as EducationScheduleType
-            update(schedule.id,{type,date:type==="single"?(schedule.date||schedule.start||""):"",start:type==="range"?(schedule.start||schedule.date||""):"",end:type==="range"?(schedule.end||schedule.date||""):""})
-          }} style={inputStyle}>
-            <option value="range">기간</option>
-            <option value="single">단일 날짜</option>
-          </select>
-          <input value={schedule.label||""} onChange={e=>update(schedule.id,{label:e.target.value})} placeholder={`일정 ${index+1}`} style={inputStyle}/>
-          <button onClick={()=>remove(schedule.id)} style={{height:42,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.red,fontFamily:FONT,fontSize:12.5,cursor:"pointer"}}>삭제</button>
+      const setType=(type:EducationScheduleType)=>update(schedule.id,{type,date:type==="single"?(schedule.date||schedule.start||""):"",start:type==="range"?(schedule.start||schedule.date||""):"",end:type==="range"?(schedule.end||schedule.date||""):""})
+      return <div key={schedule.id} style={{padding:10,borderRadius:11,border:"none",background:panelFieldBg(A),display:"flex",flexDirection:"column" as const,gap:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <PanelSegment inline value={schedule.type==="single"?"single":"range"} onChange={v=>setType(v as EducationScheduleType)} A={A}
+            height={28} fontSize={12.5} trackBg={A===ALT?"#E7EAEF":A.bg}
+            options={[{value:"range",label:"기간"},{value:"single",label:"단일 날짜"}]}/>
+          <div style={{flex:1}}/>
+          <button onClick={()=>remove(schedule.id)} title="일정 삭제" aria-label="일정 삭제"
+            style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,padding:0}}
+            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card;(e.currentTarget as HTMLElement).style.color=A.red}}
+            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 7h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              <path d="M9.5 4.5h5a1 1 0 0 1 1 1V7h-7V5.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+              <path d="M6 7.5h12l-.85 11.1a1.5 1.5 0 0 1-1.5 1.4H8.35a1.5 1.5 0 0 1-1.5-1.4L6 7.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+            </svg>
+          </button>
         </div>
+        <input value={schedule.label||""} onChange={e=>update(schedule.id,{label:e.target.value})} placeholder={`일정 이름 (예: ${index+1}회차)`} style={inputStyle}/>
         {schedule.type==="single"
           ? <input type="date" value={schedule.date||""} onChange={e=>update(schedule.id,{date:e.target.value})} style={inputStyle}/>
           : <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:8}}>
@@ -1323,13 +1422,14 @@ function EducationSchedulesEditor({schedules,onChange,A}:{schedules:EducationSch
               <span style={{color:A.t3,fontSize:12,flexShrink:0}}>~</span>
               <input type="date" value={schedule.end||""} onChange={e=>update(schedule.id,{end:e.target.value})} style={inputStyle}/>
             </div>}
-        {summary&&<div style={{marginTop:8,padding:"8px 10px",borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,fontWeight:600,color:A.blue,lineHeight:1.45}}>{summary}</div>}
+        {summary&&<div style={{fontSize:11.5,color:A.t3,lineHeight:1.45,padding:"0 2px"}}>{summary}</div>}
       </div>
     })}
-    <div style={{display:"flex",gap:8,flexWrap:"wrap" as const}}>
-      <button onClick={()=>add("range")} style={{height:34,padding:"0 12px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,cursor:"pointer"}}>+ 기간 추가</button>
-      <button onClick={()=>add("single")} style={{height:34,padding:"0 12px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,cursor:"pointer"}}>+ 단일 날짜 추가</button>
-    </div>
+    <button onClick={()=>add("range")}
+      style={{width:"100%",height:38,borderRadius:9,border:`1.5px solid ${A.blue}`,background:A.card,color:A.blue,fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+      일정 추가
+    </button>
   </div>
 }
 function mergeCfg(raw:any):Cfg {
@@ -1394,11 +1494,158 @@ function applyBrandDefaults(config:Cfg,brand:string):Cfg{
 }
 
 // ─── UI Atoms ─────────────────────────────────────────────────────────────
+// 시안 우측 패널은 테두리 없는 채움형 컨트롤을 쓴다. 라이트는 #F6F7F9, 다크는 card2.
+const panelFieldBg=(A:AT)=>A===ALT?"#F6F7F9":A.card2
+const panelFieldRing=(A:AT)=>`inset 0 0 0 1.5px ${A.blue}`
+function PanelSegment({value,options,onChange,A,height=38,fontSize=12.5,trackBg,inline=false}:{
+  value:string
+  options:{value:string;label:React.ReactNode;icon?:React.ReactNode}[]
+  onChange:(v:string)=>void
+  A:AT
+  height?:number
+  fontSize?:number
+  trackBg?:string
+  inline?:boolean
+}){
+  const count=options.length
+  const activeIdx=options.findIndex(opt=>opt.value===value)
+  return <div style={{position:"relative" as const,display:inline?"inline-grid":"grid",gridAutoFlow:"column" as const,gridAutoColumns:"1fr",alignItems:"center",padding:3,borderRadius:9,flexShrink:0,background:trackBg||(A===ALT?"#F1F3F6":A.bg)}}>
+    {/* 선택 표시(흰 알약) — 버튼마다 배경을 켜는 대신 하나를 좌우로 이동시킨다 */}
+    {activeIdx>=0&&<span aria-hidden="true" style={{
+      position:"absolute" as const,top:3,bottom:3,left:3,
+      width:`calc((100% - 6px) / ${count})`,
+      transform:`translateX(${activeIdx*100}%)`,
+      borderRadius:7,background:A.card,boxShadow:"0 1px 2px rgba(16,24,40,.10)",
+      transition:"transform .22s cubic-bezier(.4,0,.2,1)",pointerEvents:"none" as const,
+    }}/>}
+    {options.map(opt=>{
+      const on=opt.value===value
+      return <button key={opt.value} type="button" onClick={()=>onChange(opt.value)}
+        style={{position:"relative" as const,zIndex:1,minWidth:0,height,borderRadius:7,border:"none",background:"transparent",
+          cursor:"pointer",fontFamily:FONT,fontSize,fontWeight:600,color:on?A.blue:A.t2,
+          display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"0 10px",
+          transition:"color .18s ease",whiteSpace:"nowrap" as const,overflow:"hidden"}}>
+        {opt.icon}
+        <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{opt.label}</span>
+      </button>
+    })}
+  </div>
+}
+function PanelSelect({value,options,onChange,placeholder="선택해주세요",A,height=40,fontSize=13,fontWeight=500,radius=10,width,maxWidth,padX=14,gap=10}:{value:string;options:{value:string;label:string}[];onChange:(v:string)=>void;placeholder?:string;A:AT;height?:number;fontSize?:number;fontWeight?:number;radius?:number;width?:number|string;maxWidth?:number;padX?:number;gap?:number}){
+  const [open,setOpen]=React.useState(false)
+  const current=options.find(o=>o.value===value)
+  return <div style={{position:"relative" as const,width:width??"100%",maxWidth,flexShrink:0}}>
+    <button type="button" onClick={()=>setOpen(v=>!v)}
+      style={{width:"100%",height,display:"flex",alignItems:"center",justifyContent:"space-between",gap,padding:`0 ${padX}px`,borderRadius:radius,border:"none",
+        background:panelFieldBg(A),color:current?A.t1:A.t3,fontFamily:FONT,fontSize,fontWeight,cursor:"pointer",textAlign:"left" as const,
+        boxShadow:open?`inset 0 0 0 1.5px ${A.blue}`:"none",transition:"box-shadow .12s"}}>
+      <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{current?current.label:placeholder}</span>
+      <svg width="12" height="12" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A.t3,transform:open?"rotate(180deg)":"none",transition:"transform .15s"}}>
+        <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </button>
+    {open&&<>
+      <div onClick={()=>setOpen(false)} style={{position:"fixed" as const,inset:0,zIndex:59}}/>
+      <div style={{position:"absolute" as const,top:height+6,left:0,minWidth:"100%",zIndex:60,maxHeight:260,overflowY:"auto" as const,padding:6,borderRadius:12,
+        background:A.card,border:A===ALT?"none":`1px solid ${A.border}`,boxShadow:"0 1px 2px rgba(16,24,40,.08), 0 16px 40px -10px rgba(16,24,40,.28)"}}>
+        {options.map(opt=>{
+          const sel=opt.value===value
+          return <button key={opt.value||"__empty"} type="button" onClick={()=>{onChange(opt.value);setOpen(false)}}
+            style={{width:"100%",minHeight:40,display:"flex",alignItems:"center",gap:8,padding:"9px 10px",borderRadius:9,border:"none",
+              background:sel?panelFieldBg(A):"transparent",color:sel?A.t1:A.t2,fontFamily:FONT,fontSize:13,fontWeight:sel?700:500,whiteSpace:"nowrap" as const,cursor:"pointer",textAlign:"left" as const,lineHeight:1.4}}
+            onMouseEnter={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background=panelFieldBg(A)}}
+            onMouseLeave={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background="transparent"}}>
+            <span style={{flex:1,minWidth:0}}>{opt.label}</span>
+            {sel&&<svg width="12" height="12" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A.blue}}><path d="M1.5 5.2 3.8 7.5 8.5 2.8" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+          </button>
+        })}
+      </div>
+    </>}
+  </div>
+}
+// 응답 표는 행 × 열만큼 DOM이 나오기 때문에, 상세 패널을 열거나 유입 정보를 펼칠 때마다
+// 같이 다시 그리면 눈에 띄게 느려진다. 표에 실제로 영향을 주는 값이 바뀔 때만 다시 그리도록 memo로 감싼다.
+type AnalyticsRowsProps={
+  groups:any[]
+  columnMeta:any[]
+  cellTexts:Map<any,string[]>
+  selectedRowIds:string[]
+  expandedGroups:string[]
+  cols:string
+  A:AT
+  rowKeyOf:(row:any)=>string
+  fmtDate:(value:any)=>string[]
+  onOpenRow:(key:string)=>void
+  onToggleRow:(key:string)=>void
+  onToggleGroup:(key:string)=>void
+}
+const AnalyticsResponseRows=React.memo(function AnalyticsResponseRows(p:AnalyticsRowsProps){
+  const {groups,columnMeta,cellTexts,expandedGroups,cols,A,rowKeyOf,fmtDate,onOpenRow,onToggleRow,onToggleGroup}=p
+  const selected=React.useMemo(()=>new Set(p.selectedRowIds),[p.selectedRowIds])
+  const box=(on:boolean):React.CSSProperties=>({width:16,height:16,borderRadius:5,flexShrink:0,cursor:"pointer",
+    display:"flex",alignItems:"center",justifyContent:"center",
+    background:on?A.blue:"transparent",boxShadow:on?"none":`inset 0 0 0 1.5px ${A===ALT?"#D5D9DF":A.border2}`})
+  const check=<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M1.5 5.2 3.8 7.5 8.5 2.8" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>
+  return <>{groups.map((group:any)=>{
+    const primary=group.rows[0]
+    const duplicateRows=group.rows.slice(1)
+    const isOpen=!!group.duplicateKey&&expandedGroups.includes(group.duplicateKey)
+    const renderRow=(row:any,opts:any={})=>{
+      const dt=fmtDate(row.created_at)
+      const rowKey=rowKeyOf(row)
+      const on=selected.has(rowKey)
+      const duplicateCount=Number(opts.duplicateCount||0)
+      const texts=cellTexts.get(row)
+      // 열린 행 강조는 CSS 규칙(cf-open-row)이 맡는다. 여기서 openRowKey를 보면 행을 누를 때마다 표 전체가 다시 그려진다.
+      return <div key={opts.key||rowKey} data-cfrow={rowKey} onClick={()=>onOpenRow(rowKey)}
+        style={{display:"grid",gridTemplateColumns:cols,gap:14,alignItems:"center",minHeight:52,padding:"0 28px",cursor:"pointer",
+          background:opts.duplicateChild?(A===ALT?"#FAFBFC":A.card2):"transparent",
+          boxShadow:`inset 0 -1px 0 ${A===ALT?"#F5F6F8":A.border}`}}
+        onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A===ALT?"#F7F9FC":"rgba(255,255,255,0.04)"}}
+        onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background=opts.duplicateChild?(A===ALT?"#FAFBFC":A.card2):"transparent"}}>
+        <span onClick={e=>{e.stopPropagation();onToggleRow(rowKey)}} style={box(on)}>{on&&check}</span>
+        <span style={{fontSize:12.5,color:A.t3,fontVariantNumeric:"tabular-nums" as const,display:"flex",alignItems:"center",gap:6,minWidth:0,overflow:"hidden"}}>
+          {/* 목록은 이미 제출 완료/작성 중 스코프로 나뉘어 있어서 행마다 상태 배지를 또 달지 않는다. */}
+          <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{dt[0]} {dt[1]}</span>
+          {duplicateCount>0&&<button onClick={e=>{e.stopPropagation();onToggleGroup(group.duplicateKey)}} title="중복 응답 펼치기"
+            style={{flexShrink:0,padding:"1px 6px",borderRadius:5,border:"none",background:A===ALT?"#F1F3F6":A.card2,color:A.t3,fontSize:11,fontWeight:700,cursor:"pointer"}}>
+            +{duplicateCount}
+          </button>}
+        </span>
+        {columnMeta.map(({field:f}:any,ci:number)=>{
+          const text=texts?texts[ci]:""
+          return <span key={f.id} title={text||undefined}
+            style={{fontSize:12.5,color:A.t2,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
+            {text||"—"}
+          </span>
+        })}
+      </div>
+    }
+    return <React.Fragment key={group.key}>
+      {renderRow(primary,{duplicateCount:duplicateRows.length,key:`${group.key}:primary`})}
+      {isOpen&&duplicateRows.map((row:any,idx:number)=>renderRow(row,{duplicateChild:true,key:`${group.key}:dup:${rowKeyOf(row)}:${idx}`}))}
+    </React.Fragment>
+  })}</>
+},(prev,next)=>
+  // 콜백은 동작이 동일하므로 비교에서 제외하고, 표에 보이는 값만 확인한다.
+  prev.groups===next.groups&&prev.columnMeta===next.columnMeta&&prev.cellTexts===next.cellTexts&&
+  prev.selectedRowIds===next.selectedRowIds&&prev.expandedGroups===next.expandedGroups&&
+  prev.cols===next.cols&&prev.A===next.A)
+
+function PanelCheckRow({label,on,toggle,A}:{label:string;on:boolean;toggle:()=>void;A:AT}){
+  return <label onClick={toggle} style={{display:"inline-flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:12.5,fontWeight:600,color:A.t1,fontFamily:FONT,userSelect:"none" as const}}>
+    <span style={{width:16,height:16,borderRadius:4,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+      background:on?A.blue:panelFieldBg(A),boxShadow:on?"none":`inset 0 0 0 1.5px ${A.border2}`,transition:"background .12s"}}>
+      {on&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5.2 3.8 7.5 8.5 2.8" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+    </span>
+    {label}
+  </label>
+}
 function TRow({label,on,toggle,A}:{label:string;on:boolean;toggle:()=>void;A:AT}) {
-  return <div onClick={toggle} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,cursor:"pointer",marginBottom:10}}>
-    <span style={{fontSize:13,fontWeight:500,color:A.t1,fontFamily:FONT}}>{label}</span>
-    <div style={{width:34,height:20,borderRadius:10,background:on?A.blue:A.border2,position:"relative",transition:"background .2s",flexShrink:0}}>
-      <div style={{position:"absolute",width:14,height:14,borderRadius:"50%",background:"#fff",top:3,left:on?17:3,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,0.2)"}}/>
+  return <div onClick={toggle} style={{height:48,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",borderRadius:10,background:panelFieldBg(A),border:"none",cursor:"pointer",marginBottom:10,boxSizing:"border-box" as const}}>
+    <span style={{fontSize:13.5,fontWeight:600,color:A.t1,fontFamily:FONT}}>{label}</span>
+    <div style={{width:44,height:25,borderRadius:13,background:on?A.blue:(A===ALT?"#DFE3E9":A.border2),position:"relative",transition:"background .2s",flexShrink:0}}>
+      <div style={{position:"absolute",width:19,height:19,borderRadius:"50%",background:"#fff",top:3,left:on?22:3,transition:"left .2s",boxShadow:"0 1px 3px rgba(16,24,40,0.24)"}}/>
     </div>
   </div>
 }
@@ -1406,41 +1653,134 @@ function TIn({value,onChange,placeholder,type="text",A}:{value:string;onChange:(
   const [f,sf]=React.useState(false)
   return <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
     onFocus={()=>sf(true)} onBlur={()=>sf(false)}
-    style={{width:"100%",background:f?A.card:A.card2,border:`1.5px solid ${f?A.blue:A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:13,padding:"8px 10px",outline:"none",boxSizing:"border-box" as const,transition:"all .15s"}}/>
+    style={{width:"100%",height:40,background:panelFieldBg(A),border:"none",borderRadius:9,color:A.t1,fontFamily:FONT,fontSize:12.5,padding:"0 12px",outline:"none",boxSizing:"border-box" as const,boxShadow:f?panelFieldRing(A):"none",transition:"box-shadow .15s"}}/>
 }
-function TArea({value,onChange,placeholder,minH=72,A}:{value:string;onChange:(v:string)=>void;placeholder?:string;minH?:number;A:AT}) {
+function TArea({value,onChange,placeholder,minH=88,A}:{value:string;onChange:(v:string)=>void;placeholder?:string;minH?:number;A:AT}) {
   const [f,sf]=React.useState(false)
   return <textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
     onFocus={()=>sf(true)} onBlur={()=>sf(false)}
-    style={{width:"100%",minHeight:minH,background:f?A.card:A.card2,border:`1.5px solid ${f?A.blue:A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:13,padding:"8px 10px",outline:"none",resize:"vertical" as const,lineHeight:1.6,boxSizing:"border-box" as const}}/>
+    style={{width:"100%",minHeight:minH,background:panelFieldBg(A),border:"none",borderRadius:10,color:A.t1,fontFamily:FONT,fontSize:13,padding:"11px 12px",outline:"none",resize:"vertical" as const,lineHeight:1.6,boxSizing:"border-box" as const,boxShadow:f?panelFieldRing(A):"none",transition:"box-shadow .15s"}}/>
 }
 function Slider({value,min,max,step=1,unit="px",onChange,A}:{value:number;min:number;max:number;step?:number;unit?:string;onChange:(v:number)=>void;A:AT}) {
   return <div style={{display:"flex",alignItems:"center",gap:10}}>
     <input type="range" min={min} max={max} step={step} value={value} onChange={e=>onChange(Number(e.target.value))}
       style={{flex:1,WebkitAppearance:"none" as any,height:4,borderRadius:2,background:A.border2,outline:"none",border:"none",padding:0,cursor:"pointer"}}/>
-    <span style={{fontSize:12,fontWeight:600,color:A.t2,minWidth:36,textAlign:"right" as const,fontFamily:FONT}}>{value}{unit}</span>
+    <span style={{fontSize:14,fontWeight:700,color:A.t3,minWidth:56,textAlign:"right" as const,fontFamily:FONT}}>{value}{unit}</span>
   </div>
 }
+// ─── Color picker ─────────────────────────────────────────────────────────
+const HEX_RE=/^#[0-9a-fA-F]{6}$/
+function hexToRgb(hex:string){
+  const v=HEX_RE.test(hex)?hex:"#000000"
+  return {r:parseInt(v.slice(1,3),16),g:parseInt(v.slice(3,5),16),b:parseInt(v.slice(5,7),16)}
+}
+function rgbToHex(r:number,g:number,b:number){
+  const to=(n:number)=>Math.max(0,Math.min(255,Math.round(n))).toString(16).padStart(2,"0")
+  return `#${to(r)}${to(g)}${to(b)}`
+}
+function rgbToHsv(r:number,g:number,b:number){
+  const R=r/255,G=g/255,B=b/255
+  const max=Math.max(R,G,B),min=Math.min(R,G,B),d=max-min
+  let h=0
+  if(d!==0){
+    if(max===R)h=((G-B)/d)%6
+    else if(max===G)h=(B-R)/d+2
+    else h=(R-G)/d+4
+    h*=60
+    if(h<0)h+=360
+  }
+  return {h,s:max===0?0:d/max,v:max}
+}
+function hsvToHex(h:number,s:number,v:number){
+  const c=v*s,x=c*(1-Math.abs(((h/60)%2)-1)),m=v-c
+  let r=0,g=0,b=0
+  if(h<60){r=c;g=x} else if(h<120){r=x;g=c} else if(h<180){g=c;b=x}
+  else if(h<240){g=x;b=c} else if(h<300){r=x;b=c} else {r=c;b=x}
+  return rgbToHex((r+m)*255,(g+m)*255,(b+m)*255)
+}
+const COLOR_PRESETS=["#3182F6","#529DFF","#EA594D","#0F8A47","#6D4AEA","#F1C153","#15181D","#FFFFFF"]
+
 function CIn({value,onChange,A}:{value:string;onChange:(v:string)=>void;A:AT}) {
   const [hex,sh]=React.useState(value)
+  const [open,setOpen]=React.useState(false)
+  const svRef=React.useRef<HTMLDivElement|null>(null)
+  const hueRef=React.useRef<HTMLDivElement|null>(null)
   React.useEffect(()=>sh(value),[value])
-  return <div style={{display:"flex",alignItems:"center",gap:8,width:"100%",minWidth:0}}>
-    <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(value)?value:"#000000"} onChange={e=>{sh(e.target.value);onChange(e.target.value)}}
-      style={{width:32,height:32,border:`1.5px solid ${A.border}`,borderRadius:A.r,background:"none",cursor:"pointer",padding:2,flexShrink:0,boxSizing:"border-box" as const}}/>
-    <input type="text" value={hex} onChange={e=>{sh(e.target.value);if(/^#[0-9a-fA-F]{6}$/.test(e.target.value))onChange(e.target.value)}}
-      style={{flex:1,minWidth:0,background:A.card2,border:`1.5px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:"Courier New,monospace",fontSize:12,padding:"7px 9px",outline:"none",boxSizing:"border-box" as const}}/>
+
+  const safe=HEX_RE.test(value)?value:"#000000"
+  const rgb=hexToRgb(safe)
+  const hsv=rgbToHsv(rgb.r,rgb.g,rgb.b)
+
+  // 포인터를 누른 채 움직이는 동안 계속 값을 갱신한다.
+  const drag=(ref:React.MutableRefObject<HTMLDivElement|null>,handler:(x:number,y:number,rect:DOMRect)=>void)=>(e:React.PointerEvent)=>{
+    const el=ref.current
+    if(!el)return
+    e.preventDefault()
+    const apply=(cx:number,cy:number)=>handler(cx,cy,el.getBoundingClientRect())
+    apply(e.clientX,e.clientY)
+    const onMove=(ev:PointerEvent)=>apply(ev.clientX,ev.clientY)
+    const onUp=()=>{window.removeEventListener("pointermove",onMove);window.removeEventListener("pointerup",onUp)}
+    window.addEventListener("pointermove",onMove)
+    window.addEventListener("pointerup",onUp)
+  }
+  const clamp01=(n:number)=>Math.max(0,Math.min(1,n))
+  const onSv=drag(svRef,(x,y,r)=>{
+    const next=hsvToHex(hsv.h,clamp01((x-r.left)/r.width),1-clamp01((y-r.top)/r.height))
+    sh(next);onChange(next)
+  })
+  const onHue=drag(hueRef,(x,_y,r)=>{
+    const next=hsvToHex(clamp01((x-r.left)/r.width)*360,hsv.s||1,hsv.v||1)
+    sh(next);onChange(next)
+  })
+
+  return <div style={{position:"relative" as const,display:"flex",alignItems:"center",gap:8,width:"100%",minWidth:0}}>
+    <button type="button" onClick={()=>setOpen(v=>!v)} aria-label="색상 선택"
+      style={{width:34,height:34,flexShrink:0,border:"none",borderRadius:9,padding:3,background:panelFieldBg(A),cursor:"pointer",boxSizing:"border-box" as const,
+        boxShadow:open?`inset 0 0 0 1.5px ${A.blue}`:"none"}}>
+      <span style={{display:"block",width:"100%",height:"100%",borderRadius:6,background:safe,boxShadow:"inset 0 0 0 1px rgba(16,24,40,.12)"}}/>
+    </button>
+    <input type="text" value={hex} onChange={e=>{sh(e.target.value);if(HEX_RE.test(e.target.value))onChange(e.target.value)}}
+      style={{flex:1,minWidth:0,height:34,background:panelFieldBg(A),border:"none",borderRadius:9,color:A.t1,fontFamily:FONT,fontSize:12.5,padding:"0 10px",outline:"none",boxSizing:"border-box" as const}}/>
+    {open&&<>
+      <div onClick={()=>setOpen(false)} style={{position:"fixed" as const,inset:0,zIndex:79}}/>
+      <div style={{position:"absolute" as const,top:42,left:0,zIndex:80,width:236,padding:12,borderRadius:12,background:A.card,
+        border:A===ALT?"none":`1px solid ${A.border}`,boxShadow:"0 1px 2px rgba(16,24,40,.08), 0 16px 40px -10px rgba(16,24,40,.28)"}}>
+        {/* 명도·채도 */}
+        <div ref={svRef} onPointerDown={onSv}
+          style={{position:"relative" as const,width:"100%",height:132,borderRadius:9,cursor:"crosshair",touchAction:"none" as const,
+            background:`linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, ${hsvToHex(hsv.h,1,1)})`}}>
+          <span style={{position:"absolute" as const,left:`${hsv.s*100}%`,top:`${(1-hsv.v)*100}%`,width:14,height:14,marginLeft:-7,marginTop:-7,
+            borderRadius:"50%",border:"2px solid #fff",boxShadow:"0 0 0 1px rgba(16,24,40,.3)",pointerEvents:"none" as const}}/>
+        </div>
+        {/* 색상 */}
+        <div ref={hueRef} onPointerDown={onHue}
+          style={{position:"relative" as const,width:"100%",height:12,marginTop:12,borderRadius:999,cursor:"pointer",touchAction:"none" as const,
+            background:"linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)"}}>
+          <span style={{position:"absolute" as const,left:`${(hsv.h/360)*100}%`,top:"50%",width:16,height:16,marginLeft:-8,marginTop:-8,
+            borderRadius:"50%",background:hsvToHex(hsv.h,1,1),border:"2px solid #fff",boxShadow:"0 1px 3px rgba(16,24,40,.35)",pointerEvents:"none" as const}}/>
+        </div>
+        {/* 프리셋 */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:5,marginTop:12}}>
+          {COLOR_PRESETS.map(c=>(
+            <button key={c} type="button" onClick={()=>{sh(c);onChange(c)}} title={c}
+              style={{width:"100%",aspectRatio:"1",borderRadius:6,background:c,border:"none",cursor:"pointer",padding:0,
+                boxShadow:safe.toLowerCase()===c.toLowerCase()?`inset 0 0 0 1.5px #fff, 0 0 0 2px ${A.blue}`:"inset 0 0 0 1px rgba(16,24,40,.12)"}}/>
+          ))}
+        </div>
+      </div>
+    </>}
   </div>
 }
 function FG({children,title,A,last=false}:{children:React.ReactNode;title?:string;A:AT;last?:boolean}) {
-  return <div style={{marginBottom:last?0:20,paddingBottom:last?0:20,borderBottom:last?"none":`1px solid ${A.border}`}}>
-    {title&&<div style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,marginBottom:12,fontFamily:FONT}}>{title}</div>}
+  return <div style={{marginBottom:last?0:20}}>
+    {title&&<div style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:".4px",marginBottom:8,fontFamily:FONT}}>{title}</div>}
     {children}
   </div>
 }
 function F({children,label,hint,A}:{children:React.ReactNode;label?:string;hint?:string;A:AT}) {
   return <div style={{marginBottom:12}}>
-    {label&&<div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:5,fontFamily:FONT}}>{label}</div>}
-    {hint&&<div style={{fontSize:11,color:A.t3,marginBottom:5,lineHeight:1.5,fontFamily:FONT}}>{hint}</div>}
+    {label&&<div style={{fontSize:12.5,fontWeight:600,color:A.t1,marginBottom:hint?4:8,fontFamily:FONT}}>{label}</div>}
+    {hint&&<div style={{fontSize:11.5,color:A.t3,marginBottom:7,lineHeight:1.5,fontFamily:FONT}}>{hint}</div>}
     {children}
   </div>
 }
@@ -1455,7 +1795,7 @@ function Btn({children,onClick,variant="ghost",disabled=false,sm=false,A}:{child
   }
   const s=map[variant]
   return <button onClick={onClick} disabled={disabled} onMouseEnter={()=>sh(true)} onMouseLeave={()=>sh(false)}
-    style={{height:sm?28:32,padding:sm?"0 12px":"0 14px",borderRadius:A.r,border:`1px solid ${s.bd}`,background:s.bg,color:s.col,fontFamily:FONT,fontSize:sm?12:12.5,fontWeight:600,cursor:disabled?"not-allowed":"pointer",display:"inline-flex",alignItems:"center",gap:5,opacity:disabled?0.45:1,whiteSpace:"nowrap" as const,transition:"all .12s"}}>
+    style={{height:sm?28:32,padding:sm?"0 12px":"0 14px",borderRadius:A.r,border:`1px solid ${s.bd}`,background:s.bg,color:s.col,fontFamily:FONT,fontSize:sm?12:12.5,fontWeight:variant==="blue"||variant==="primary"||variant==="success"?700:600,cursor:disabled?"not-allowed":"pointer",display:"inline-flex",alignItems:"center",gap:5,opacity:disabled?0.45:1,whiteSpace:"nowrap" as const,transition:"all .12s"}}>
     {children}
   </button>
 }
@@ -1510,14 +1850,17 @@ function FieldOptAdder({fieldIdx,onAdd,A}:{fieldIdx:number;onAdd:(lbl:string,val
     onAdd(trimmed,trimmed)
     setLbl("")
   }
-  return <div style={{display:"flex",gap:5,alignItems:"flex-start"}}>
-    <textarea value={lbl} onChange={e=>setLbl(e.target.value)}
-      onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey&&!(e.nativeEvent as any).isComposing){e.preventDefault();add()}}}
-      placeholder={"답변 텍스트 입력\n(Shift+Enter 줄바꿈)"}
-      rows={2}
-      style={{flex:1,background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT2,fontSize:12.5,padding:"7px 9px",outline:"none",resize:"vertical" as const,boxSizing:"border-box" as const,lineHeight:1.6}}/>
-    <button onClick={add}
-      style={{height:32,padding:"0 11px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,cursor:"pointer",fontFamily:FONT2,fontSize:12.5,flexShrink:0,marginTop:1}}>추가</button>
+  return <div>
+    <div style={{display:"flex",gap:6,alignItems:"stretch"}}>
+      <textarea value={lbl} onChange={e=>setLbl(e.target.value)}
+        onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey&&!(e.nativeEvent as any).isComposing){e.preventDefault();add()}}}
+        placeholder="답변 텍스트 입력"
+        rows={1}
+        style={{flex:1,minWidth:0,minHeight:40,background:panelFieldBg(A),border:"none",borderRadius:9,color:A.t1,fontFamily:FONT2,fontSize:12.5,padding:"11px 12px",outline:"none",resize:"vertical" as const,boxSizing:"border-box" as const,lineHeight:1.5}}/>
+      <button onClick={add} disabled={!lbl.trim()}
+        style={{width:56,flexShrink:0,borderRadius:9,border:"none",background:lbl.trim()?A.blue:panelFieldBg(A),color:lbl.trim()?"#fff":A.t3,cursor:lbl.trim()?"pointer":"not-allowed",fontFamily:FONT2,fontSize:12.5,fontWeight:600,transition:"background .12s, color .12s"}}>추가</button>
+    </div>
+    <div style={{marginTop:6,fontSize:11.5,color:A.t3,lineHeight:1.5}}>Enter로 추가, Shift+Enter로 줄바꿈</div>
   </div>
 }
 
@@ -1767,7 +2110,7 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
     setShowLink(false);setLinkUrl("");savedRangeRef.current=null
   }
 
-  const btnS:React.CSSProperties={width:28,height:26,borderRadius:4,border:`1px solid ${A.border}`,background:"transparent",cursor:"pointer",color:A.t1,fontFamily:FONT2,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}
+  const btnS:React.CSSProperties={width:36,height:34,borderRadius:8,border:`1px solid ${A===ALT?"#E3E7EC":A.border}`,background:A.card,cursor:"pointer",color:A.t2,fontFamily:FONT2,fontSize:13,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center"}
   return <div style={{position:"relative"}}>
     <div style={{position:"sticky" as const,top:0,zIndex:5,background:A.card,padding:"0 0 6px",marginBottom:5}}>
       <div style={{display:"flex",gap:4,alignItems:"center"}}>
@@ -1780,7 +2123,7 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
           setShowLink(v=>!v);setLinkUrl("")}} title="링크" style={btnS}>
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M6.5 9.5a4.24 4.24 0 0 0 6 0l2-2a4.24 4.24 0 0 0-6-6L7 3M9.5 6.5a4.24 4.24 0 0 0-6 0l-2 2a4.24 4.24 0 0 0 6 6L9 13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
         </button>
-        <div style={{width:1,height:16,background:A.border,margin:"0 2px"}}/>
+        <div style={{width:1,height:18,background:A.border,margin:"0 2px"}}/>
         <button onMouseDown={e=>{e.preventDefault();const el=edRef.current;if(!el)return;el.focus();
           const sel=window.getSelection();if(!sel||!sel.rangeCount)return;
           const range=sel.getRangeAt(0);const text=sel.toString();
@@ -1792,7 +2135,7 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
         <button onMouseDown={e=>{e.preventDefault();const el=edRef.current;if(!el)return;el.focus();document.execCommand("insertHTML",false,'<hr style="border:none;border-top:1px solid currentColor;opacity:0.2;margin:6px 0"/><br>');onChange(htmlToMd(el.innerHTML))}} title="구분선" style={btnS}>
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 8h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><path d="M4 4h8M4 12h8" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.4"/></svg>
         </button>
-        <span style={{fontSize:11,color:A.t3,marginLeft:2}}>텍스트 선택 후 클릭</span>
+        <span style={{fontSize:12,color:A.t3,marginLeft:2}}>텍스트 선택 후 클릭</span>
       </div>
       {showLink&&<div style={{display:"flex",gap:5,marginTop:6,alignItems:"center"}}>
         <input value={linkUrl} onChange={e=>setLinkUrl(e.target.value)}
@@ -1818,7 +2161,7 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
       onBlur={e=>{setIsFocused(false);onChange(htmlToMd((e.currentTarget as HTMLDivElement).innerHTML))}}
       onInput={()=>{commitHtml();saveSelection()}}
       onKeyDown={e=>{const el=edRef.current;if(el)handleEditorKey(e,el,onChange)}}
-      style={{width:"100%",minHeight:100,background:A.card2,border:`1px solid ${isFocused?A.blue:A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT2,fontSize:13,padding:"8px 10px",outline:"none",lineHeight:1.7,boxSizing:"border-box" as const,wordBreak:"break-word" as const,cursor:"text",transition:"border .15s"}}
+      style={{width:"100%",minHeight:132,background:panelFieldBg(A),border:"none",borderRadius:10,color:A.t1,fontFamily:FONT2,fontSize:13.5,padding:"13px 14px",outline:"none",lineHeight:1.7,boxSizing:"border-box" as const,wordBreak:"break-word" as const,cursor:"text",boxShadow:isFocused?`inset 0 0 0 1.5px ${A.blue}`:"none",transition:"box-shadow .15s"}}
     />
   </div>
 }
@@ -1845,93 +2188,96 @@ function ConsentBodyPreview({body,accentColor,FC,noBorder,noAccordion}:{body:str
 }
 
 // ─── ProgramPicker — category grid → program list ────────────────────────
-const IO_CAT_NAMES = ["인턴형", "프로젝트형"]
-const SF_ETC_CAT_ID = "dc117b4b-1646-4721-9177-6e6e305f6fd0"
-const SF_CAT_NAMES = ["새싹(SeSAC)", "새싹", "KDT", "중소기업 인재키움", "인턴형", "ETC"]
-const SF_CAT_IDS = [SF_ETC_CAT_ID]
 
 function ProgramPicker({progs,cats,brand,value,onChange,A}:{progs:Prog[];cats:Cat[];brand:string;value:string;onChange:(p:Prog)=>void;A:AT}) {
-  const [selCat,setSelCat]=React.useState<string|null>(null)
   const [open,setOpen]=React.useState(false)
   const [query,setQuery]=React.useState("")
 
-  const allowedNames = brand==="INSIDEOUT" ? IO_CAT_NAMES : SF_CAT_NAMES
-  const allowedCatIds = brand==="INSIDEOUT" ? [] : SF_CAT_IDS
-  // category UUID → name 매핑
-  const catNameOf = (catId:string|undefined) => cats.find(c=>c.id===catId)?.name||(catId&&allowedCatIds.includes(catId)?"ETC":"")
-  const isAllowedCat = (catId:string|undefined) => allowedNames.includes(catNameOf(catId))||!!(catId&&allowedCatIds.includes(catId))
-  // 허용된 이름의 카테고리에 속하는 프로그램만
-  const filtered = progs.filter(p=>isAllowedCat(p.category))
-  // unique categories from actual data
-  const catName=catNameOf
-  // allowedNames 순서대로 카테고리 표시 (과정 없어도 보임)
-  const catIds = [
-    ...cats.filter(c=>isAllowedCat(c.id)).map(c=>c.id),
-    ...allowedCatIds.filter(id=>progs.some(p=>p.category===id)&&!cats.some(c=>c.id===id)),
-  ]
-  const inCat = selCat ? filtered.filter(p=>p.category===selCat) : []
-  const inCatFiltered = query.trim() ? inCat.filter(p=>p.title.toLowerCase().includes(query.trim().toLowerCase())) : inCat
+  // 카테고리 목록은 Supabase `categories` 테이블의 brand 컬럼을 그대로 따른다.
+  const brandCats = cats.filter(c=>canonicalBrand(c.brand||"")===canonicalBrand(brand||""))
+  // 아직 해당 브랜드로 등록된 카테고리가 없으면 기존 동작대로 스나이퍼팩토리 기준을 쓴다.
+  const usableCats = brandCats.length ? brandCats : cats.filter(c=>canonicalBrand(c.brand||"")==="SNIPERFACTORY")
+  const allowedCatIdSet = new Set(usableCats.map(c=>c.id))
+  const catNameOf = (catId:string|undefined) => cats.find(c=>c.id===catId)?.name||""
+  const isAllowedCat = (catId:string|undefined) => !!catId && allowedCatIdSet.has(catId)
+  const allPrograms = progs.filter(p=>isAllowedCat(p.category))
   const selected = progs.find(p=>p.id===value)
 
-  const catColor = A.blue
+  const needle=query.trim().toLowerCase()
+  // 유형 단계 없이 전체 과정을 한 목록에 두고, 유형은 그룹 헤더로만 구분한다.
+  const groups = usableCats.map(cat=>({
+    id:cat.id,
+    name:cat.name,
+    items:allPrograms.filter(p=>p.category===cat.id&&(!needle||p.title.toLowerCase().includes(needle))),
+  })).filter(g=>g.items.length>0)
+  const totalHits = groups.reduce((n,g)=>n+g.items.length,0)
+
+  React.useEffect(()=>{if(!open)setQuery("")},[open])
 
   return <div style={{position:"relative" as const}}>
-    {/* Trigger */}
-    <div onClick={()=>setOpen(v=>!v)}
-      style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 11px",borderRadius:A.r,background:A.card2,border:`1.5px solid ${open?catColor:A.border}`,cursor:"pointer",transition:"border .15s"}}>
-      <span style={{fontSize:13,color:selected?A.t1:A.t3,fontFamily:FONT,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,flex:1}}>
+    {/* 트리거 */}
+    <button type="button" onClick={()=>setOpen(v=>!v)}
+      style={{width:"100%",height:46,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"0 14px",borderRadius:10,border:"none",
+        background:panelFieldBg(A),color:selected?A.t1:A.t3,fontFamily:FONT,fontSize:13,fontWeight:500,cursor:"pointer",textAlign:"left" as const,
+        boxShadow:open?`inset 0 0 0 1.5px ${A.blue}`:"none",transition:"box-shadow .12s"}}>
+      <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
         {selected?selected.title:"과정을 선택해 주세요."}
       </span>
-      <span style={{fontSize:11,color:A.t3,flexShrink:0,marginLeft:6}}>{open?"▴":"▾"}</span>
-    </div>
+      <svg width="12" height="12" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A.t3,transform:open?"rotate(180deg)":"none",transition:"transform .15s"}}>
+        <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </button>
 
-    {/* Dropdown panel */}
-    {open&&<div style={{marginTop:4,background:A.card,border:`1.5px solid ${A.border}`,borderRadius:A.r2,overflow:"hidden",boxShadow:A.shadow}}>
-      {/* Category grid */}
-      {!selCat&&<div style={{padding:12}}>
-        <div style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,marginBottom:10}}>유형 선택</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          {catIds.length===0&&<div style={{gridColumn:"1 / -1",padding:"14px 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t3,fontSize:12.5,textAlign:"center" as const}}>선택 가능한 과정 유형을 불러오고 있어요.</div>}
-          {catIds.map(cat=><button key={cat} onClick={()=>setSelCat(cat)}
-            style={{padding:"12px 10px",borderRadius:A.r,border:`1.5px solid ${A.border}`,background:A.card2,cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,transition:"all .12s"}}
-            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=catColor;(e.currentTarget as HTMLElement).style.background=catColor+"12"}}
-            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=A.border;(e.currentTarget as HTMLElement).style.background=A.card2}}>
-            <div style={{fontSize:12.5,fontWeight:600,color:A.t1,marginBottom:3}}>{catName(cat)}</div>
-            <div style={{fontSize:11,color:A.t3}}>{filtered.filter(p=>p.category===cat).length}개 과정</div>
-          </button>)}
+    {open&&<>
+      <div onClick={()=>setOpen(false)} style={{position:"fixed" as const,inset:0,zIndex:59}}/>
+      <div style={{position:"absolute" as const,top:52,left:0,right:0,zIndex:60,borderRadius:12,overflow:"hidden",background:A.card,
+        border:A===ALT?"none":`1px solid ${A.border}`,boxShadow:"0 1px 2px rgba(16,24,40,.08), 0 16px 40px -10px rgba(16,24,40,.28)"}}>
+        {/* 검색 — 유형을 고르지 않아도 전체 과정에서 바로 찾을 수 있다 */}
+        <div style={{padding:10,boxShadow:`inset 0 -1px 0 ${A.border}`}}>
+          <div style={{height:36,display:"flex",alignItems:"center",gap:8,padding:"0 11px",borderRadius:9,background:panelFieldBg(A)}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{color:A.t3,flexShrink:0}}>
+              <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8"/><path d="m20 20-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+            </svg>
+            <input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="과정명 검색"
+              style={{flex:1,minWidth:0,border:"none",outline:"none",background:"transparent",color:A.t1,fontFamily:FONT,fontSize:12.5}}/>
+            {query&&<button type="button" onClick={()=>setQuery("")} aria-label="검색어 지우기"
+              style={{width:18,height:18,flexShrink:0,border:"none",borderRadius:5,background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>
+              <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
+            </button>}
+          </div>
         </div>
-      </div>}
 
-      {/* Program list after cat selected */}
-      {selCat&&<>
-        <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",borderBottom:`1px solid ${A.border}`,background:A.card2}}>
-          <button onClick={()=>{setSelCat(null);setQuery("")}} style={{display:"flex",alignItems:"center",gap:4,background:"transparent",border:"none",cursor:"pointer",color:catColor,fontSize:12,fontWeight:600,fontFamily:FONT,padding:0}}>
-            ← 유형 선택
-          </button>
-          <span style={{fontSize:11,color:A.t3,marginLeft:"auto"}}>{catName(selCat||"")}</span>
+        <div style={{maxHeight:300,overflowY:"auto" as const,padding:6}}>
+          {totalHits===0
+            ? <div style={{padding:"28px 12px",textAlign:"center" as const,color:A.t3,fontSize:12.5,lineHeight:1.6}}>
+                {allPrograms.length===0?"선택 가능한 교육과정이 없어요.":"검색 결과가 없어요."}
+              </div>
+            : groups.map(group=>(
+              <div key={group.id}>
+                <div style={{display:"flex",alignItems:"center",gap:6,padding:"9px 10px 6px"}}>
+                  <span style={{fontSize:11.5,fontWeight:700,color:A.t3,letterSpacing:".3px"}}>{group.name}</span>
+                  <span style={{fontSize:11,fontWeight:600,color:A.t4}}>{group.items.length}</span>
+                </div>
+                {group.items.map(p=>{
+                  const sel=p.id===value
+                  return <button key={p.id} type="button" onClick={()=>{onChange(p);setOpen(false)}}
+                    style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"9px 10px",borderRadius:9,border:"none",
+                      background:sel?panelFieldBg(A):"transparent",color:sel?A.t1:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:sel?700:500,
+                      cursor:"pointer",textAlign:"left" as const,lineHeight:1.45}}
+                    onMouseEnter={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background=panelFieldBg(A)}}
+                    onMouseLeave={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background="transparent"}}>
+                    <span style={{flex:1,minWidth:0}}>{p.title}</span>
+                    {sel&&<svg width="12" height="12" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A.blue}}><path d="M1.5 5.2 3.8 7.5 8.5 2.8" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </button>
+                })}
+              </div>
+            ))}
         </div>
-        <div style={{padding:"8px 10px 4px",borderBottom:`1px solid ${A.border}`}}>
-          <input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="과정명 검색..."
-            style={{width:"100%",background:A.card2,border:`1.5px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:12.5,padding:"6px 10px",outline:"none",boxSizing:"border-box" as const}}/>
-        </div>
-        <div style={{maxHeight:200,overflowY:"auto" as const,padding:6}}>
-          {inCatFiltered.length===0&&<div style={{padding:"12px 10px",fontSize:12.5,color:A.t3,fontFamily:FONT,textAlign:"center" as const}}>검색 결과가 없어요</div>}
-          {inCatFiltered.map(p=>{const sel=p.id===value;return(
-            <div key={p.id} onClick={()=>{onChange(p);setOpen(false);setSelCat(null)}}
-              style={{padding:"9px 12px",borderRadius:A.r,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2,background:sel?catColor+"14":"transparent",border:`1px solid ${sel?catColor+"44":"transparent"}`,transition:"all .1s"}}
-              onMouseEnter={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background=A.card2}}
-              onMouseLeave={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background="transparent"}}>
-              <span style={{fontSize:13,color:A.t1,fontFamily:FONT}}>{p.title}</span>
-              {sel&&<span style={{fontSize:13,color:catColor,fontWeight:600}}>✓</span>}
-            </div>
-          )})}
-        </div>
-      </>}
-    </div>}
+      </div>
+    </>}
   </div>
 }
 
-// ─── Main Component ────────────────────────────────────────────────────────
 export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:string;supabaseAnonKey?:string;formBaseUrl?:string;googleSheetsWebhookUrl?:string}) {
   const {width=1280,height=820,supabaseUrl="",supabaseAnonKey="",formBaseUrl="",googleSheetsWebhookUrl=""}=props
   const supa=React.useMemo(()=>getSB(supabaseUrl,supabaseAnonKey),[supabaseUrl,supabaseAnonKey])
@@ -1962,18 +2308,95 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const dashTableScrollRef=React.useRef<HTMLDivElement|null>(null)
   const [showBrandModal,setShowBrandModal]=React.useState(false)
   const [showGuide,setShowGuide]=React.useState(false)
-  const [dashTab,setDashTab]=React.useState<BrandId>("SNIPERFACTORY")
   const [dashBrandFilter,setDashBrandFilter]=React.useState("")
   const [dashProgramFilter,setDashProgramFilter]=React.useState("")
-  const [dashSideTypeFilter,setDashSideTypeFilter]=React.useState<DashboardFormType|"" >("")
+  const [dashProgramGroupFilter,setDashProgramGroupFilter]=React.useState("")
+  const [dashShowEmptyGroups,setDashShowEmptyGroups]=React.useState(false)
+  const [showCustomAppType,setShowCustomAppType]=React.useState(false)
+  const [openConsentIdx,setOpenConsentIdx]=React.useState<Record<number,boolean>>({})
+  React.useEffect(()=>{
+    const rgb=adminDark?"255,255,255":"141,149,163"
+    const id="cf-admin-scrollbar-style"
+    let tag=document.getElementById(id) as HTMLStyleElement|null
+    if(!tag){tag=document.createElement("style");tag.id=id;document.head.appendChild(tag)}
+    // 트랙 배경 없이 얇은 디바이더처럼. 실제 노출 두께는 7px - 좌우 테두리 2px = 3px.
+    // 진하기는 --cf-sb-a 로 제어하고, 아래 effect에서 스크롤 시작/종료에 맞춰 페이드시킨다.
+    tag.textContent=`
+      *::-webkit-scrollbar{width:7px;height:7px}
+      *::-webkit-scrollbar-track{background:transparent}
+      *::-webkit-scrollbar-corner{background:transparent}
+      *::-webkit-scrollbar-thumb{background-color:rgba(${rgb},var(--cf-sb-a,0));border:2px solid transparent;background-clip:padding-box;border-radius:999px}
+      *{scrollbar-width:thin;scrollbar-color:rgba(${rgb},var(--cf-sb-a,0)) transparent}
+    `
+  },[adminDark])
+  const scrollbarPeakAlpha=adminDark?0.34:0.5
+  React.useEffect(()=>{
+    const FADE_IN=140, FADE_OUT=320, HOLD=700
+    const anims=new WeakMap<Element,{raf:number;timer:any;alpha:number}>()
+    const animate=(el:HTMLElement,to:number,duration:number)=>{
+      const state=anims.get(el)||{raf:0,timer:0,alpha:0}
+      anims.set(el,state)
+      cancelAnimationFrame(state.raf)
+      const from=state.alpha
+      if(from===to)return
+      const startedAt=performance.now()
+      const step=(now:number)=>{
+        const progress=Math.min(1,(now-startedAt)/duration)
+        const alpha=from+(to-from)*progress
+        state.alpha=alpha
+        el.style.setProperty("--cf-sb-a",String(Math.round(alpha*1000)/1000))
+        if(progress<1)state.raf=requestAnimationFrame(step)
+      }
+      state.raf=requestAnimationFrame(step)
+    }
+    const onScroll=(e:Event)=>{
+      const el=e.target as HTMLElement|null
+      if(!el||el.nodeType!==1||!el.style)return
+      const state=anims.get(el)||{raf:0,timer:0,alpha:0}
+      anims.set(el,state)
+      clearTimeout(state.timer)
+      animate(el,scrollbarPeakAlpha,FADE_IN)
+      state.timer=setTimeout(()=>animate(el,0,FADE_OUT),HOLD)
+    }
+    document.addEventListener("scroll",onScroll,true)
+    return ()=>document.removeEventListener("scroll",onScroll,true)
+  },[scrollbarPeakAlpha])
+  const courseTabsRef=React.useRef<HTMLDivElement|null>(null)
+  const [courseTabsArrows,setCourseTabsArrows]=React.useState({left:false,right:false})
+  const syncCourseTabsArrows=React.useCallback(()=>{
+    const el=courseTabsRef.current
+    if(!el){setCourseTabsArrows({left:false,right:false});return}
+    const max=el.scrollWidth-el.clientWidth
+    setCourseTabsArrows({left:el.scrollLeft>2,right:max>2&&el.scrollLeft<max-2})
+  },[])
+  const scrollCourseTabs=(dir:1|-1)=>{
+    const el=courseTabsRef.current
+    if(!el)return
+    el.scrollBy({left:dir*Math.max(200,Math.round(el.clientWidth*0.7)),behavior:"smooth"})
+  }
   const [dashTopTypeFilter,setDashTopTypeFilter]=React.useState<DashboardFormType|"" >("")
   const [dashTopStatusFilter,setDashTopStatusFilter]=React.useState<DashboardManualStatus|"" >("")
   const [dashQuery,setDashQuery]=React.useState("")
-  const [dashOpenGroups,setDashOpenGroups]=React.useState<Record<string,boolean>>({})
   const [dashResponseCounts,setDashResponseCounts]=React.useState<Record<string,number>>({})
   const [dashboardSettings,setDashboardSettings]=React.useState<DashboardSettingsState|null>(null)
   const [dashboardSettingsSaving,setDashboardSettingsSaving]=React.useState(false)
   const [editPasswordPrompt,setEditPasswordPrompt]=React.useState<null|{item:any;password:string;error:string;checking:boolean}>(null)
+  const [recentEditIds,setRecentEditIds]=React.useState<string[]>([])
+  React.useEffect(()=>{
+    try{
+      const raw=window.localStorage.getItem(RECENT_EDIT_STORAGE_KEY)
+      const parsed=raw?JSON.parse(raw):[]
+      if(Array.isArray(parsed))setRecentEditIds(parsed.filter((id:any)=>typeof id==="string"))
+    }catch{}
+  },[])
+  function markFormRecentlyEdited(id:string){
+    if(!id)return
+    setRecentEditIds(prev=>{
+      const next=[id,...prev.filter(item=>item!==id)].slice(0,RECENT_EDIT_LIMIT)
+      try{window.localStorage.setItem(RECENT_EDIT_STORAGE_KEY,JSON.stringify(next))}catch{}
+      return next
+    })
+  }
   const [formTrashOpen,setFormTrashOpen]=React.useState(false)
   const [formTrashItems,setFormTrashItems]=React.useState<any[]>([])
   const [formTrashBusy,setFormTrashBusy]=React.useState("")
@@ -1999,8 +2422,21 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
   // ── Builder UI state ───────────────────────────────────────────────────
   const [sec,setSec]=React.useState("header")
+  // 동의 탭에 들어올 때마다 아코디언을 모두 접는다.
+  React.useEffect(()=>{if(sec==="consent")setOpenConsentIdx({})},[sec])
   const [pvTab,setPvTab]=React.useState<"form"|"link">("form")
   const [saved,setSaved]=React.useState<any[]>([])
+  // 최근 구간 기준 폼별 참여/전환. 대시보드 콜아웃에서만 쓴다.
+  const [conversionByForm,setConversionByForm]=React.useState<Record<string,{sessions:number;completed:number}>>({})
+  React.useEffect(()=>{
+    syncCourseTabsArrows()
+    const el=courseTabsRef.current
+    if(!el)return
+    const observer=typeof ResizeObserver!=="undefined"?new ResizeObserver(()=>syncCourseTabsArrows()):null
+    observer?.observe(el)
+    window.addEventListener("resize",syncCourseTabsArrows)
+    return ()=>{observer?.disconnect();window.removeEventListener("resize",syncCourseTabsArrows)}
+  },[view,dashShowEmptyGroups,dashBrandFilter,dashProgramGroupFilter,cats.length,saved.length,syncCourseTabsArrows])
   const [editorTabs,setEditorTabs]=React.useState<EditorTab[]>([])
   const [activeEditorTabKey,setActiveEditorTabKey]=React.useState("")
   const [saving,setSaving]=React.useState(false)
@@ -2027,10 +2463,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [qrGeneratedUrl,setQrGeneratedUrl]=React.useState("")
   const [qrGeneratedMatrix,setQrGeneratedMatrix]=React.useState<boolean[][]|null>(null)
   const [qrGeneratedError,setQrGeneratedError]=React.useState("")
-  const [showAnalyticsTip,setShowAnalyticsTip]=React.useState(false)
-  const [showBuilderSettingsTip,setShowBuilderSettingsTip]=React.useState(false)
   const [actionLoading,setActionLoading]=React.useState("")
-  const [analyticsInfoTip,setAnalyticsInfoTip]=React.useState("")
   const [analyticsTopTip,setAnalyticsTopTip]=React.useState("")
   const [showDeleteAllAnalytics,setShowDeleteAllAnalytics]=React.useState(false)
   const [showAnalyticsDeleteMenu,setShowAnalyticsDeleteMenu]=React.useState(false)
@@ -2069,11 +2502,30 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [analyticsErr,setAnalyticsErr]=React.useState("")
   const [analyticsQuestionId,setAnalyticsQuestionId]=React.useState("")
   const [analyticsSection,setAnalyticsSection]=React.useState(1)
-  const [analyticsHoverSlice,setAnalyticsHoverSlice]=React.useState<number|null>(null)
-  const [analyticsHoverPoint,setAnalyticsHoverPoint]=React.useState<{x:number;y:number}|null>(null)
+  // 섹션은 여러 개를 동시에 펼칠 수 있다. 다른 섹션을 눌러도 기존 것이 닫히지 않는다.
+  const [analyticsOpenSections,setAnalyticsOpenSections]=React.useState<Record<number,boolean>>({})
+  // 응답별 데이터에서 행을 누르면 우측에 상세 패널을 연다.
+  const [analyticsOpenRowKey,setAnalyticsOpenRowKey]=React.useState<string>("")
+  // 기간별 인사이트: 유입경로 축 전환과 추이 그래프 호버 위치
+  const [periodSourceAxis,setPeriodSourceAxis]=React.useState<"domain"|"source"|"medium"|"campaign">("domain")
+  // 기간별 인사이트에서 볼 구간
+  const [periodRangeMode,setPeriodRangeMode]=React.useState<"all"|"7"|"30"|"90"|"custom">("all")
+  const [periodRangeStart,setPeriodRangeStart]=React.useState("")
+  const [periodRangeEnd,setPeriodRangeEnd]=React.useState("")
+  const [periodRangeOpen,setPeriodRangeOpen]=React.useState(false)
+  // 유입경로에서 펼쳐 볼 채널 (해당 채널로 들어온 사람들의 위치·기기·언어)
+  const [periodSourceDetail,setPeriodSourceDetail]=React.useState("")
+  // 수정 권장 목록에서 펼쳐 놓은 질문
+  const [openRecommendationId,setOpenRecommendationId]=React.useState("")
+  const trendHoverIdxRef=React.useRef<number|null>(null)
+  const trendDotRef=React.useRef<HTMLSpanElement|null>(null)
+  const trendTipRef=React.useRef<HTMLDivElement|null>(null)
+  const trendTipDateRef=React.useRef<HTMLDivElement|null>(null)
+  const trendTipValueRef=React.useRef<HTMLSpanElement|null>(null)
+  const trendTipDoneRef=React.useRef<HTMLSpanElement|null>(null)
+  const trendDotDoneRef=React.useRef<HTMLSpanElement|null>(null)
+  const [analyticsUtmOpen,setAnalyticsUtmOpen]=React.useState(false)
   const [analyticsQuestionQuery,setAnalyticsQuestionQuery]=React.useState("")
-  const [analyticsColumnWidths,setAnalyticsColumnWidths]=React.useState<Record<string,number>>({})
-  const [periodHover,setPeriodHover]=React.useState<null|{scope:string;x:number;y:number;title:string;color:string;lines:string[]}>(null)
 
   // ── Preview interactive states (must be at top level - Rules of Hooks) ─
   const [pvName,setPvName]=React.useState("")
@@ -2086,7 +2538,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [pvDd,setPvDd]=React.useState(false)
   const [pvPage,setPvPage]=React.useState(1)
   const [pvPageHistory,setPvPageHistory]=React.useState<number[]>([])
-  const [rightPanelW,setRightPanelW]=React.useState(320)
+  const [rightPanelW,setRightPanelW]=React.useState(344)
   const isResizingRef=React.useRef(false)
   const [pvFieldVals,setPvFieldVals]=React.useState<Record<string,string>>({})
   const [pvFieldErrors,setPvFieldErrors]=React.useState<Record<string,string>>({})
@@ -2103,6 +2555,45 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [selectedFieldId,setSelectedFieldId]=React.useState<string|null>(null)
   const [editIdx,setEditIdx]=React.useState<number|null>(null)
   const [showAddField,setShowAddField]=React.useState(false)
+  const [sheetRenamePrompt,setSheetRenamePrompt]=React.useState<{from:string;to:string}|null>(null)
+  // 기존 시트에 어떤 탭이 있는지 Apps Script에 물어 드롭다운을 채운다.
+  const [sheetTabs,setSheetTabs]=React.useState<{url:string;tabs:string[];gids:Record<string,string>}|null>(null)
+  const [sheetTabsLoading,setSheetTabsLoading]=React.useState(false)
+  const [sheetTabsErr,setSheetTabsErr]=React.useState("")
+  const [newTabMode,setNewTabMode]=React.useState(false)
+  async function loadSheetTabs(sheetUrl:string){
+    const url=String(sheetUrl||"").trim()
+    const webhookUrl=String(googleSheetsWebhookUrl||"").trim()
+    if(!url||!webhookUrl)return
+    setSheetTabsLoading(true);setSheetTabsErr("")
+    try{
+      const result:any=await postAppsScriptPayload(webhookUrl,{action:"listTabs",sheetUrl:url},{allowDirectFallback:false})
+      const tabs=Array.isArray(result?.tabs)?result.tabs.map((t:any)=>String(t)):[]
+      if(!tabs.length)throw new Error("시트에서 탭을 찾지 못했어요.")
+      // 탭 이름 → gid. `시트 열기`가 해당 탭으로 바로 가도록 저장해둔다.
+      const rawGids=Array.isArray(result?.tabGids)?result.tabGids:[]
+      const gids:Record<string,string>={}
+      tabs.forEach((t:string,i:number)=>{if(rawGids[i]!==undefined)gids[t]=String(rawGids[i])})
+      setSheetTabs({url,tabs,gids})
+      const crmWarning=String(result?.crmAccessWarning||"").trim()
+      if(crmWarning)setSheetTabsErr(crmWarning)
+    }catch(e){
+      setSheetTabs(null)
+      setSheetTabsErr((e as any)?.message||"시트를 읽지 못했어요. 링크와 공유 권한을 확인해주세요.")
+    }finally{setSheetTabsLoading(false)}
+  }
+  const addFieldBtnRef=React.useRef<HTMLButtonElement|null>(null)
+  const [addFieldMenuTop,setAddFieldMenuTop]=React.useState(118)
+  // 메뉴를 '+ 질문 추가' 버튼 높이에 맞춰 띄우되, 화면 밖으로 넘치지 않게 위아래로 보정한다.
+  function openAddFieldMenu(){
+    const rect=addFieldBtnRef.current?.getBoundingClientRect()
+    if(rect){
+      const min=118
+      const max=Math.max(min,window.innerHeight-240)
+      setAddFieldMenuTop(Math.min(Math.max(rect.top,min),max))
+    }
+    setShowAddField(true)
+  }
   const [panelDragIdx,setPanelDragIdx]=React.useState<number|null>(null)
   const [panelDragOver,setPanelDragOver]=React.useState<number|null>(null)
   const [sectionDragIdx,setSectionDragIdx]=React.useState<number|null>(null)
@@ -2122,7 +2613,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [pvKdtDrops,setPvKdtDrops]=React.useState<Record<string,boolean>>({})
 
   // ── Toast ─────────────────────────────────────────────────────────────
-  const [toast,setToast]=React.useState<{msg:string;ok:boolean;undo?:()=>void}|null>(null)
+  const [toast,setToast]=React.useState<{msg:string;ok:boolean;undo?:()=>void;action?:{label:string;onClick:()=>void}}|null>(null)
   const [toastLeaving,setToastLeaving]=React.useState(false)
   const toastRef=React.useRef<any>(null)
   const [deletedField,setDeletedField]=React.useState<{field:FormField;idx:number}|null>(null)
@@ -2148,9 +2639,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       window.removeEventListener("drop",clear)
     }
   },[optionDrag])
-  function showToast(msg:string,ok=true,undo?:()=>void){
+  function showToast(msg:string,ok=true,undo?:()=>void,action?:{label:string;onClick:()=>void}){
     setToastLeaving(false)
-    setToast({msg,ok,undo})
+    setToast({msg,ok,undo,action})
     clearTimeout(toastRef.current)
     toastRef.current=setTimeout(()=>{
       setToastLeaving(true)
@@ -2215,7 +2706,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setSavedSlug(tab.slug||"")
     setCurrentBrand(canonicalBrand(tab.brand||tab.cfg?.brand||"SNIPERFACTORY"))
     resetQrEditorState(tab.cfg)
-    if(opts.resetPanel){setSec("header");setPvTab("form")}
+    if(opts.resetPanel){setSec(pendingBuilderSectionRef.current||"header");setPvTab("form")}
+    else if(pendingBuilderSectionRef.current)setSec(pendingBuilderSectionRef.current)
+    pendingBuilderSectionRef.current=""
     setView("builder")
   }
   function upsertEditorTab(tab:EditorTab,opts:{resetPanel?:boolean}={}){
@@ -2372,7 +2865,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     try{
       const [programRes,categoryRes]:any[]=await Promise.all([
         withTimeout(sb.from("programs").select("*").eq("is_archived",false).order("title"),10000,"프로그램 목록 확인 시간이 초과됐어요."),
-        withTimeout(sb.from("categories").select("id,name"),10000,"카테고리 목록 확인 시간이 초과됐어요."),
+        withTimeout(sb.from("categories").select("id,name,brand,slug").order("name"),10000,"카테고리 목록 확인 시간이 초과됐어요."),
       ])
       if(requestId!==programCatalogRequestRef.current)return
       if(programRes.error)throw programRes.error
@@ -2515,12 +3008,25 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setDashHasMore(true)
     setDashNextOffset(0)
     try{
+      // 첫 페이지만 받고 로딩을 끝내면, 아직 안 받은 폼은 목록에도 검색에도 안 나온다.
+      // (검색은 이미 받아온 목록을 로컬에서 거르는 방식이라 더 그렇다.)
+      // 그래서 남은 페이지까지 이어서 받은 뒤에 로딩을 끝낸다.
       const refreshLimit=silent?Math.max(DASHBOARD_PAGE_SIZE,dashNextOffset||0):DASHBOARD_PAGE_SIZE
       const all=await fetchFormSummaries(sb,refreshLimit,0)
+      if(all.length===refreshLimit){
+        // 페이지를 다 돌 때까지 이어붙인다. 무한 루프를 막기 위해 상한을 둔다.
+        for(let offset=all.length,guard=0;guard<40;guard++){
+          const next=await fetchFormSummaries(sb,DASHBOARD_PAGE_SIZE,offset)
+          if(!next.length)break
+          all.push(...next)
+          offset+=next.length
+          if(next.length<DASHBOARD_PAGE_SIZE)break
+        }
+      }
       const trashed=all.filter(isFormTrashed)
       const active=all.filter((item:any)=>!isFormTrashed(item))
       setDashNextOffset(all.length)
-      setDashHasMore(all.length===refreshLimit)
+      setDashHasMore(false)
       setFormTrashItems(trashed)
       setSnList(active.filter((x:any)=>(x.config?.brand||x.brand)==="SNIPERFACTORY"))
       setIoList(active.filter((x:any)=>(x.config?.brand||x.brand)==="INSIDEOUT"))
@@ -2632,6 +3138,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     finally{setActionLoading("")}
   }
   async function openFormForEdit(item:any){
+    if(item?.id)markFormRecentlyEdited(String(item.id))
     const alreadyOpen=editorTabs.find(tab=>item?.id&&tab.id===item.id)
     if(alreadyOpen){
       applyEditorTab(alreadyOpen,{resetPanel:false})
@@ -2649,7 +3156,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     } catch(e){showToast("폼 불러오기 실패",false)}
     finally{if(shouldBlock)setActionLoading("")}
   }
-  function requestOpenFormForEdit(item:any){
+  // 편집 창을 열자마자 특정 패널로 보내야 할 때 쓴다. (전환 점검 알림 → 폼 질문)
+  const pendingBuilderSectionRef=React.useRef("")
+  function requestOpenFormForEdit(item:any,opts:{section?:string}={}){
+    pendingBuilderSectionRef.current=opts.section||""
     const passwordHash=item.config?.dashboard?.editPasswordHash||""
     if(passwordHash){
       setEditPasswordPrompt({item,password:"",error:"",checking:false})
@@ -2664,7 +3174,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     try{
       const summaryHash=editPasswordPrompt.item.config?.dashboard?.editPasswordHash||""
       const expected=summaryHash||((await getFullFormRow(editPasswordPrompt.item)).config?.dashboard?.editPasswordHash||"")
-      if(expected&&await sha256Text(editPasswordPrompt.password)!==expected){
+      if(expected&&!(await matchesEditPassword(editPasswordPrompt.password,expected))){
         setEditPasswordPrompt(prev=>prev&&({...prev,checking:false,error:"비밀번호가 맞지 않아요."}))
         return
       }
@@ -2702,7 +3212,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(expected){
       const password=window.prompt("편집 비밀번호를 입력해주세요.")
       if(password===null)return
-      if(!password||await sha256Text(password)!==expected){showToast("편집 비밀번호가 맞지 않아요.",false);return}
+      if(!password||!(await matchesEditPassword(password,expected))){showToast("편집 비밀번호가 맞지 않아요.",false);return}
     }
     setView("builder")
   }
@@ -2745,6 +3255,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       operationPeriods:operationPeriodsFromDashboard(dashboard,dbPeriod),
       alwaysOpen:!!dashboard.alwaysOpen||legacyAlwaysOpen,
       manualStatus:dashboard.manualStatus||"",
+      conversionCheckOff:!!dashboard.conversionCheckOff,
       currentEditPasswordDraft:"",
       editPasswordDraft:"",
       clearEditPassword:false,
@@ -2770,18 +3281,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const changingEditPassword=!!dashboardSettings.editPasswordDraft||dashboardSettings.clearEditPassword
       if(changingEditPassword&&previousEditPasswordHash&&!canMasterReset(authRole)){
         if(!dashboardSettings.currentEditPasswordDraft)throw new Error("현재 편집 비밀번호를 입력해주세요.")
-        if(await sha256Text(dashboardSettings.currentEditPasswordDraft)!==previousEditPasswordHash)throw new Error("현재 편집 비밀번호가 맞지 않아요.")
+        if(!(await matchesEditPassword(dashboardSettings.currentEditPasswordDraft,previousEditPasswordHash)))throw new Error("현재 편집 비밀번호가 맞지 않아요.")
       }
       if(dashboardSettings.clearEditPassword)editPasswordHash=""
       else if(dashboardSettings.editPasswordDraft){
         if(dashboardSettings.editPasswordDraft.length<4)throw new Error("편집 비밀번호는 4자 이상으로 입력해주세요.")
-        editPasswordHash=await sha256Text(dashboardSettings.editPasswordDraft)
+        editPasswordHash=await hashEditPassword(dashboardSettings.editPasswordDraft)
       }
       next.dashboard={
         ...nextDashboard,
         formTypeTag:dashboardSettings.formTypeTag,
         alwaysOpen:dashboardSettings.alwaysOpen,
         manualStatus:"",
+        conversionCheckOff:dashboardSettings.conversionCheckOff,
         editPasswordHash,
       }
       const updatedAt=new Date().toISOString()
@@ -3066,7 +3578,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(!passwordHash)return true
     const password=window.prompt(`"${name}"을 삭제하려면 편집 비밀번호를 입력해주세요.`)
     if(password===null)return false
-    if(!password||await sha256Text(password)!==passwordHash){
+    if(!password||!(await matchesEditPassword(password,passwordHash))){
       showToast("편집 비밀번호가 맞지 않아 삭제할 수 없어요.",false)
       return false
     }
@@ -3139,6 +3651,41 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       loadList();loadDashboard(supa)
     }catch(error){
       showToast("폼 영구 삭제 실패: "+((error as any)?.message||"오류"),false)
+    }finally{
+      setFormTrashBusy("")
+    }
+  }
+  async function purgeAllFormsFromTrash(){
+    if(!supa)return
+    const targets=formTrashItems.filter((item:any)=>item?.id)
+    if(!targets.length)return
+    if(!confirm(`휴지통의 폼 ${targets.length}개를 모두 영구 삭제할까요? 제출 응답과 QR/분석 기록까지 모두 삭제되며 복구할 수 없어요.`))return
+    setFormTrashBusy("__all__")
+    const failed:string[]=[]
+    try{
+      for(const item of targets){
+        const id=item.id
+        try{
+          const deleteFrom=async(table:string)=>{
+            const {error}=await supa.from(table).delete().eq("form_id",id)
+            if(error)throw error
+          }
+          await deleteFrom("applications")
+          await deleteFrom("company_applications")
+          await deleteFrom("form_response_events")
+          const {error}=await supa.from("form_configs").delete().eq("id",id)
+          if(error)throw error
+          delete fullFormCache.current[id]
+          setEditorTabs(prev=>prev.filter(tab=>tab.id!==id))
+          if(loadedId===id){setLoadedId("");setLoadedName("");setSavedSlug("");setActiveEditorTabKey("");setView("dashboard")}
+          setFormTrashItems(prev=>prev.filter(form=>form.id!==id))
+        }catch(error){
+          failed.push(item.name||"이름 없는 폼")
+        }
+      }
+      if(failed.length)showToast(`${targets.length-failed.length}개를 영구 삭제했고 ${failed.length}개는 실패했어요.`,false)
+      else showToast(`휴지통의 폼 ${targets.length}개를 영구 삭제했어요.`)
+      loadList();loadDashboard(supa)
     }finally{
       setFormTrashBusy("")
     }
@@ -3303,12 +3850,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       await supa.from("form_configs").update({config:nextCfg,brand:dbBrandValue(currentBrand),updated_at:new Date().toISOString()}).eq("id",loadedId)
     }
   }
-  async function testGoogleSheetsIntegration(){
+  async function testGoogleSheetsIntegration(sheetAction:""|"rename"|"new"=""){
     const gs={...DEFAULT_GOOGLE_SHEETS,...(cfg.integrations?.googleSheets||{})}
-    const webhookUrl=String(gs.webhookUrl||googleSheetsWebhookUrl||"").trim()
+    // `새로 생성`으로 이미 시트를 만든 뒤 이름을 바꿨다면, 이름만 바꿀지 새로 만들지 먼저 묻는다.
+    // Apps Script는 폼 ID로 만든 시트를 기억하므로, 묻지 않으면 이름을 바꿔도 옛 시트에 계속 쌓인다.
+    if(!sheetAction&&gs.mode==="new"&&gs.createdSheetName&&String(gs.sheetName||"").trim()&&gs.createdSheetName!==String(gs.sheetName||"").trim()){
+      setSheetRenamePrompt({from:gs.createdSheetName,to:String(gs.sheetName||"").trim()})
+      return
+    }
+    // 폼별 전용 URL은 쓰지 않는다. 공통 환경변수 하나만 바라본다.
+    const webhookUrl=String(googleSheetsWebhookUrl||"").trim()
     if(!loadedId){showToast("폼을 먼저 저장한 뒤 연동 테스트를 해주세요.",false);return}
     if(!gs.enabled){showToast("응답 자동 연동을 먼저 켜주세요.",false);return}
-    if(!webhookUrl){showToast("Apps Script Web App URL을 입력해주세요.",false);return}
+    if(!webhookUrl){showToast("연동 서버 주소가 설정되지 않았어요. 관리자에게 문의해주세요.",false);return}
     setActionLoading("구글 시트 연동을 테스트하는 중이에요.")
     try{
       const payload={
@@ -3317,7 +3871,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         schema:"analytics_export_v1",
         mode:gs.mode||"existing",
         accountEmail:gs.accountEmail||"",
-        sheetUrl:gs.sheetUrl||"",
+        // `새로 생성` 모드에서는 시트 링크를 보내지 않는다.
+        // Apps Script가 mode를 보지 않고 sheetUrl이 있으면 그 시트를 열어버려서,
+        // 기존 시트로 쓰다가 새로 생성으로 바꾸면 옛 시트에 행이 계속 쌓였다.
+        sheetUrl:(gs.mode||"existing")==="existing"?(gs.sheetUrl||""):"",
+        ...(sheetAction?{sheetAction}:{}),
+        tabName:String(gs.tabName||"").trim(),
         sheetName:gs.sheetName||cfg.header?.title||"CatchForm Responses",
         formId:loadedId,
         formSlug:savedSlug||saveSlug||"",
@@ -3345,9 +3904,18 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         {
           webhookUrl,
           ...(returnedSheetUrl?{sheetUrl:returnedSheetUrl}:{}),
+          ...(gs.mode==="new"?{createdSheetName:String(gs.sheetName||"").trim()}:{}),
+          ...(result?.sheetGid!==undefined?{tabGid:String(result.sheetGid)}:{}),
+          ...(result?.sheetName?{tabName:String(result.sheetName)}:{}),
         }
       )
-      showToast("테스트 전송 요청 완료! 시트를 확인해주세요.")
+      // 새로 만든 시트를 바로 열 수 있도록 토스트에 버튼을 붙인다.
+      const openUrl=googleSheetOpenUrl({...gs,...(returnedSheetUrl?{sheetUrl:returnedSheetUrl}:{}),...(result?.sheetGid!==undefined?{tabGid:String(result.sheetGid)}:{})})
+      // CRM 읽기 계정 권한 부여에 실패했으면 성공 토스트로 덮지 않고 그대로 알린다.
+      const crmWarning=String(result?.crmAccessWarning||"").trim()
+      if(crmWarning)showToast(crmWarning,false)
+      else showToast("테스트 전송 요청 완료! 시트를 확인해주세요.",true,undefined,
+        openUrl?{label:"시트 열기",onClick:()=>window.open(openUrl,"_blank","noopener,noreferrer")}:undefined)
       loadList()
     }catch(e){
       const msg=(e as any)?.message||"테스트 전송 실패"
@@ -3357,8 +3925,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   function googleSheetOpenUrl(gs:any){
     const savedSheetUrl=String(gs.sheetUrl||"").trim()
-    if(savedSheetUrl)return savedSheetUrl
-    return ""
+    if(!savedSheetUrl)return ""
+    // gid를 붙이면 스프레드시트가 그 탭으로 열린다.
+    const gid=String(gs.tabGid||"").trim()
+    if(!gid)return savedSheetUrl
+    return `${savedSheetUrl.split("#")[0]}#gid=${gid}`
   }
 
   function consentConfigAnswerKey(consent:any,index:number){
@@ -3475,6 +4046,26 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const hit=fd.find((x:any)=>answerKeys.includes(String(x.answerKey||"")))||fd.find((x:any)=>(x.question||"")===field.label)
     return normalize(hit?.answer)
   }
+  // 복수 선택 답변은 저장 시 ", "로 이어붙인 한 문자열이라, 칩으로 보여주려면 다시 쪼개야 한다.
+  // 보기 라벨 안에도 쉼표가 흔해서 먼저 보기 라벨과 통째로 맞춰보고, 실패할 때만 ", "로 자른다.
+  function analyticsChipValues(row:any,field:any){
+    const raw=analyticsRawAnswer(row,field)
+    if(Array.isArray(raw))return raw.map((v:any)=>analyticsOptionLabel(field,v)).filter(Boolean)
+    let text=String(raw??"").trim()
+    if(!text)return []
+    const labels=Array.from(new Set<string>(analyticsFieldOpts(field).flatMap((o:any)=>[String(o.label||""),String(o.value||"")]).filter(Boolean)))
+      .sort((a,b)=>b.length-a.length)
+    const out:string[]=[]
+    let guard=0
+    while(text&&guard++<200){
+      const hit=labels.find((label:string)=>text.startsWith(label))
+      if(hit){text=text.slice(hit.length).replace(/^\s*,\s*/,"");out.push(hit);continue}
+      const idx=text.indexOf(", ")
+      if(idx===-1){out.push(text);text=""}
+      else{out.push(text.slice(0,idx));text=text.slice(idx+2)}
+    }
+    return out.map((v:string)=>analyticsOptionLabel(field,v)).filter(Boolean)
+  }
   function analyticsFieldOpts(field:any){
     const raw=(field?.opts&&field.opts.length)?field.opts:(field?.options||[])
     return raw.map((o:any)=>{
@@ -3526,6 +4117,448 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }))
     })
   }
+  // 응답 화면은 상태가 하나만 바뀌어도 이 거대한 컴포넌트 전체가 다시 그려진다.
+  // 이벤트 그룹핑·필드 목록·셀 텍스트는 매번 다시 만들면 수천 번의 배열 탐색이 생기므로,
+  // 원본 데이터가 바뀔 때만 다시 계산하도록 useMemo로 묶어둔다.
+  const analyticsSessionsMemo=React.useMemo(()=>{
+    const grouped:any={}
+    ;(Array.isArray(analyticsEvents)?analyticsEvents:[]).forEach((e:any)=>{
+      const sid=e.session_id||e.id||"unknown"
+      ;(grouped[sid]=grouped[sid]||[]).push(e)
+    })
+    return Object.keys(grouped).map(k=>(grouped[k]||[]).sort((a:any,b:any)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime())) as any[][]
+  },[analyticsEvents])
+  const draftResponseRowsMemo=React.useMemo(()=>analyticsSessionsMemo.filter(evs=>!evs.some((e:any)=>e.event_type==="completed")).map(evs=>{
+    const latest=[...evs].reverse().find((e:any)=>e.event_type==="draft_saved")
+    if(!latest)return null
+    const meta=analyticsEventMeta(latest)
+    const formData=Array.isArray(meta.draft_answers)?meta.draft_answers:[]
+    if(!formData.length)return null
+    const direct=(id:string)=>formData.find((item:any)=>item.answerKey===id)?.answer||""
+    return {
+      id:`draft:${latest.session_id||latest.id}`,
+      __draft:true,
+      __sessionId:latest.session_id||"",
+      __page:latest.page||1,
+      created_at:meta.draft_updated_at||latest.created_at,
+      form_data:formData,
+      name:direct("name"),
+      phone:direct("phone"),
+      email:direct("email"),
+    }
+  }).filter(Boolean) as any[],[analyticsSessionsMemo])
+  const analyticsFieldsMemo=React.useMemo(()=>getAnalyticsFields(),[cfg,isKdt])
+  const responseRowsMemo=React.useMemo(()=>analyticsResponseScope==="draft"?draftResponseRowsMemo:(Array.isArray(analyticsRows)?analyticsRows:[]),[analyticsResponseScope,draftResponseRowsMemo,analyticsRows])
+  const responseFieldsMemo=React.useMemo(()=>getAnalyticsFields({includeConsentFields:true,includeAttributionFields:analyticsResponseScope==="submitted",rows:responseRowsMemo}),[cfg,isKdt,analyticsResponseScope,responseRowsMemo])
+  // 중복 응답 묶기도 행 전체와 form_data를 훑기 때문에, 원본이 바뀔 때만 다시 계산한다.
+  // 응답에서 연령대를 뽑는다. 폼마다 "연령대"를 직접 고르게 하거나 "생년월일"을 받으므로 둘 다 지원한다.
+  const AGE_BUCKET_ORDER=["10대 이하","20대","30대","40대","50대","60대 이상"]
+  function analyticsAgeBucket(row:any){
+    const fd=Array.isArray(row?.form_data)?row.form_data:[]
+    const pick=(re:RegExp)=>fd.find((item:any)=>re.test(`${item?.question||""} ${item?.answerKey||""}`))
+    const bucketOf=(age:number)=>age<20?"10대 이하":age>=60?"60대 이상":`${Math.floor(age/10)}0대`
+    const direct=String(pick(/연령|나이|age/i)?.answer??"").trim()
+    if(direct){
+      const decade=direct.match(/(\d{1,2})\s*대/)
+      if(decade){
+        const value=Number(decade[1])
+        return value<20?"10대 이하":value>=60?"60대 이상":`${value}대`
+      }
+      const num=Number(direct.replace(/[^\d]/g,""))
+      if(num>0&&num<120)return bucketOf(num)
+      return direct
+    }
+    const raw=String(pick(/생년월일|생일|birth/i)?.answer??row?.birth_date??"").trim()
+    const matched=raw.match(/(\d{4})[-./\s]*(\d{1,2})?[-./\s]*(\d{1,2})?/)
+    if(!matched)return ""
+    const year=Number(matched[1])
+    if(!year||year<1900)return ""
+    const now=new Date()
+    let age=now.getFullYear()-year
+    const month=Number(matched[2]||0), day=Number(matched[3]||0)
+    if(month&&(now.getMonth()+1<month||(now.getMonth()+1===month&&day&&now.getDate()<day)))age-=1
+    if(age<0||age>120)return ""
+    return bucketOf(age)
+  }
+  // 대시보드에서 폼별 참여·전환을 한 번에 받아온다.
+  // 폼마다 따로 세면 요청이 수백 건이 되므로, 최근 구간의 started/completed 이벤트만 한꺼번에 받아 집계한다.
+  // 폼 목록이 다 그려질 때까지 기다리면 알림이 뒤늦게 튀어나온다.
+  // 이 조회는 폼 목록과 무관하므로, 로그인되는 즉시 시작해서 화면에 처음부터 떠 있게 한다.
+  const conversionLoadedRef=React.useRef(false)
+  React.useEffect(()=>{
+    if(!supa||conversionLoadedRef.current)return
+    conversionLoadedRef.current=true
+    let cancelled=false
+    ;(async()=>{
+      const since=new Date()
+      since.setDate(since.getDate()-LOW_CONVERSION_WINDOW_DAYS)
+      const fetchPage=async(page:number)=>{
+        const from=page*1000
+        const {data,error}=await supa.from("form_response_events")
+          .select("form_id,session_id,event_type")
+          .in("event_type",["started","completed"])
+          .gte("created_at",since.toISOString())
+          .range(from,from+999)
+        if(error)throw error
+        return data||[]
+      }
+      const rows:any[]=[]
+      const first=await fetchPage(0)
+      rows.push(...first)
+      if(first.length===1000){
+        // 남은 페이지는 순서대로 기다리지 않고 동시에 받는다.
+        const rest=await Promise.all([1,2,3,4,5,6,7,8,9].map(page=>fetchPage(page).catch(()=>[])))
+        rest.forEach(batch=>rows.push(...batch))
+      }
+      if(cancelled)return
+      const started:Record<string,Set<string>>={}
+      const done:Record<string,Set<string>>={}
+      rows.forEach((row:any)=>{
+        const formId=String(row.form_id||"")
+        if(!formId)return
+        const sid=String(row.session_id||row.id||"")
+        const target=row.event_type==="completed"?done:started
+        ;(target[formId]=target[formId]||new Set()).add(sid)
+      })
+      const next:Record<string,{sessions:number;completed:number}>={}
+      Object.keys(started).forEach(formId=>{
+        next[formId]={sessions:started[formId].size,completed:(done[formId]||new Set()).size}
+      })
+      setConversionByForm(next)
+    })().catch(()=>{conversionLoadedRef.current=false})
+    return ()=>{cancelled=true}
+  },[supa])
+  // 편집 창에서 "이 질문을 고쳐라"를 말하려면 이탈 데이터가 필요하다.
+  // 분석 화면 전체를 부르지 않고, 판단에 쓰는 이벤트만 최근 구간에서 받아 온다.
+  const BUILDER_INSIGHT_WINDOW_DAYS = 60
+  type BuilderInsight={formId:string;loading:boolean;sessions:number;completed:number;touchedSessions:number;reachByField:Record<string,number>;dropByField:Record<string,number>;dropTotal:number}
+  const [builderInsight,setBuilderInsight]=React.useState<BuilderInsight|null>(null)
+  // 한 번 계산한 폼은 다시 열어도 즉시 보이도록 들고 있는다.
+  const builderInsightCache=React.useRef<Record<string,BuilderInsight>>({})
+  const builderInsightInFlight=React.useRef<Record<string,Promise<BuilderInsight>>>({})
+  const loadBuilderInsight=React.useCallback((formId:string)=>{
+    if(!supa||!formId)return null
+    const cached=builderInsightCache.current[formId]
+    if(cached)return Promise.resolve(cached)
+    const running=builderInsightInFlight.current[formId]
+    if(running)return running
+    const since=new Date()
+    since.setDate(since.getDate()-BUILDER_INSIGHT_WINDOW_DAYS)
+    // metadata를 통째로 받으면 응답이 몇 배 커진다. 봇 판별에 쓰는 값 세 개만 뽑아 온다.
+    const select="session_id,event_type,field_id,field_label,ua:metadata->>user_agent,tz:metadata->>timezone,lang:metadata->>language"
+    const fetchPage=async(page:number)=>{
+      const from=page*1000
+      const {data,error}=await supa.from("form_response_events").select(select)
+        .eq("form_id",formId)
+        .in("event_type",["started","completed","field_touch","leave"])
+        .gte("created_at",since.toISOString())
+        .order("created_at",{ascending:true})
+        .range(from,from+999)
+      if(error)throw error
+      return data||[]
+    }
+    const task=(async()=>{
+      const rows:any[]=[]
+      const first=await fetchPage(0)
+      rows.push(...first)
+      if(first.length===1000){
+        // 남은 페이지는 한 장씩 기다리지 않고 동시에 받는다.
+        const rest=await Promise.all([1,2,3,4,5,6,7].map(page=>fetchPage(page).catch(()=>[])))
+        rest.forEach(batch=>rows.push(...batch))
+      }
+      const isBotRow=(row:any)=>{
+        const ua=String(row.ua||"").toLowerCase()
+        if(ua&&BOT_UA_PATTERNS.some(pattern=>ua.includes(pattern)))return true
+        const timezone=String(row.tz||"")
+        const language=String(row.lang||"").toLowerCase()
+        if(!timezone&&!language)return false
+        return timezone!=="Asia/Seoul"&&!language.startsWith("ko")
+      }
+      const bySession:Record<string,any[]>={}
+      rows.filter(row=>!isBotRow(row)).forEach(row=>{
+        const sid=String(row.session_id||"")
+        if(!sid)return
+        ;(bySession[sid]=bySession[sid]||[]).push(row)
+      })
+      const sessionList=Object.values(bySession)
+      const completed=sessionList.filter(list=>list.some((e:any)=>e.event_type==="completed")).length
+      const touchedSessions=sessionList.filter(list=>list.some((e:any)=>e.field_id||e.field_label)).length
+      // 각 질문까지 실제로 도달한 사람 수. "이 질문까지 온 N명 중 M명이 멈췄다"를 말하려면 필요하다.
+      const reachByField:Record<string,number>={}
+      sessionList.forEach(list=>{
+        const seen=new Set<string>()
+        list.forEach((e:any)=>{
+          const key=String(e.field_id||e.field_label||"")
+          if(key)seen.add(key)
+        })
+        seen.forEach(key=>{reachByField[key]=(reachByField[key]||0)+1})
+      })
+      const dropByField:Record<string,number>={}
+      let dropTotal=0
+      sessionList.filter(list=>!list.some((e:any)=>e.event_type==="completed")).forEach(list=>{
+        // 끝까지 못 간 세션에서 마지막으로 건드린 질문을 이탈 지점으로 본다.
+        const lastTouch=[...list].reverse().find((e:any)=>e.field_id||e.field_label)
+        const key=String(lastTouch?.field_id||lastTouch?.field_label||"")
+        if(!key)return
+        dropByField[key]=(dropByField[key]||0)+1
+        dropTotal+=1
+      })
+      const result:BuilderInsight={formId,loading:false,sessions:sessionList.length,completed,touchedSessions,reachByField,dropByField,dropTotal}
+      builderInsightCache.current[formId]=result
+      delete builderInsightInFlight.current[formId]
+      return result
+    })().catch(()=>{
+      const empty:BuilderInsight={formId,loading:false,sessions:0,completed:0,touchedSessions:0,reachByField:{},dropByField:{},dropTotal:0}
+      builderInsightCache.current[formId]=empty
+      delete builderInsightInFlight.current[formId]
+      return empty
+    })
+    builderInsightInFlight.current[formId]=task
+    return task
+  },[supa])
+  React.useEffect(()=>{
+    if(view!=="builder"||!supa||!loadedId)return
+    const cached=builderInsightCache.current[loadedId]
+    if(cached){setBuilderInsight(cached);return}
+    let cancelled=false
+    setBuilderInsight({formId:loadedId,loading:true,sessions:0,completed:0,touchedSessions:0,reachByField:{},dropByField:{},dropTotal:0})
+    loadBuilderInsight(loadedId)?.then(result=>{if(!cancelled)setBuilderInsight(result)})
+    return ()=>{cancelled=true}
+  },[view,supa,loadedId,loadBuilderInsight])
+
+  // AI 피드백 — 규칙으로는 못 하는 "이 문구를 이렇게 바꾸세요" 수준의 조언을 받는다.
+  // 서버 라우트를 거치므로 API 키는 브라우저에 내려가지 않고, 응답자가 쓴 내용은 보내지 않는다.
+  const [aiFeedback,setAiFeedback]=React.useState<{formId:string;loading:boolean;error:string;items:any[]}|null>(null)
+  async function requestAiFeedback(){
+    if(!supa||!loadedId)return
+    const insight=builderInsight
+    if(!insight||insight.loading)return
+    const allFields:any[]=(isKdt?(cfg.kdtFields||[]):(cfg.form.fields||[])).filter((f:any)=>!isDisplayOnlyFieldType(f.type))
+    const statOf=(field:any,table:Record<string,number>)=>Number(table[String(field.id)]||table[String(field.label||"")]||0)
+    const fields=allFields.map((field:any,index:number)=>{
+      const opts=((field.opts&&field.opts.length)?field.opts:(field.options||[])) as any[]
+      const helpers=Array.isArray(field.helpers)?field.helpers.map((h:any)=>String(h?.text||"")).filter(Boolean):[]
+      return {
+        label:String(field.label||""),
+        type:String(field.type||""),
+        required:!!field.required,
+        page:Number(field.page||1),
+        order:index+1,
+        optionCount:opts.length,
+        // 문구와 보기까지 보여줘야 "이 문구를 이렇게 바꾸세요"를 말할 수 있다.
+        helper:[String(field.helper||""),...helpers].filter(Boolean).join(" "),
+        placeholder:String(field.placeholder||""),
+        options:opts.map((o:any)=>String(o?.label??o?.value??o)).filter(Boolean).slice(0,12),
+        reach:statOf(field,insight.reachByField),
+        drop:statOf(field,insight.dropByField),
+      }
+    })
+    setAiFeedback({formId:loadedId,loading:true,error:"",items:[]})
+    try{
+      const {data:sessionData}=await supa.auth.getSession()
+      const token=sessionData?.session?.access_token||""
+      if(!token)throw new Error("로그인이 만료됐어요. 새로고침 후 다시 시도해 주세요.")
+      // 서버가 어떤 이유로든 답을 못 주더라도 버튼이 "분석 중"에서 멈추지 않게 한다.
+      const abort=new AbortController()
+      const timer=setTimeout(()=>abort.abort(),60000)
+      let response:Response
+      try{
+        response=await fetch("/api/admin/form-feedback",{
+          method:"POST",
+          signal:abort.signal,
+          headers:{authorization:`Bearer ${token}`,"content-type":"application/json"},
+          body:JSON.stringify({formTitle:loadedName||cfg.header?.title||"",sessions:insight.sessions,completed:insight.completed,fields}),
+        })
+      }finally{clearTimeout(timer)}
+      const payload=await response.json().catch(()=>({}))
+      if(!response.ok)throw new Error(String(payload?.error||"AI 피드백을 받지 못했어요."))
+      setAiFeedback({formId:loadedId,loading:false,error:"",items:Array.isArray(payload?.items)?payload.items:[]})
+    }catch(error:any){
+      const message=error?.name==="AbortError"
+        ?"응답이 너무 오래 걸려 중단했어요. 잠시 후 다시 눌러주세요."
+        :String(error?.message||"AI 피드백을 받지 못했어요.")
+      setAiFeedback({formId:loadedId,loading:false,error:message,items:[]})
+    }
+  }
+  // 조언을 읽고 끝내지 않도록, 되돌리기 쉬운 변경은 버튼 한 번으로 적용한다.
+  function patchFieldById(fieldId:string,patch:any){
+    if(isKdt){
+      const list=cfg.kdtFields||[]
+      const idx=list.findIndex((f:any)=>f.id===fieldId)
+      if(idx>=0)updateKdtField(idx,patch)
+      return
+    }
+    const list=cfg.form.fields||[]
+    const idx=list.findIndex((f:any)=>f.id===fieldId)
+    if(idx>=0)updateField(idx,patch)
+  }
+  function recommendationActions(rec:any){
+    const fieldId=String(rec.field.id)
+    // 버튼 하나로 바뀌는 값이라, 되돌리는 것도 버튼 하나여야 한다.
+    // 바꾸기 직전 값을 그대로 들고 있다가 토스트의 `실행 취소`로 되돌린다.
+    const apply=(patch:any,previous:any,message:string)=>{
+      patchFieldById(fieldId,patch)
+      showToast(message,true,()=>{
+        patchFieldById(fieldId,previous)
+        showToast("되돌렸어요.")
+      })
+    }
+    const actions:{label:string;run:()=>void}[]=[]
+    if(rec.field.required)actions.push({
+      label:rec.field.type==="file"?"선택 항목으로":"필수 해제",
+      run:()=>apply({required:false},{required:true},`'${rec.title}'을(를) 선택 항목으로 바꿨어요.`),
+    })
+    if(formPages>1&&Number(rec.field.page||1)<formPages)actions.push({
+      label:`섹션 ${formPages}로 이동`,
+      run:()=>apply({page:formPages},{page:Number(rec.field.page||1)},`'${rec.title}'을(를) 섹션 ${formPages}로 옮겼어요.`),
+    })
+    if(rec.field.type==="textarea")actions.push({
+      label:"단답으로 변경",
+      run:()=>apply({type:"text"},{type:"textarea"},`'${rec.title}'을(를) 단답 입력으로 바꿨어요.`),
+    })
+    return actions
+  }
+  // 편집 패널에서 질문을 고르면 캔버스에서도 그 질문이 보이도록 스크롤한다.
+  // 섹션이 다르면 섹션을 먼저 바꾸고, 캔버스가 다시 그려진 뒤에 스크롤해야 한다.
+  function focusCanvasField(fieldId:string,page:number){
+    const samePage=pvPage===page
+    setPvPage(page)
+    const list=isKdt?(cfg.kdtFields||[]).filter((f:any)=>f.page===page)
+      :isMultiPage?(cfg.form.fields||[]).filter((f:any)=>(f.page||1)===page)
+      :(cfg.form.fields||[])
+    const idx=list.findIndex((f:any)=>f.id===fieldId)
+    setEditIdx(idx>=0?idx:null)
+    setSelectedFieldId(fieldId)
+    const scroll=()=>{
+      if(typeof document==="undefined")return
+      const el=document.querySelector(`[data-cf-field="${CSS.escape(fieldId)}"]`) as HTMLElement|null
+      if(el)el.scrollIntoView({behavior:"smooth",block:"center"})
+    }
+    // 같은 섹션이면 바로, 섹션을 옮겼으면 캔버스가 새로 그려진 다음 프레임에 스크롤한다.
+    if(samePage)requestAnimationFrame(scroll)
+    else requestAnimationFrame(()=>requestAnimationFrame(scroll))
+  }
+  // 이탈 데이터와 폼 구성을 함께 보고 손볼 질문을 추린다.
+  // 좁은 패널에서 읽히려면 문장이 아니라 숫자와 짧은 한 줄이어야 한다. 실제 조치는 버튼이 맡는다.
+  function buildFieldRecommendations(){
+    const insight=builderInsight
+    if(!insight||insight.loading||insight.formId!==loadedId)return [] as any[]
+    if(insight.dropTotal<5)return [] as any[]
+    const allFields:any[]=(isKdt?(cfg.kdtFields||[]):(cfg.form.fields||[])).filter((f:any)=>!isDisplayOnlyFieldType(f.type))
+    const numberOf=(field:any)=>allFields.findIndex((f:any)=>f.id===field.id)+1
+    const statOf=(field:any,table:Record<string,number>)=>Number(table[String(field.id)]||table[String(field.label||"")]||0)
+    const typeName=(type:any)=>FTYPES_DATA.find(ft=>ft.type===type)?.label||"질문"
+    const out:any[]=[]
+    allFields.forEach((field:any)=>{
+      const drop=statOf(field,insight.dropByField)
+      if(drop<3)return
+      const share=Math.round((drop/insight.dropTotal)*1000)/10
+      if(share<12)return
+      const reach=Math.max(drop,statOf(field,insight.reachByField))
+      const dropRate=reach?Math.round((drop/reach)*1000)/10:0
+      const page=Number(field.page||1)
+      const order=numberOf(field)
+      const optionCount=((field.opts&&field.opts.length)?field.opts:(field.options||[])).length
+      const labelLength=String(field.label||"").length
+      // 왜 여기서 멈추는지 한 줄로만 말한다. 무엇을 할지는 아래 버튼이 보여준다.
+      const cause=field.type==="file"
+        ? (field.required?"필수 첨부라 파일이 없으면 넘어갈 수 없습니다.":"첨부 파일을 준비하는 것 자체가 부담입니다.")
+        : field.type==="textarea"
+        ? (field.required?"필수 서술형이라 답을 쓰는 데 시간이 걸립니다.":"직접 써야 해서 그냥 나가는 경우가 많습니다.")
+        : optionCount>=12
+        ? `보기가 ${optionCount}개라 고르기 어렵습니다.`
+        : ["text","name","phone","email"].includes(field.type)
+        ? "무엇을 어떤 형식으로 적을지 애매합니다."
+        : field.required
+        ? "필수라 답을 모르면 건너뛸 수 없습니다."
+        : "질문이 어렵게 읽히거나 답할 이유가 약합니다."
+      const tags=[`섹션 ${page}`,`${order}번째`,typeName(field.type)]
+      if(field.required)tags.push("필수")
+      if(page===1&&share>=15)tags.push("첫 섹션")
+      if(labelLength>=45)tags.push(`문구 ${labelLength}자`)
+      out.push({
+        field,page,drop,share,dropRate,reach,order,tags,cause,
+        title:field.label||"이름 없는 질문",
+        tone:dropRate>=50||share>=25?"high":"mid",
+      })
+    })
+    return out.sort((a:any,b:any)=>b.drop-a.drop).slice(0,5)
+  }
+  // 권장 목록이 비어 있으면 "문제가 없다"가 아니라 "지목할 근거가 모자라다"인 경우가 대부분이다.
+  // 빈 화면만 두면 오해하므로, 실제 숫자로 왜 비었는지 적어준다.
+  function buildEmptyRecommendationNotes(){
+    const insight=builderInsight
+    if(!insight||insight.loading||insight.formId!==loadedId)return [] as string[]
+    if(!insight.sessions)return [`최근 ${BUILDER_INSIGHT_WINDOW_DAYS}일 동안 이 폼을 연 기록이 없어요. 응답이 쌓이면 손볼 질문을 짚어드릴게요.`]
+    const notes:string[]=[]
+    const untouched=Math.max(0,insight.sessions-insight.touchedSessions)
+    if(insight.dropTotal<5){
+      notes.push(`이탈 지점이 ${insight.dropTotal}건만 잡혀서 특정 질문을 지목하기 어려워요. 잘못 짚으면 멀쩡한 질문을 고치게 되므로 근거가 더 쌓일 때까지 기다립니다.`)
+    }else{
+      notes.push("이탈이 여러 질문에 고르게 흩어져 있어요. 한 질문에 몰린 곳이 없어서 따로 지목하지 않았습니다.")
+    }
+    if(untouched>=Math.max(5,Math.round(insight.sessions*0.5))){
+      notes.push(`참여 ${insight.sessions}명 중 ${untouched}명이 질문을 하나도 건드리지 않고 나갔어요. 특정 질문보다 첫 화면(헤더·안내 문구)이나 광고가 닿는 대상을 먼저 살펴보세요.`)
+    }
+    return notes
+  }
+  // 이름·전화·이메일이 모두 같으면 같은 사람으로 본다. 중복 묶기와 지표가 같은 기준을 쓰도록 한 곳에 둔다.
+  function analyticsIdentityKey(row:any){
+    const lookup=(keys:string[],labels:string[])=>{
+      const direct=keys.map(key=>row?.[key]).find(value=>value!==undefined&&value!==null&&String(value).trim()!=="")
+      if(direct!==undefined&&direct!==null&&String(direct).trim()!=="")return String(direct)
+      const labelSet=new Set(labels.map(label=>label.replace(/\s+/g,"").toLowerCase()))
+      const fd=Array.isArray(row?.form_data)?row.form_data:[]
+      const hit=fd.find((item:any)=>keys.includes(String(item?.answerKey||"")))||fd.find((item:any)=>labelSet.has(String(item?.question||"").replace(/\s+/g,"").toLowerCase()))
+      const answer=hit?.answer
+      return answer===undefined||answer===null?"":Array.isArray(answer)?answer.join(" / "):String(answer)
+    }
+    const name=lookup(["name","applicant_name","manager_name","full_name"],["이름","성함","성명","지원자명","담당자명"]).replace(/\s+/g,"").trim().toLowerCase()
+    const phone=lookup(["phone","contact_phone","mobile","tel"],["전화번호","휴대폰번호","연락처","휴대폰"]).replace(/\D/g,"")
+    const email=lookup(["email","contact_email"],["이메일","메일","이메일주소"]).trim().toLowerCase()
+    return name&&phone&&email?`${name}::${phone}::${email}`:""
+  }
+  // 같은 사람이 여러 번 제출했으면 가장 이른 제출만 남긴다.
+  // 기간별 인사이트의 "완료" 숫자와 활동 그래프가 같은 기준을 쓰도록 개수가 아니라 대표 행을 보관한다.
+  const submittedPeopleRowsMemo=React.useMemo(()=>{
+    const firstByKey=new Map<string,any>()
+    const singles:any[]=[]
+    ;(Array.isArray(analyticsRows)?analyticsRows:[]).forEach((row:any)=>{
+      const key=row?.user_id?`user:${row.user_id}`:analyticsIdentityKey(row)
+      if(!key){singles.push(row);return}
+      const kept=firstByKey.get(key)
+      if(!kept||new Date(row.created_at||0).getTime()<new Date(kept.created_at||0).getTime())firstByKey.set(key,row)
+    })
+    return [...singles,...Array.from(firstByKey.values())]
+  },[analyticsRows])
+  const submittedPeopleCountMemo=submittedPeopleRowsMemo.length
+  const responseRowGroupsMemo=React.useMemo(()=>{
+    const duplicateKeyOf=(row:any)=>{
+      if(analyticsResponseScope!=="submitted"||row?.__draft||row?.user_id)return""
+      return analyticsIdentityKey(row)
+    }
+    const groups:any[]=[]
+    const byKey=new Map<string,any>()
+    responseRowsMemo.forEach((row:any)=>{
+      const duplicateKey=duplicateKeyOf(row)
+      if(!duplicateKey){groups.push({key:analyticsRowKey(row),duplicateKey:"",rows:[row]});return}
+      const existing=byKey.get(duplicateKey)
+      if(existing)existing.rows.push(row)
+      else{
+        const group={key:`duplicate:${duplicateKey}`,duplicateKey,rows:[row]}
+        byKey.set(duplicateKey,group)
+        groups.push(group)
+      }
+    })
+    return groups
+  },[responseRowsMemo,analyticsResponseScope])
+  const analyticsColumnMetaMemo=React.useMemo(()=>responseFieldsMemo.filter((f:any)=>!f.attributionField).map((field:any)=>({field,fileCount:analyticsFieldFiles(responseRowsMemo,field).length})),[responseFieldsMemo,responseRowsMemo])
+  // 표의 각 셀 문자열은 행 × 열만큼 계산되므로 미리 한 번만 만들어 두고 렌더에서는 꺼내 쓴다.
+  const analyticsCellTextsMemo=React.useMemo(()=>{
+    const map=new Map<any,string[]>()
+    responseRowsMemo.forEach((row:any)=>{map.set(row,analyticsColumnMetaMemo.map(({field}:any)=>analyticsAnswer(row,field)))})
+    return map
+  },[responseRowsMemo,analyticsColumnMetaMemo])
   function analyticsAnswer(row:any,field:any){
     const ans=analyticsRawAnswer(row,field)
     const files=analyticsFileItems(ans)
@@ -3798,14 +4831,31 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(!loadedId||!events.length)return[] as any[]
     return insertAnalyticsEventsForForm(loadedId,savedSlug||"",events)
   }
+  // 지표에 쓰이는 이벤트는 빠짐없이 페이지 단위로 받고, 자동 저장 기록만 최신 것으로 제한한다.
+  async function fetchAnalyticsEventRows(client:any,formId:string){
+    const core:any[]=[]
+    for(let page=0;page<ANALYTICS_EVENT_MAX_PAGES;page++){
+      const from=page*ANALYTICS_EVENT_PAGE_SIZE
+      const {data,error}=await client.from("form_response_events").select(ANALYTICS_EVENT_SELECT)
+        .eq("form_id",formId).neq("event_type","draft_saved")
+        .order("created_at",{ascending:false}).range(from,from+ANALYTICS_EVENT_PAGE_SIZE-1)
+      if(error)throw error
+      const batch=data||[]
+      core.push(...batch)
+      if(batch.length<ANALYTICS_EVENT_PAGE_SIZE)break
+    }
+    const {data:drafts,error:draftError}=await client.from("form_response_events").select(ANALYTICS_EVENT_SELECT)
+      .eq("form_id",formId).eq("event_type","draft_saved")
+      .order("created_at",{ascending:false}).limit(ANALYTICS_DRAFT_EVENT_LIMIT)
+    if(draftError)throw draftError
+    return [...core,...(drafts||[])]
+  }
   async function insertAnalyticsAdminEvent(event_type:string,metadata:any,session_id?:string){
     return (await insertAnalyticsAdminEvents([{event_type,metadata,session_id}]))[0]
   }
   async function restoreActiveAnalyticsTrashForForm(formId:string,formSlug:string){
     if(!supa||!formId)return 0
-    const {data,error}=await supa.from("form_response_events").select(ANALYTICS_EVENT_SELECT).eq("form_id",formId).order("created_at",{ascending:false}).limit(ANALYTICS_EVENT_LIMIT)
-    if(error)throw error
-    const rawEvents=data||[]
+    const rawEvents=await fetchAnalyticsEventRows(supa,formId)
     const closedIds=new Set(rawEvents.filter(event=>["response_restored","analytics_scope_restored","response_purged","analytics_scope_purged"].includes(event.event_type)).map(event=>analyticsEventMeta(event).trash_event_id).filter(Boolean))
     const activeScopes=rawEvents.filter(event=>event.event_type==="analytics_scope_trashed"&&!closedIds.has(event.id)).sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime())
     let restoredScopes=0
@@ -3852,11 +4902,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const tableNames=analyticsCandidateTableNames()
       const [rowResults,eventResult]=await Promise.all([
         Promise.all(tableNames.map(async tableName=>{
-          const res=await supa.from(tableName).select("*").eq("form_id",loadedId).order("created_at",{ascending:false}).limit(1000)
-          if(res.error)throw res.error
-          return (res.data||[]).map((row:any)=>({...row,__tableName:tableName}))
+          // 응답도 한 번에 1000건만 받으면 그 이상 쌓인 폼은 목록과 지표가 모두 잘린다. 페이지를 넘겨가며 전부 받는다.
+          const collected:any[]=[]
+          for(let page=0;page<ANALYTICS_EVENT_MAX_PAGES;page++){
+            const from=page*ANALYTICS_EVENT_PAGE_SIZE
+            const res=await supa.from(tableName).select("*").eq("form_id",loadedId)
+              .order("created_at",{ascending:false}).range(from,from+ANALYTICS_EVENT_PAGE_SIZE-1)
+            if(res.error)throw res.error
+            const batch=res.data||[]
+            collected.push(...batch)
+            if(batch.length<ANALYTICS_EVENT_PAGE_SIZE)break
+          }
+          return collected.map((row:any)=>({...row,__tableName:tableName}))
         })),
-        supa.from("form_response_events").select(ANALYTICS_EVENT_SELECT).eq("form_id",loadedId).order("created_at",{ascending:false}).limit(ANALYTICS_EVENT_LIMIT),
+        fetchAnalyticsEventRows(supa,loadedId).then((data:any[])=>({data,error:null})).catch((error:any)=>({data:[],error})),
       ])
       const rows=rowResults.flat().sort((a:any,b:any)=>new Date(b.created_at||0).getTime()-new Date(a.created_at||0).getTime())
       let eventError=eventResult.error
@@ -4280,34 +5339,28 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   function copyJSON(){navigator.clipboard.writeText(JSON.stringify(cfg,null,2));showToast("JSON 복사 완료!")}
 
   function renderEditorTabsStrip(){
-    const stripBg=adminDark?"#121419":"#F1F2F4"
+    const stripBg=adminDark?"#121419":"#F2F3F5"
     const activeBg=A.card
-    const edge=adminDark?"rgba(255,255,255,0.08)":"#D8DBE0"
+    const edge=adminDark?"rgba(255,255,255,0.08)":"#D5D9DF"
     const tabBorder="transparent"
-    const inactiveDivider=adminDark?"rgba(255,255,255,0.08)":"rgba(25,25,25,0.08)"
     const homeActive=view==="dashboard"
     const iconColor=(active:boolean)=>active?A.blue:A.t3
-    const tabIcon=(active:boolean)=><svg width="15" height="15" viewBox="0 0 32 32" fill="none" style={{flexShrink:0,color:iconColor(active)}}>
-      <path d="M10.2 9.2V6.8c0-1 .8-1.8 1.8-1.8h8c1 0 1.8.8 1.8 1.8v2.4" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M6.5 8.8h19c.8 0 1.5.7 1.5 1.5v15.2c0 .8-.7 1.5-1.5 1.5h-19c-.8 0-1.5-.7-1.5-1.5V10.3c0-.8.7-1.5 1.5-1.5z" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"/>
-      <path d="M11 17h10M11 21h7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
+    const tabIcon=(active:boolean)=><svg width="17" height="17" viewBox="0 0 24 24" fill="none" style={{flexShrink:0,color:iconColor(active)}}>
+      <rect x="4.5" y="4.5" width="15" height="15" rx="4" fill={active?A.blue2:(adminDark?A.card2:"#EDEFF2")}/>
+      <path d="M9.5 9.5h5M9.5 12.8h5M9.5 16h3" stroke={active?A.blue:A.t3} strokeWidth="1.6" strokeLinecap="round"/>
     </svg>
-    return <div style={{height:44,background:stripBg,borderBottom:`1px solid ${edge}`,display:"flex",alignItems:"center",gap:6,padding:"5px 8px",boxSizing:"border-box" as const,flexShrink:0,overflow:"hidden"}}>
+    return <div style={{height:52,background:stripBg,display:"flex",alignItems:"center",gap:6,padding:"0 14px",boxSizing:"border-box" as const,flexShrink:0,overflow:"hidden"}}>
       <button onClick={()=>{rememberActiveEditorTab();setView("dashboard")}} title="폼 리스트"
-        style={{width:34,height:32,border:`1px solid ${tabBorder}`,borderRadius:10,background:homeActive?activeBg:"transparent",boxShadow:homeActive?A.shadow:"none",color:iconColor(homeActive),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2.4 7.3 8 2.7l5.6 4.6v5.4a.8.8 0 0 1-.8.8h-3.1V9.4H6.3v4.1H3.2a.8.8 0 0 1-.8-.8V7.3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg>
+        style={{width:36,height:36,border:`1px solid ${homeActive?edge:"transparent"}`,borderRadius:10,background:homeActive?activeBg:"transparent",boxShadow:homeActive?"0 1px 3px rgba(16,24,40,.10)":"none",color:iconColor(homeActive),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3.5 10.5 12 4l8.5 6.5V19a1.2 1.2 0 0 1-1.2 1.2h-4.4v-5.6H9.1v5.6H4.7A1.2 1.2 0 0 1 3.5 19v-8.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round"/></svg>
       </button>
-      <div style={{display:"flex",alignItems:"center",gap:0,overflowX:"auto" as const,overflowY:"hidden" as const,scrollbarWidth:"none" as any,flex:1,minWidth:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,overflowX:"auto" as const,overflowY:"hidden" as const,scrollbarWidth:"none" as any,flex:1,minWidth:0}}>
         {editorTabs.map((tab,index)=>{
           const active=view==="builder"&&tab.key===activeEditorTabKey
-          const prevTab=editorTabs[index-1]
-          const prevActive=!!prevTab&&view==="builder"&&prevTab.key===activeEditorTabKey
-          const showInactiveDivider=index>0&&!active&&!prevActive
           const label=editorTabLabel(tab)
           return <div key={tab.key} role="button" tabIndex={0} onClick={()=>activateEditorTab(tab.key)} onKeyDown={e=>{if(e.key==="Enter"||e.key===" ")activateEditorTab(tab.key)}}
             title={label}
-            style={{height:32,width:178,maxWidth:178,minWidth:138,padding:"0 7px 0 11px",border:`1px solid ${tabBorder}`,borderRadius:11,background:active?activeBg:"transparent",boxShadow:active?A.shadow:"none",color:active?A.t1:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,flexShrink:0,position:"relative" as const,outline:"none",transition:"background .12s,box-shadow .12s"}}>
-            {showInactiveDivider&&<span aria-hidden="true" style={{position:"absolute" as const,left:0,top:8,bottom:8,width:1,background:inactiveDivider,borderRadius:999}}/>}
+            style={{height:36,maxWidth:250,padding:"0 8px 0 10px",border:`1px solid ${tabBorder}`,borderRadius:12,background:active?activeBg:"transparent",boxShadow:active?"0 1px 3px rgba(16,24,40,.10)":"none",color:active?A.t1:A.t2,fontFamily:FONT,fontSize:13,fontWeight:active?600:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,flexShrink:0,position:"relative" as const,outline:"none",transition:"background .12s,box-shadow .12s"}}>
             {tabIcon(active)}
             <span style={{minWidth:0,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
               {label}
@@ -4324,7 +5377,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
         })}
         <button type="button" onClick={()=>setShowBrandModal(true)} title="새 폼 만들기"
-          style={{width:32,height:32,marginLeft:6,border:`1px dashed ${edge}`,borderRadius:10,background:"transparent",color:A.t3,fontSize:18,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          style={{width:34,height:34,marginLeft:6,border:`1.5px dashed ${edge}`,borderRadius:10,background:"transparent",color:A.t3,fontSize:17,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
           +
         </button>
       </div>
@@ -4342,7 +5395,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const t2=adminDark?"#9CA3AF":"#6B7280"
     const t3=adminDark?"rgba(255,255,255,0.25)":"#B0B8C1"
     return (
-      <div style={{width,height,display:"flex",alignItems:"center",justifyContent:"center",background:bg,fontFamily:FONT,position:"relative" as const}}>
+      <div style={{width,height,display:"flex",alignItems:"center",justifyContent:"center",background:bg,fontFamily:FONT,position:"relative" as const,WebkitFontSmoothing:"antialiased"}}>
         <button onClick={()=>setAdminDark(d=>!d)} style={{position:"absolute",top:16,right:16,height:30,padding:"0 12px",borderRadius:6,border:`1px solid ${border}`,background:"transparent",color:t2,fontFamily:FONT,fontSize:12,fontWeight:500,cursor:"pointer"}}>
           {adminDark
             ?<><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M8 1v1.5M8 13.5V15M15 8h-1.5M2.5 8H1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1M12.6 12.6l-1.1-1.1M4.5 4.5 3.4 3.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> 라이트</>
@@ -4368,7 +5421,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
           {loginErr&&<div style={{fontSize:12.5,color:"#E85C5C",marginBottom:14,padding:"9px 12px",borderRadius:8,background:"rgba(232,92,92,0.08)",border:"1px solid rgba(232,92,92,0.18)"}}>{loginErr}</div>}
           <button onClick={doLogin} disabled={loginLoading}
-            style={{width:"100%",height:46,borderRadius:10,border:"none",background:loginLoading?"rgba(49,130,246,0.6)":"#3182F6",color:"#fff",fontFamily:FONT,fontSize:14.5,fontWeight:600,cursor:loginLoading?"not-allowed":"pointer",letterSpacing:"-0.2px"}}>
+            style={{width:"100%",height:46,borderRadius:10,border:"none",background:loginLoading?"rgba(49,130,246,0.6)":"#3182F6",color:"#fff",fontFamily:FONT,fontSize:14.5,fontWeight:700,cursor:loginLoading?"not-allowed":"pointer",letterSpacing:"-0.2px"}}>
             {loginLoading?"로그인 중...":"로그인"}
           </button>
           {!supabaseUrl&&<div style={{marginTop:18,fontSize:11.5,color:t3,textAlign:"center" as const,lineHeight:1.6}}>환경변수에 Supabase URL과 Key를 먼저 입력해주세요</div>}
@@ -4382,52 +5435,27 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   // ─────────────────────────────────────────────────────────────────────
   if(view==="dashboard") {
     const BRANDS=[
-      {id:"SNIPERFACTORY" as const,label:"스나이퍼팩토리",color:"#6366F1",sub:snList},
+      {id:"SNIPERFACTORY" as const,label:"스나이퍼팩토리",color:"#529DFF",sub:snList},
       {id:"INSIDEOUT" as const,label:"인사이드아웃",color:"#E85C5C",sub:ioList},
       {id:"SFACSPACE" as const,label:"스팩스페이스",color:"#073B70",sub:sfacList},
     ]
     return (
-      <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,fontFamily:FONT,overflow:"hidden",position:"relative" as const}}>
+      <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,fontFamily:FONT,overflow:"hidden",position:"relative" as const,WebkitFontSmoothing:"antialiased"}}>
         {renderEditorTabsStrip()}
         {/* Topbar */}
-        <div style={{height:56,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 24px",gap:12,flexShrink:0,boxShadow:A.shadow}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <FlickMark size={30}/>
-            <FlickWordmark size={17} dark={adminDark}/>
-          </div>
+        <div style={{height:58,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 20px",gap:10,flexShrink:0}}>
+          <FlickMark size={30}/>
+          <FlickWordmark size={17} dark={adminDark}/>
+          <span style={{marginLeft:6,padding:"3px 8px",borderRadius:6,background:A.card2,fontSize:11,fontWeight:600,color:A.t3,whiteSpace:"nowrap" as const}}>운영 콘솔</span>
           <div style={{flex:1}}/>
-          {/* 다크/라이트 토글 */}
-          <button onClick={()=>setAdminDark(d=>!d)} style={{display:"flex",alignItems:"center",gap:6,height:32,padding:"0 12px",borderRadius:8,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:"pointer"}}>
-            {adminDark
-              ?<><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M8 1v1.5M8 13.5V15M15 8h-1.5M2.5 8H1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1M12.6 12.6l-1.1-1.1M4.5 4.5 3.4 3.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> 라이트 모드</>
-              :<><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><path d="M13.5 8.5A5.5 5.5 0 0 1 7 2a6 6 0 1 0 6.5 6.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> 다크 모드</>}
-          </button>
-          <div style={{width:1,height:20,background:A.border}}/>
-          <span style={{fontSize:12.5,color:A.t3}}>{authUser?.email}</span>
-          <button onClick={doLogout} style={{fontSize:12.5,fontWeight:500,padding:"5px 12px",borderRadius:8,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,cursor:"pointer",fontFamily:FONT}}>로그아웃</button>
-          <button onClick={()=>setFormTrashOpen(true)}
-            style={{height:36,padding:"0 12px",borderRadius:8,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}
-            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=A.red;(e.currentTarget as HTMLElement).style.color=A.red}}
-            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=A.border;(e.currentTarget as HTMLElement).style.color=A.t2}}>
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v8M8 6v8M11 6v8M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            폼 휴지통{formTrashItems.length?` ${formTrashItems.length}`:""}
-          </button>
+          <div style={{display:"flex",alignItems:"center",gap:8,height:32,padding:"0 4px 0 10px",borderRadius:8,background:adminDark?A.card2:"#F8F9FB",flexShrink:0}}>
+            <span style={{fontSize:12.5,color:A.t2,whiteSpace:"nowrap" as const}}>{authUser?.email}</span>
+            <button onClick={doLogout} style={{height:24,padding:"0 8px",borderRadius:6,border:"none",background:A.card,color:A.t3,cursor:"pointer",fontFamily:FONT,fontSize:11.5,fontWeight:600}}>로그아웃</button>
+          </div>
           <button onClick={()=>setShowBrandModal(true)}
-            style={{height:36,padding:"0 16px",borderRadius:8,border:"none",background:"#3182F6",color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:17,lineHeight:1,marginTop:-1}}>+</span> 새 폼 만들기
-          </button>
-          <button onClick={()=>{
-              setShowGuide(true)
-              if(!supa)return
-              setGuideLoading(true)
-              supa.from("guide_content").select("content").eq("key","form_admin").single()
-                .then(({data})=>{if(data?.content)setGuideData(data.content as any);setGuideLoading(false)},()=>setGuideLoading(false))
-            }}
-            style={{height:36,padding:"0 14px",borderRadius:8,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}
-            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=A.blue;(e.currentTarget as HTMLElement).style.color=A.blue}}
-            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=A.border;(e.currentTarget as HTMLElement).style.color=A.t2}}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8"/><path d="M12 16v-4M12 8.5v.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-            가이드
+            style={{height:34,padding:"0 14px",borderRadius:8,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,boxShadow:"0 1px 2px rgba(49,130,246,.35)",cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+            새 폼 만들기
           </button>
         </div>
         {(()=>{
@@ -4443,157 +5471,492 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             return"draft"
           }
           const statusInfo=(status:DashboardManualStatus)=>{
-            if(status==="active")return{label:"진행중",color:A.green,bg:"rgba(23,201,100,0.10)"}
-            if(status==="closed")return{label:"종료",color:A.t2,bg:A.card2}
-            return{label:"작성중",color:"#8B5CF6",bg:"rgba(139,92,246,0.10)"}
+            if(status==="active")return{label:"진행중",color:adminDark?A.green:"#0F8A47",bg:adminDark?"rgba(34,197,94,0.14)":"#E7F6EE"}
+            if(status==="closed")return{label:"종료",color:adminDark?A.t2:"#6B7280",bg:A.card2}
+            return{label:"작성중",color:adminDark?"#A78BFA":"#6D4AEA",bg:adminDark?"rgba(139,92,246,0.16)":"#F0EDFE"}
           }
           const typeLabel=(type:DashboardFormType)=>DASHBOARD_FORM_TYPES.find(x=>x.value===type)?.label||"기타"
           const brandOf=(item:any)=>canonicalBrand(item.config?.brand||item.brand||"")
-          const brandLabel=(brand:string)=>brandDisplayName(brand)
-          const categoryNameOf=(prog?:Prog)=>{
-            if(prog?.category===SF_ETC_CAT_ID)return"ETC"
-            const name=cats.find(c=>c.id===prog?.category)?.name||"기타"
-            if(name==="새싹(SeSAC)")return"새싹"
-            if(name==="중소기업 인재키움")return"인재키움"
-            return name
-          }
+          const categoryNameOf=(prog?:Prog)=>cats.find(c=>c.id===prog?.category)?.name||"기타"
           const sidebarItems=saved.filter((item:any)=>!dashBrandFilter||brandOf(item)===dashBrandFilter)
           const sidebarProgramIds=new Set(sidebarItems.map((item:any)=>item.config?.header?.programId).filter(Boolean))
           const sidebarPrograms=progs.filter(program=>sidebarProgramIds.has(program.id))
-          const sfProgramGroups=["새싹","KDT","인재키움","인턴형","ETC"]
-          const ioProgramGroups=["인턴형","프로젝트형"]
-          const defaultProgramGroups=dashBrandFilter==="SNIPERFACTORY"
-            ?sfProgramGroups
-            :dashBrandFilter==="INSIDEOUT"
-              ?ioProgramGroups
-              :dashBrandFilter==="SFACSPACE"
-                ?[]
-                :[...sfProgramGroups,...ioProgramGroups.filter(group=>!sfProgramGroups.includes(group))]
-          const visibleProgramGroups=sidebarPrograms.reduce((acc:string[],program)=>{
+          // 교육과정 탭은 Supabase `categories` 테이블을 그대로 따라간다.
+          // 행이 추가되면 코드 수정 없이 해당 브랜드 탭에 바로 나타난다.
+          const defaultProgramGroups=cats.reduce((acc:string[],cat)=>{
+            const name=String(cat.name||"").trim()
+            if(!name)return acc
+            if(dashBrandFilter&&canonicalBrand(cat.brand||"")!==dashBrandFilter)return acc
+            if(!acc.includes(name))acc.push(name)
+            return acc
+          },[])
+          const groupCount=(group:string)=>sidebarItems.filter((item:any)=>categoryNameOf(programOf(item))===group).length
+          // 테이블에 없는 카테고리를 쓰는 폼이 있으면 그 탭도 잃지 않도록 뒤에 덧붙인다.
+          const allProgramGroups=sidebarPrograms.reduce((acc:string[],program)=>{
             const key=categoryNameOf(program)
-            if(dashBrandFilter!=="SFACSPACE"&&!acc.includes(key))acc.push(key)
+            if(!acc.includes(key))acc.push(key)
             return acc
           },[...defaultProgramGroups])
+          // 최근 작업(브랜드 미선택)에서는 카테고리가 모두 모여 길어지므로 폼이 있는 것을 앞으로 보낸다.
+          // 브랜드를 고르면 테이블 순서를 그대로 쓴다. (sort는 안정 정렬이라 같은 그룹 안에서는 이름순 유지)
+          const visibleProgramGroups=dashBrandFilter
+            ?allProgramGroups
+            :[...allProgramGroups].sort((a,b)=>(groupCount(a)?0:1)-(groupCount(b)?0:1))
+          // 폼이 하나도 없는 카테고리는 기본으로 접어 탭바가 가로로 길어지지 않게 한다.
+          // 현재 선택된 탭은 0개여도 계속 보여준다.
+          const collapsedProgramGroups=visibleProgramGroups.filter(group=>groupCount(group)===0&&group!==dashProgramGroupFilter)
+          const shownProgramGroups=dashShowEmptyGroups
+            ?visibleProgramGroups
+            :visibleProgramGroups.filter(group=>!collapsedProgramGroups.includes(group))
           const programGroups=sidebarPrograms.reduce((acc:Record<string,Prog[]>,program)=>{
             const key=categoryNameOf(program)
             ;(acc[key]||(acc[key]=[])).push(program)
             return acc
           },Object.fromEntries(visibleProgramGroups.map(group=>[group,[]])) as Record<string,Prog[]>)
+          const selectedGroupPrograms=dashProgramGroupFilter?(programGroups[dashProgramGroupFilter]||[]):[]
           const filtered=saved.filter((item:any)=>{
             const type=typeOf(item)
             const status=statusOf(item)
+            const program=programOf(item)
+            const programGroup=categoryNameOf(program)
             const query=dashQuery.trim().toLowerCase()
             return(!dashBrandFilter||brandOf(item)===dashBrandFilter)
+              &&(!dashProgramGroupFilter||programGroup===dashProgramGroupFilter)
               &&(!dashProgramFilter||item.config?.header?.programId===dashProgramFilter)
-              &&(!dashSideTypeFilter||type===dashSideTypeFilter)
               &&(!dashTopTypeFilter||type===dashTopTypeFilter)
               &&(!dashTopStatusFilter||status===dashTopStatusFilter)
-              &&(!query||`${item.name||""} ${item.config?.header?.title||""} ${programOf(item)?.title||""}`.toLowerCase().includes(query))
+              &&(!query||`${item.name||""} ${item.config?.header?.title||""} ${program?.title||""}`.toLowerCase().includes(query))
           })
-          const sideButton=(active:boolean):React.CSSProperties=>({width:"100%",height:34,padding:"0 10px",borderRadius:A.r,border:"none",background:active?A.blue2:"transparent",color:active?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:active?600:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left" as const})
+          if(!dashBrandFilter){
+            const recentRank=(item:any)=>{
+              const idx=recentEditIds.indexOf(String(item?.id||""))
+              return idx<0?Number.MAX_SAFE_INTEGER:idx
+            }
+            filtered.sort((a:any,b:any)=>{
+              const ra=recentRank(a),rb=recentRank(b)
+              if(ra!==rb)return ra-rb
+              return new Date(b.updated_at||b.created_at||0).getTime()-new Date(a.updated_at||a.created_at||0).getTime()
+            })
+          }
+          const maxResponseCount=Math.max(1,...filtered.map((item:any)=>dashResponseCounts[item.id]||0))
+          const brandCounts=BRANDS.map(brand=>({
+            ...brand,
+            count:saved.filter((item:any)=>brandOf(item)===brand.id).length,
+          }))
+          const tableColumns="minmax(240px,1.8fr) 60px 84px 82px 78px 92px 158px"
+          const sideButton=(active:boolean):React.CSSProperties=>({width:"100%",height:32,padding:"0 8px",borderRadius:A.r,border:"none",background:active?A.blue2:"transparent",color:active?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:active?600:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left" as const})
+          const sidebarToolButton=(color:string=A.t2):React.CSSProperties=>({width:"100%",height:32,padding:"0 8px",borderRadius:A.r,border:"none",background:"transparent",color,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left" as const})
+          const openGuide=()=>{
+            setShowGuide(true)
+            if(!supa)return
+            setGuideLoading(true)
+            supa.from("guide_content").select("content").eq("key","form_admin").single()
+              .then(({data})=>{if(data?.content)setGuideData(data.content as any);setGuideLoading(false)},()=>setGuideLoading(false))
+          }
           return <div style={{flex:1,minHeight:0,display:"flex",overflow:"hidden"}}>
-            <aside style={{width:252,flexShrink:0,overflowY:"auto" as const,padding:16,borderRight:`1px solid ${A.border}`,background:A.card}}>
-              <div style={{border:`1px solid ${A.border}`,borderRadius:A.r2,padding:8,marginBottom:12}}>
-                <div style={{padding:"4px 6px 8px",fontSize:11.5,fontWeight:600,color:A.t3}}>브랜드</div>
-                <button onClick={()=>{setDashBrandFilter("");setDashProgramFilter("")}} style={sideButton(!dashBrandFilter)}>전체 브랜드</button>
-                <button onClick={()=>{setDashBrandFilter("SNIPERFACTORY");setDashProgramFilter("")}} style={sideButton(dashBrandFilter==="SNIPERFACTORY")}><SFLogo height={13} dark={adminDark}/></button>
-                <button onClick={()=>{setDashBrandFilter("INSIDEOUT");setDashProgramFilter("")}} style={sideButton(dashBrandFilter==="INSIDEOUT")}><IOLogo height={12} dark={adminDark}/></button>
-                <button onClick={()=>{setDashBrandFilter("SFACSPACE");setDashProgramFilter("")}} style={sideButton(dashBrandFilter==="SFACSPACE")}><SfacspaceLogo height={11} dark={adminDark}/></button>
+            <aside style={{width:208,flexShrink:0,background:A.bg,display:"flex",flexDirection:"column" as const,minHeight:0}}>
+              <div style={{flex:1,minHeight:0,overflowY:"auto" as const,padding:"16px 12px",display:"flex",flexDirection:"column" as const,gap:26}}>
+                <div>
+                  <button onClick={()=>{setDashBrandFilter("");setDashProgramGroupFilter("");setDashProgramFilter("")}} style={{...sideButton(!dashBrandFilter),justifyContent:"space-between"}}>
+                    <span style={{display:"flex",alignItems:"center",gap:8}}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{flexShrink:0}}><circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.7"/><path d="M12 7.5V12l3 1.8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      최근 작업
+                    </span>
+                    <span style={{fontSize:11.5,fontWeight:500,color:A.t3}}>{saved.length}</span>
+                  </button>
+                </div>
+                <div>
+                  <div style={{padding:"0 8px 7px",fontSize:11,fontWeight:700,letterSpacing:".4px",color:A.t3}}>브랜드</div>
+                  {brandCounts.map(brand=><button key={brand.id} onClick={()=>{setDashBrandFilter(brand.id);setDashProgramGroupFilter("");setDashProgramFilter("")}} style={{...sideButton(dashBrandFilter===brand.id),justifyContent:"space-between"}}>
+                    <span style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+                      <span style={{width:6,height:6,borderRadius:3,background:brand.color,flexShrink:0}}/>
+                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{brand.label}</span>
+                    </span>
+                    <span style={{fontSize:11.5,fontWeight:500,color:A.t3}}>{brand.count}</span>
+                  </button>)}
+                </div>
               </div>
-              <div style={{border:`1px solid ${A.border}`,borderRadius:A.r2,padding:8,marginBottom:12}}>
-                <div style={{padding:"4px 6px 8px",fontSize:11.5,fontWeight:600,color:A.t3}}>교육과정</div>
-                <button onClick={()=>setDashProgramFilter("")} style={sideButton(!dashProgramFilter)}>전체 교육과정</button>
-                {visibleProgramGroups.length===0&&<div style={{padding:"10px 10px 8px",fontSize:12,color:A.t3,lineHeight:1.5}}>등록된 교육과정이 없어요.</div>}
-                {visibleProgramGroups.map(group=>{
-                  const programs=programGroups[group]||[]
-                  const open=dashOpenGroups[group]===true
-                  return <div key={group}>
-                    <button onClick={()=>setDashOpenGroups(prev=>({...prev,[group]:!open}))} style={{...sideButton(false),justifyContent:"space-between",color:A.t1,fontWeight:600}}>
-                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{group}</span>
-                      <span style={{fontSize:12,color:A.t3}}>{open?"−":"+"}</span>
-                    </button>
-                    {open&&programs.sort((a,b)=>a.title.localeCompare(b.title,"ko")).map(program=><button key={program.id} onClick={()=>setDashProgramFilter(program.id)} style={{...sideButton(dashProgramFilter===program.id),paddingLeft:18}}>
-                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{program.title}</span>
-                    </button>)}
-                  </div>
-                })}
-              </div>
-              <div style={{border:`1px solid ${A.border}`,borderRadius:A.r2,padding:8}}>
-                <div style={{padding:"4px 6px 8px",fontSize:11.5,fontWeight:600,color:A.t3}}>폼 유형</div>
-                <button onClick={()=>setDashSideTypeFilter("")} style={sideButton(!dashSideTypeFilter)}>전체</button>
-                {DASHBOARD_FORM_TYPES.map(type=><button key={type.value} onClick={()=>setDashSideTypeFilter(type.value)} style={sideButton(dashSideTypeFilter===type.value)}>{type.label}</button>)}
+              <div style={{padding:"12px",boxShadow:`inset 0 1px 0 ${adminDark?A.border:"#E7EAEF"}`,display:"flex",flexDirection:"column" as const,gap:2,flexShrink:0}}>
+                <button onClick={()=>setAdminDark(d=>!d)} style={sidebarToolButton()}>
+                  {adminDark
+                    ? <><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M8 1v1.5M8 13.5V15M15 8h-1.5M2.5 8H1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1M12.6 12.6l-1.1-1.1M4.5 4.5 3.4 3.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> 라이트 모드</>
+                    : <><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><path d="M13.5 8.5A5.5 5.5 0 0 1 7 2a6 6 0 1 0 6.5 6.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> 다크 모드</>}
+                </button>
+                <button onClick={()=>setFormTrashOpen(true)} style={sidebarToolButton(A.red)}>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><path d="M2 4h12M6 4V2.8h4V4M5 6v8M8 6v8M11 6v8M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <span style={{flex:1}}>폼 휴지통</span>
+                  {formTrashItems.length>0&&<span style={{fontSize:11.5,color:A.red}}>{formTrashItems.length}</span>}
+                </button>
+                <button onClick={openGuide} style={sidebarToolButton()}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{flexShrink:0}}><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8"/><path d="M12 16v-4M12 8.5v.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                  가이드
+                </button>
               </div>
             </aside>
-            <main style={{flex:1,minWidth:0,overflow:"hidden",padding:24,display:"flex",flexDirection:"column" as const}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18,flexShrink:0}}>
+            <main style={{flex:1,minWidth:0,overflow:"hidden",padding:0,display:"flex",flexDirection:"column" as const,background:A.card}}>
+              {/* 대시보드 알림 — 마감 임박과 전환 점검을 좌우로 나란히 둔다.
+                  위아래로 쌓으면 아래 폼 목록이 보는 만큼 짧아져서, 정작 목록을 훑기 어려워진다. */}
+              {(()=>{
+                const closingCard=(()=>{
+                const closing=sidebarItems
+                  .map((item:any)=>({item,days:daysUntilOperationEnd(item.config?.dashboard,recruitmentPeriodOf(programOf(item),recruitmentPeriodModeOf(item.config)))}))
+                  .filter((entry:any)=>entry.days!==null&&entry.days<=CLOSING_SOON_DAYS&&!isFormTrashed(entry.item))
+                  .sort((a:any,b:any)=>a.days-b.days)
+                if(!closing.length)return null
+                const head=closing[0]
+                const nameOf=(entry:any)=>String(entry.item.name||entry.item.config?.header?.title||"이름 없는 폼")
+                const dayOf=(entry:any)=>entry.days<=0?"D-DAY":`D-${entry.days}`
+                const accent=adminDark?"#F5B546":"#B26A00"
+                const badge={flexShrink:0,height:20,padding:"0 8px",borderRadius:999,display:"inline-flex",alignItems:"center",lineHeight:1,fontSize:11.5,fontWeight:700,
+                  background:adminDark?"rgba(245,158,11,0.2)":"#FBE7C2",color:adminDark?"#F5B546":"#9A5B00"} as React.CSSProperties
+                return <div style={{flex:1,minWidth:0}}>
+                  {/* 여닫기를 React 상태로 두면 폼 목록까지 통째로 다시 그려져서 느리게 열린다.
+                      data 속성만 바꾸고 나머지는 CSS가 처리하도록 해서 리렌더 없이 바로 펼쳐지게 한다. */}
+                  <style>{`
+                    [data-cf-closing]{position:relative;z-index:1}
+                    /* 펼친 콜아웃은 아래 콜아웃보다 위에 있어야 패널이 가려지지 않는다. */
+                    [data-cf-closing="1"]{z-index:40}
+                    [data-cf-closing] [data-cf-closing-head]{border-radius:12px;box-shadow:inset 0 0 0 1px var(--cf-line)}
+                    /* 펼침 영역이 아래 목록을 밀면 매 프레임 전체가 다시 배치돼 버벅인다.
+                       흐름에서 빼내 겹쳐 띄우고 transform/opacity로만 움직여 배치 계산을 없앤다. */
+                    /* 접혔을 땐 머리가 테두리를 다 갖고, 펼치면 아래 테두리만 빼서 패널과 한 덩어리로 이어지게 한다. */
+                    [data-cf-closing="1"] [data-cf-closing-head]{border-radius:12px 12px 0 0;box-shadow:inset 1px 0 0 var(--cf-line),inset -1px 0 0 var(--cf-line),inset 0 1px 0 var(--cf-line)}
+                    /* 닫기는 열기보다 빠르게. 이 규칙이 닫힐 때의 속도를 정한다. */
+                    [data-cf-closing] [data-cf-closing-body]{position:absolute;left:0;right:0;top:100%;z-index:30;
+                      transform-origin:top;transform:translateY(-4px);opacity:0;visibility:hidden;
+                      transition:transform .1s ease-in,opacity .09s linear,visibility 0s linear .1s}
+                    [data-cf-closing="1"] [data-cf-closing-body]{transform:translateY(0);opacity:1;visibility:visible;
+                      transition:transform .18s cubic-bezier(.4,0,.2,1),opacity .14s linear,visibility 0s}
+                    [data-cf-closing] [data-cf-closing-chevron]{transition:transform .1s ease-in}
+                    [data-cf-closing="1"] [data-cf-closing-chevron]{transition:transform .18s cubic-bezier(.4,0,.2,1)}
+                    [data-cf-closing="1"] [data-cf-closing-chevron]{transform:rotate(180deg)}
+                    [data-cf-closing="0"] [data-cf-closing-when="open"]{display:none}
+                    [data-cf-closing="1"] [data-cf-closing-when="closed"]{display:none}
+                  `}</style>
+                  <div data-cf-closing="0" style={{["--cf-line" as any]:adminDark?"rgba(245,158,11,0.28)":"#F6E3BE"}}>
+                    <div data-cf-closing-head
+                      onClick={e=>{
+                        const host=(e.currentTarget as HTMLElement).closest("[data-cf-closing]") as HTMLElement|null
+                        if(host)host.setAttribute("data-cf-closing",host.getAttribute("data-cf-closing")==="1"?"0":"1")
+                      }}
+                      style={{position:"relative" as const,zIndex:31,display:"flex",alignItems:"center",gap:14,padding:"12px 14px 12px 16px",cursor:"pointer",userSelect:"none" as const,
+                        background:adminDark?"#232B18":"#FFF7E8"}}>
+                      <span style={{flexShrink:0,fontSize:12.5,fontWeight:700,color:accent}}>마감 임박</span>
+                      <span style={{minWidth:0,display:"flex",alignItems:"center",gap:10,flex:1,overflow:"hidden"}}>
+                        <span data-cf-closing-when="closed" style={{minWidth:0,display:"flex",alignItems:"center",gap:10,overflow:"hidden"}}>
+                          <span style={{minWidth:0,fontSize:13,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{nameOf(head)}</span>
+                          {/* 배지는 명시적 높이와 line-height가 있어야 텍스트와 세로 중심이 맞는다. */}
+                          <span style={badge}>{dayOf(head)}</span>
+                          {closing.length>1&&<span style={{flexShrink:0,fontSize:12.5,color:A.t3}}>외 {closing.length-1}건</span>}
+                        </span>
+                      </span>
+                      <span style={{flexShrink:0,width:26,height:26,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",color:accent}}>
+                        <svg data-cf-closing-chevron width="11" height="11" viewBox="0 0 10 10" fill="none">
+                          <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </span>
+                    </div>
+                    <div data-cf-closing-body>
+                      <div style={{minHeight:0,overflow:"hidden",borderRadius:"0 0 12px 12px",
+                        background:adminDark?"#232B18":"#FFF7E8",
+                        borderLeft:`1px solid ${adminDark?"rgba(245,158,11,0.28)":"#F6E3BE"}`,
+                        borderRight:`1px solid ${adminDark?"rgba(245,158,11,0.28)":"#F6E3BE"}`,
+                        borderBottom:`1px solid ${adminDark?"rgba(245,158,11,0.28)":"#F6E3BE"}`,
+                        boxShadow:"0 14px 30px -12px rgba(16,24,40,.28)"}}>
+                        {/* 구분선을 행의 inset 그림자로 그리면 행의 radius를 따라 끝이 둥글게 보인다.
+                            별도 요소로 빼서 곧은 선이 되도록 한다. */}
+                        <div style={{padding:"6px 10px 10px"}}>
+                        {/* 배지를 왼쪽 고정 열에 두면 남은 날짜가 세로로 정렬돼 훑기 쉽다.
+                            버튼을 행마다 두는 대신 행 전체를 누르게 해 반복되는 버튼을 없앴다. */}
+                        {closing.map((entry:any,i:number)=>(
+                          <div key={entry.item.id||i} role="button" tabIndex={0}
+                            onPointerDown={()=>prefetchFullFormRow(entry.item,true)}
+                            onClick={()=>requestOpenFormForEdit(entry.item)}
+                            onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();requestOpenFormForEdit(entry.item)}}}
+                            style={{display:"flex",alignItems:"center",gap:10,minHeight:38,padding:"0 8px",borderRadius:8,cursor:"pointer",transition:"background .12s"}}
+                            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=adminDark?"rgba(255,255,255,0.06)":"rgba(255,255,255,0.66)"}}
+                            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
+                            <span style={{...badge,width:52,justifyContent:"center",padding:0}}>{dayOf(entry)}</span>
+                            <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:500,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{nameOf(entry)}</span>
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A.t4,transform:"rotate(-90deg)"}} aria-hidden="true">
+                              <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </div>
+                        ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              })()
+                const lowConversionCard=(()=>{
+                const lowList=sidebarItems
+                  .filter((item:any)=>!isFormTrashed(item))
+                  .map((item:any)=>{
+                    if(item.config?.dashboard?.conversionCheckOff)return null
+                    const stat=conversionByForm[String(item.id||"")]
+                    if(!stat||stat.sessions<LOW_CONVERSION_MIN_SESSIONS)return null
+                    const rate=Math.round((stat.completed/stat.sessions)*1000)/10
+                    if(rate>=LOW_CONVERSION_RATE)return null
+                    const days=daysUntilOperationEnd(item.config?.dashboard,recruitmentPeriodOf(programOf(item),recruitmentPeriodModeOf(item.config)))
+                    if(days!==null&&days<0)return null
+                    return {item,rate,sessions:stat.sessions,completed:stat.completed}
+                  })
+                  .filter(Boolean)
+                  .sort((a:any,b:any)=>a.rate-b.rate)
+                if(!lowList.length)return null
+                const nameOf=(entry:any)=>String(entry.item.name||entry.item.config?.header?.title||"이름 없는 폼")
+                const tone=adminDark?"#7FB2FF":"#1B62E0"
+                const badge={flexShrink:0,height:20,padding:"0 8px",borderRadius:999,display:"inline-flex",alignItems:"center",lineHeight:1,fontSize:11.5,fontWeight:700,
+                  background:adminDark?"rgba(49,130,246,0.22)":"#DCE9FD",color:adminDark?"#9CC4FF":"#1B62E0"} as React.CSSProperties
+                return <div style={{flex:1,minWidth:0}}>
+                  <style>{`
+                    [data-cf-lowconv]{position:relative;z-index:1}
+                    /* 펼친 콜아웃은 아래 콜아웃보다 위에 있어야 패널이 가려지지 않는다. */
+                    [data-cf-lowconv="1"]{z-index:40}
+                    [data-cf-lowconv] [data-cf-lowconv-head]{border-radius:12px;box-shadow:inset 0 0 0 1px var(--cf-line)}
+                    /* 접혔을 땐 머리가 테두리를 다 갖고, 펼치면 아래 테두리만 빼서 패널과 한 덩어리로 이어지게 한다. */
+                    [data-cf-lowconv="1"] [data-cf-lowconv-head]{border-radius:12px 12px 0 0;box-shadow:inset 1px 0 0 var(--cf-line),inset -1px 0 0 var(--cf-line),inset 0 1px 0 var(--cf-line)}
+                    /* 닫기는 열기보다 빠르게. 이 규칙이 닫힐 때의 속도를 정한다. */
+                    [data-cf-lowconv] [data-cf-lowconv-body]{position:absolute;left:0;right:0;top:100%;z-index:30;
+                      transform-origin:top;transform:translateY(-4px);opacity:0;visibility:hidden;
+                      transition:transform .1s ease-in,opacity .09s linear,visibility 0s linear .1s}
+                    [data-cf-lowconv="1"] [data-cf-lowconv-body]{transform:translateY(0);opacity:1;visibility:visible;
+                      transition:transform .18s cubic-bezier(.4,0,.2,1),opacity .14s linear,visibility 0s}
+                    [data-cf-lowconv] [data-cf-lowconv-chevron]{transition:transform .1s ease-in}
+                    [data-cf-lowconv="1"] [data-cf-lowconv-chevron]{transition:transform .18s cubic-bezier(.4,0,.2,1)}
+                    [data-cf-lowconv="1"] [data-cf-lowconv-chevron]{transform:rotate(180deg)}
+                  `}</style>
+                  <div data-cf-lowconv="0" style={{["--cf-line" as any]:adminDark?"rgba(49,130,246,0.26)":"#D8E6FB"}}>
+                    <div data-cf-lowconv-head
+                      onClick={e=>{
+                        const host=(e.currentTarget as HTMLElement).closest("[data-cf-lowconv]") as HTMLElement|null
+                        if(host)host.setAttribute("data-cf-lowconv",host.getAttribute("data-cf-lowconv")==="1"?"0":"1")
+                      }}
+                      style={{position:"relative" as const,zIndex:31,display:"flex",alignItems:"center",gap:14,padding:"12px 14px 12px 16px",cursor:"pointer",userSelect:"none" as const,
+                        background:adminDark?"#1B2430":"#F2F7FF"}}>
+                      <span style={{flexShrink:0,fontSize:12.5,fontWeight:700,color:tone}}>전환 점검</span>
+                      <span style={{minWidth:0,display:"flex",alignItems:"center",gap:10,flex:1,overflow:"hidden"}}>
+                        <span style={{minWidth:0,fontSize:13,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{nameOf(lowList[0])}</span>
+                        <span style={badge}>{lowList[0].rate}%</span>
+                        {lowList.length>1&&<span style={{flexShrink:0,fontSize:12.5,color:A.t3}}>외 {lowList.length-1}건</span>}
+                      </span>
+                      <span style={{flexShrink:0,width:26,height:26,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",color:tone}}>
+                        <svg data-cf-lowconv-chevron width="11" height="11" viewBox="0 0 10 10" fill="none">
+                          <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </span>
+                    </div>
+                    <div data-cf-lowconv-body>
+                      <div style={{minHeight:0,overflow:"hidden",borderRadius:"0 0 12px 12px",
+                        background:adminDark?"#1B2430":"#F2F7FF",
+                        borderLeft:`1px solid ${adminDark?"rgba(49,130,246,0.26)":"#D8E6FB"}`,
+                        borderRight:`1px solid ${adminDark?"rgba(49,130,246,0.26)":"#D8E6FB"}`,
+                        borderBottom:`1px solid ${adminDark?"rgba(49,130,246,0.26)":"#D8E6FB"}`,
+                        boxShadow:"0 14px 30px -12px rgba(16,24,40,.28)"}}>
+                        <div style={{padding:"9px 14px 4px",fontSize:12,color:A.t3,lineHeight:1.6}}>
+                          <div>최근 {LOW_CONVERSION_WINDOW_DAYS}일 동안 {LOW_CONVERSION_MIN_SESSIONS}명 넘게 폼을 열었지만 제출까지 간 비율이 {LOW_CONVERSION_RATE}% 미만인 폼입니다. 질문이 너무 많거나, 첫 화면에서 요구하는 정보가 부담스러운지 점검해 보세요.</div>
+                          <div>어디서 이탈하는지는 응답 및 분석의 `질문별 이탈률`에서 볼 수 있어요.</div>
+                        </div>
+                        <div style={{padding:"2px 10px 10px"}}>
+                        {lowList.map((entry:any,i:number)=>(
+                          <div key={entry.item.id||i} role="button" tabIndex={0}
+                            onPointerDown={()=>{prefetchFullFormRow(entry.item,true);loadBuilderInsight(String(entry.item.id||""))}}
+                            onClick={()=>requestOpenFormForEdit(entry.item,{section:"form"})}
+                            onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();requestOpenFormForEdit(entry.item,{section:"form"})}}}
+                            style={{display:"flex",alignItems:"center",gap:10,minHeight:38,padding:"0 8px",borderRadius:8,cursor:"pointer",transition:"background .12s"}}
+                            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=adminDark?"rgba(255,255,255,0.06)":"rgba(255,255,255,0.72)"}}
+                            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
+                            <span style={{...badge,width:52,justifyContent:"center",padding:0}}>{entry.rate}%</span>
+                            <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:500,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{nameOf(entry)}</span>
+                            <span style={{flexShrink:0,fontSize:11.5,color:A.t3,fontVariantNumeric:"tabular-nums" as const}}>참여 {entry.sessions} · 완료 {entry.completed}</span>
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A.t4,transform:"rotate(-90deg)"}} aria-hidden="true">
+                              <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </div>
+                        ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              })()
+                if(!closingCard&&!lowConversionCard)return null
+                return <div style={{flexShrink:0,display:"flex",alignItems:"flex-start",gap:12,padding:"18px 24px 16px"}}>
+                  {closingCard}
+                  {lowConversionCard}
+                </div>
+              })()}
+              <div style={{position:"relative" as const,flexShrink:0,boxShadow:`inset 0 -1px 0 ${A.border}`}}>
+              <style>{`.cf-course-tabs{scrollbar-width:none;-ms-overflow-style:none}.cf-course-tabs::-webkit-scrollbar{display:none;width:0;height:0}`}</style>
+              <style>{`.cf-tip{position:relative}.cf-tip::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);padding:5px 8px;border-radius:6px;background:${adminDark?"#2A2F3A":"#15181D"};color:#fff;font-size:11.5px;font-weight:600;line-height:1;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .12s;z-index:20}.cf-tip:hover::after{opacity:1}`}</style>
+              <div ref={courseTabsRef} onScroll={syncCourseTabsArrows} className="cf-course-tabs" style={{display:"flex",alignItems:"center",gap:22,padding:"0 24px",overflowX:"auto" as const}}>
+                <button onClick={()=>{setDashProgramGroupFilter("");setDashProgramFilter("")}}
+                  style={{height:44,padding:"0 2px",border:"none",borderRadius:0,background:"transparent",color:!dashProgramGroupFilter?A.t1:A.t3,fontFamily:FONT,fontSize:13.5,fontWeight:!dashProgramGroupFilter?700:500,cursor:"pointer",whiteSpace:"nowrap" as const,display:"flex",alignItems:"center",gap:7,boxShadow:!dashProgramGroupFilter?`inset 0 -2px 0 ${A.blue}`:"none"}}>
+                  <span>전체 교육과정</span>
+                  <span style={{padding:"1px 6px",borderRadius:5,fontSize:11.5,fontWeight:600,background:!dashProgramGroupFilter?A.blue2:A.card2,color:!dashProgramGroupFilter?A.blue:A.t3}}>{sidebarItems.length}</span>
+                </button>
+                {shownProgramGroups.map(group=>{
+                  const active=dashProgramGroupFilter===group
+                  return <button key={group} onClick={()=>{setDashProgramGroupFilter(group);setDashProgramFilter("")}}
+                    style={{height:44,padding:"0 2px",border:"none",borderRadius:0,background:"transparent",color:active?A.t1:A.t3,fontFamily:FONT,fontSize:13.5,fontWeight:active?700:500,cursor:"pointer",whiteSpace:"nowrap" as const,display:"flex",alignItems:"center",gap:7,boxShadow:active?`inset 0 -2px 0 ${A.blue}`:"none",opacity:groupCount(group)===0?0.55:1}}>
+                    <span>{group}</span>
+                    <span style={{padding:"1px 6px",borderRadius:5,fontSize:11.5,fontWeight:600,background:active?A.blue2:A.card2,color:active?A.blue:A.t3}}>{groupCount(group)}</span>
+                  </button>
+                })}
+                {collapsedProgramGroups.length>0&&<button onClick={()=>setDashShowEmptyGroups(v=>!v)}
+                  title={dashShowEmptyGroups?"폼이 없는 교육과정 접기":`폼이 없는 교육과정 ${collapsedProgramGroups.length}개 펼치기`}
+                  style={{height:26,padding:"0 8px",border:"none",borderRadius:6,background:A.card2,color:A.t3,fontFamily:FONT,fontSize:11.5,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap" as const,display:"flex",alignItems:"center",gap:4,flexShrink:0,marginLeft:-12}}>
+                  {dashShowEmptyGroups?"접기":`+${collapsedProgramGroups.length}`}
+                  <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{transform:dashShowEmptyGroups?"rotate(180deg)":"none",transition:"transform .15s"}}>
+                    <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>}
+              </div>
+              {(["left","right"] as const).map(side=>{
+                const on=side==="left"?courseTabsArrows.left:courseTabsArrows.right
+                if(!on)return null
+                return <div key={side} style={{position:"absolute" as const,top:0,bottom:1,[side]:0,width:56,display:"flex",alignItems:"center",justifyContent:side==="left"?"flex-start":"flex-end",padding:side==="left"?"0 0 0 6px":"0 6px 0 0",pointerEvents:"none" as const,background:`linear-gradient(to ${side==="left"?"right":"left"}, ${A.card} 42%, ${A.card}00 100%)`}}>
+                  <button onClick={()=>scrollCourseTabs(side==="left"?-1:1)} aria-label={side==="left"?"이전 교육과정 보기":"다음 교육과정 보기"}
+                    style={{pointerEvents:"auto" as const,width:26,height:26,borderRadius:8,border:`1px solid ${A.border}`,background:A.card,color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,boxShadow:"0 1px 3px rgba(16,24,40,.10)"}}>
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{transform:side==="left"?"rotate(90deg)":"rotate(-90deg)"}}>
+                      <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                </div>
+              })}
+              </div>
+              {dashProgramGroupFilter&&<div style={{flexShrink:0,display:"flex",alignItems:"center",gap:8,padding:"14px 24px 0"}}>
+                <div style={{position:"relative" as const,flexShrink:0}}>
+                  <PanelSelect value={dashProgramFilter} onChange={setDashProgramFilter} A={A} height={32} fontSize={12.5} fontWeight={600} radius={8} padX={11} width={232} maxWidth={320}
+                    options={[{value:"",label:`${dashProgramGroupFilter} 전체 과정`},...[...selectedGroupPrograms].sort((a,b)=>a.title.localeCompare(b.title,"ko")).map(program=>({value:program.id,label:program.title}))]}/>
+                </div>
+                <button onClick={()=>{setDashProgramGroupFilter("");setDashProgramFilter("")}}
+                  style={{height:32,padding:"0 10px",borderRadius:A.r,border:"none",background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
+                  초기화
+                </button>
+              </div>}
+              <div style={{display:"flex",alignItems:"center",gap:12,padding:"20px 24px 26px",flexShrink:0}}>
                 <div>
-                  <div style={{fontSize:20,fontWeight:600,color:A.t1}}>전체 폼</div>
-                  <div style={{fontSize:12.5,color:A.t3,marginTop:4}}>필요한 폼을 빠르게 찾고 응답 현황을 확인할 수 있어요.</div>
+                  <div style={{display:"flex",alignItems:"baseline",gap:7}}>
+                    <span style={{fontSize:17,fontWeight:700,letterSpacing:"-.2px",color:A.t1}}>{dashBrandFilter?brandDisplayName(dashBrandFilter):"전체"} 폼</span>
+                    <span style={{fontSize:13,fontWeight:600,color:A.t3}}>{filtered.length}</span>
+                  </div>
+                  <div style={{fontSize:12,color:A.t3,marginTop:3}}>필요한 폼을 빠르게 찾고 응답 현황을 확인할 수 있어요.</div>
                 </div>
                 <div style={{flex:1}}/>
-                <div style={{position:"relative" as const}}>
-                  <select value={dashTopTypeFilter} onChange={e=>setDashTopTypeFilter(e.target.value as DashboardFormType|"")} style={{height:36,minWidth:132,padding:"0 38px 0 12px",appearance:"none" as any,WebkitAppearance:"none" as any,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,outline:"none"}}>
-                    <option value="">폼 유형 전체</option>
-                    {DASHBOARD_FORM_TYPES.map(type=><option key={type.value} value={type.value}>{type.label}</option>)}
-                  </select>
-                  <SelectChevron color={A.t2}/>
+                <div style={{position:"relative" as const,flexShrink:0}}>
+                  <PanelSelect value={dashTopTypeFilter} onChange={v=>setDashTopTypeFilter(v as DashboardFormType|"")} A={A} height={34} fontSize={12.5} fontWeight={600} radius={8} padX={12} width={150}
+                    options={[{value:"",label:"폼 유형 전체"},...DASHBOARD_FORM_TYPES.map(t=>({value:t.value,label:t.label}))]}/>
                 </div>
-                <div style={{position:"relative" as const}}>
-                  <select value={dashTopStatusFilter} onChange={e=>setDashTopStatusFilter(e.target.value as DashboardManualStatus|"")} style={{height:36,minWidth:116,padding:"0 38px 0 12px",appearance:"none" as any,WebkitAppearance:"none" as any,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,outline:"none"}}>
-                    <option value="">상태 전체</option>
-                    <option value="draft">작성중</option>
-                    <option value="active">진행중</option>
-                    <option value="closed">종료</option>
-                  </select>
-                  <SelectChevron color={A.t2}/>
+                <div style={{display:"flex",alignItems:"center",gap:2,padding:3,borderRadius:9,background:A.card2,flexShrink:0}}>
+                  {[
+                    {value:"" as const,label:"전체"},
+                    {value:"draft" as const,label:"작성중"},
+                    {value:"active" as const,label:"진행중"},
+                    {value:"closed" as const,label:"종료"},
+                  ].map(status=>{
+                    const active=dashTopStatusFilter===status.value
+                    return <button key={status.value||"all"} onClick={()=>setDashTopStatusFilter(status.value as DashboardManualStatus|"")}
+                      style={{height:28,padding:"0 11px",border:"none",borderRadius:7,background:active?A.card:"transparent",color:active?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:active?600:500,cursor:"pointer",boxShadow:active?"0 1px 2px rgba(16,24,40,.10)":"none",whiteSpace:"nowrap" as const}}>
+                      {status.label}
+                    </button>
+                  })}
                 </div>
-                <div style={{width:220,height:36,display:"flex",alignItems:"center",gap:7,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card}}>
+                <div style={{flex:"0 1 250px",minWidth:150,height:34,display:"flex",alignItems:"center",gap:7,padding:"0 11px",borderRadius:A.r,border:"none",background:A.card2,flexShrink:0,transition:"box-shadow .12s, background .12s"}}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{color:A.t3,flexShrink:0}}><circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8"/><path d="m20 20-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-                  <input value={dashQuery} onChange={e=>setDashQuery(e.target.value)} placeholder="폼 이름 검색" style={{width:"100%",border:"none",outline:"none",background:"transparent",color:A.t1,fontFamily:FONT,fontSize:12.5}}/>
+                  <input value={dashQuery} onChange={e=>setDashQuery(e.target.value)} placeholder="폼 이름 · 교육과정 검색"
+                    onFocus={e=>{const w=e.currentTarget.parentElement as HTMLElement|null;if(w){w.style.background=A.card;w.style.boxShadow=`0 0 0 2px ${A.blue}40`}}}
+                    onBlur={e=>{const w=e.currentTarget.parentElement as HTMLElement|null;if(w){w.style.background=A.card2;w.style.boxShadow="none"}}}
+                    style={{width:"100%",border:"none",outline:"none",background:"transparent",color:A.t1,fontFamily:FONT,fontSize:12.5}}/>
                 </div>
               </div>
-              <div style={{flex:1,minHeight:0,background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,boxShadow:A.shadow,overflow:"hidden"}}>
+              <div style={{flex:1,minHeight:0,background:A.card,overflow:"hidden"}}>
                 <div ref={dashTableScrollRef} onScroll={onDashboardTableScroll} style={{height:"100%",overflow:"auto"}}>
-                <div style={{display:"grid",gridTemplateColumns:"minmax(210px,1.35fr) 132px minmax(160px,1fr) 92px 80px 74px 100px 148px",alignItems:"center",minWidth:1080,padding:"11px 14px",borderBottom:`1px solid ${A.border}`,background:A.card2,fontSize:11.5,fontWeight:600,color:A.t3,position:"sticky" as const,top:0,zIndex:4}}>
-                    <span>폼 이름</span><span>브랜드</span><span>교육과정</span><span>폼 유형</span><span>상태</span><span>응답 수</span><span>수정일</span><span style={{textAlign:"right"}}>관리</span>
+                <div style={{display:"grid",gridTemplateColumns:tableColumns,alignItems:"center",gap:12,minWidth:940,padding:"0 24px 8px",boxShadow:`inset 0 -1px 0 ${adminDark?A.border:"#EFF1F4"}`,background:A.card,fontSize:11.5,fontWeight:600,color:A.t3,position:"sticky" as const,top:0,zIndex:4}}>
+                    <span>폼 이름</span><span>교육과정</span><span>폼 유형</span><span>상태</span><span>응답 수</span><span>수정일</span><span style={{textAlign:"right"}}>액션</span>
                   </div>
-                  <div style={{minWidth:1080}}>
-                  {dashLoading?<div style={{padding:14}}>{[1,2,3,4,5].map(i=><div key={i} style={{height:50,borderRadius:A.r,background:A.card2,marginBottom:8,animation:"skeletonPulse 1.4s ease-in-out infinite"}}/>)}</div>
-                  :filtered.length===0?<div style={{padding:"56px 20px",textAlign:"center" as const,fontSize:13,color:A.t3}}>조건에 맞는 폼이 없어요.</div>
+                  <div style={{minWidth:940,padding:"0 0 10px"}}>
+                  {dashLoading?<div style={{padding:"8px 24px"}}>{[1,2,3,4,5].map(i=><div key={i} style={{height:48,borderRadius:A.r,background:A.card2,marginBottom:8,animation:"skeletonPulse 1.4s ease-in-out infinite"}}/>)}</div>
+                  :filtered.length===0?<div style={{padding:"72px 20px",textAlign:"center" as const}}>
+                    <div style={{fontSize:13.5,fontWeight:600,color:A.t2}}>조건에 맞는 폼이 없어요.</div>
+                    <div style={{fontSize:12.5,color:A.t3,marginTop:5}}>필터를 초기화하거나 검색어를 지워보세요.</div>
+                  </div>
                   :filtered.map((item:any)=>{
                     const type=typeOf(item)
                     const status=statusInfo(statusOf(item))
                     const program=programOf(item)
                     const locked=!!item.config?.dashboard?.editPasswordHash
-                    return <div key={item.id} onMouseEnter={()=>prefetchFullFormRow(item)} onContextMenu={e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,item,source:"dashboard"})}}
-                      style={{display:"grid",gridTemplateColumns:"minmax(210px,1.35fr) 132px minmax(160px,1fr) 92px 80px 74px 100px 148px",alignItems:"center",minHeight:58,padding:"0 14px",borderBottom:`1px solid ${A.border}`,fontSize:12.5,color:A.t2}}>
-                      <div style={{minWidth:0,paddingRight:20}}>
+                    const responseCount=dashResponseCounts[item.id]||0
+                    const responsePct=responseCount?Math.max(8,Math.round((responseCount/maxResponseCount)*100)):0
+                    return <div key={item.id} onMouseEnter={e=>{prefetchFullFormRow(item);(e.currentTarget as HTMLElement).style.background=adminDark?A.card2:"#F7F9FC"}} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background=A.card} onContextMenu={e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,item,source:"dashboard"})}}
+                      style={{display:"grid",gridTemplateColumns:tableColumns,alignItems:"center",gap:12,minHeight:48,padding:"0 24px",fontSize:12.5,color:A.t2,transition:"background .12s"}}>
+                      <div style={{minWidth:0,paddingRight:12}}>
                         <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
                           <span style={{fontSize:13,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name||"이름 없는 폼"}</span>
                           {locked&&<span title="편집 비밀번호 설정됨" style={{color:A.t3,display:"inline-flex",alignItems:"center",flexShrink:0}}><LockIcon/></span>}
                         </div>
-                        <div style={{fontSize:11.5,color:A.t3,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.config?.header?.title||""}</div>
                       </div>
-                      <span>{brandLabel(brandOf(item))}</span>
-                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{program?.title||"교육과정 없음"}</span>
+                      {/* 전체 189개 중 연결된 폼은 46개(24%)뿐이라, 매 행에 배지를 찍으면 정보량 없이 무게만 늘어난다.
+                          배지는 더 자주 스캔하는 상태 열에만 남기고 여기는 아이콘 하나로 낮춘다. */}
+                      <span style={{display:"flex",alignItems:"center",color:program?A.blue:A.t4}}>
+                        {program
+                          ? <span className="cf-tip" data-tip={program.title||"교육과정 연결됨"} style={{display:"inline-flex",alignItems:"center"}}>
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-label="교육과정 연결됨">
+                                <path d="M10 13a5 5 0 0 0 7.54.54l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                <path d="M14 11a5 5 0 0 0-7.54-.54l-2 2a5 5 0 0 0 7.07 7.07l1.14-1.14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </span>
+                          : <span title="연결된 교육과정 없음" style={{fontSize:13}}>–</span>}
+                      </span>
                       <span style={{color:A.t2}}>{typeLabel(type)}</span>
-                      <span><span style={{display:"inline-flex",padding:"3px 7px",borderRadius:999,background:status.bg,color:status.color,fontSize:11.5,fontWeight:600}}>{status.label}</span></span>
-                      <span style={{fontWeight:600,color:A.t1}}>{dashResponseCounts[item.id]||0}</span>
-                      <span>{item.updated_at?new Date(item.updated_at).toLocaleDateString("ko-KR"):"-"}</span>
+                      <span><span style={{display:"inline-flex",alignItems:"center",padding:"3px 8px",borderRadius:6,background:status.bg,color:status.color,fontSize:11.5,fontWeight:600}}>
+                        {status.label}
+                      </span></span>
+                      <div style={{display:"flex",flexDirection:"column" as const,alignItems:"flex-start",gap:4,minWidth:0}}>
+                        <span style={{fontSize:13,fontWeight:responseCount?700:500,color:responseCount?A.t1:A.t4,fontVariantNumeric:"tabular-nums" as const}}>{responseCount}</span>
+                        <span style={{width:48,height:3,borderRadius:2,background:adminDark?A.card2:"#EFF1F4",overflow:"hidden",display:"block"}}>
+                          <span style={{display:"block",width:`${responsePct}%`,height:"100%",borderRadius:999,background:A.blue}}/>
+                        </span>
+                      </div>
+                      <span style={{fontSize:12.5,color:A.t3,fontVariantNumeric:"tabular-nums" as const}}>{item.updated_at?new Date(item.updated_at).toLocaleDateString("ko-KR"):"-"}</span>
                       <div style={{display:"flex",justifyContent:"flex-end",gap:4}}>
-                        <button onClick={()=>openFormAnalytics(item)} title="응답 및 분석" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg></button>
-                        <button onClick={()=>openDashboardSettings(item)} title="폼 설정" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><GearIcon size={15}/></button>
-                        <button onPointerDown={()=>prefetchFullFormRow(item,true)} onFocus={()=>prefetchFullFormRow(item,true)} onClick={()=>requestOpenFormForEdit(item)} title="편집" style={{height:30,padding:"0 9px",borderRadius:6,border:`1px solid ${A.border}`,background:A.card,color:A.t1,cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:600}}>편집</button>
+                        <button onClick={()=>openFormAnalytics(item)} className="cf-tip" data-tip="응답 및 분석" aria-label="응답 및 분석" style={{width:28,height:28,borderRadius:7,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.color=A.t1}}
+                          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 20V11M10 20V4M16 20v-6M22 20H2" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/></svg></button>
+                        <button onClick={()=>openDashboardSettings(item)} className="cf-tip" data-tip="폼 설정" aria-label="폼 설정" style={{width:28,height:28,borderRadius:7,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.color=A.t1}}
+                          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}><GearIcon size={14}/></button>
+                        <button onClick={()=>{
+                          const slug=String(item.slug||item.config?.slug||"").trim()
+                          if(!slug){showToast("슬러그가 저장된 폼만 바로 열 수 있어요.",false);return}
+                          window.open(buildPublicFormUrl(slug),"_blank","noopener,noreferrer")
+                        }} className="cf-tip" data-tip="폼 열기" aria-label="폼 열기" style={{width:28,height:28,borderRadius:7,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.color=A.t1}}
+                          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M14 4h6v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M20 4l-8.5 8.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                            <path d="M18 14.5V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                        <button onPointerDown={()=>prefetchFullFormRow(item,true)} onFocus={()=>prefetchFullFormRow(item,true)} onClick={()=>requestOpenFormForEdit(item)} title="편집" style={{height:28,padding:"0 11px",borderRadius:7,border:`1px solid ${adminDark?A.border:"#E3E7EC"}`,background:A.card,color:A.t2,cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:600}}>편집</button>
                       </div>
                     </div>
                   })}
-                  {!dashLoading&&dashLoadingMore&&<div style={{height:48,display:"flex",alignItems:"center",justifyContent:"center",gap:8,color:A.t3,fontSize:12.5,borderTop:`1px solid ${A.border}`}}>
-                    <span style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${A.border}`,borderTopColor:A.blue,animation:"actionSpin .8s linear infinite"}}/>
-                    추가 폼을 불러오는 중이에요.
+                  {!dashLoading&&dashLoadingMore&&<div style={{padding:"8px 24px"}}>
+                    {[0,1,2].map(i=><div key={i} style={{height:48,borderRadius:A.r,background:A.card2,marginBottom:8,animation:"skeletonPulse 1.4s ease-in-out infinite",animationDelay:`${i*0.12}s`}}/>)}
                   </div>}
                   {!dashLoading&&!dashLoadingMore&&!dashHasMore&&filtered.length>0&&<div style={{height:42,display:"flex",alignItems:"center",justifyContent:"center",color:A.t3,fontSize:12,borderTop:`1px solid ${A.border}`}}>모든 폼을 불러왔어요.</div>}
                   </div>
                 </div>
+              </div>
+              <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:8,padding:"11px 24px",background:adminDark?A.card2:"#FAFBFC",fontSize:11.5,color:A.t3}}>
+                <span>{(()=>{const c=(st:DashboardManualStatus)=>filtered.filter((item:any)=>statusOf(item)===st).length
+                  return `총 ${filtered.length}개 · 진행중 ${c("active")} · 작성중 ${c("draft")} · 종료 ${c("closed")}`})()}</span>
+                <div style={{flex:1}}/>
+                <span>우클릭으로 폼 복사 · 이름 변경 · 휴지통 이동</span>
               </div>
             </main>
           </div>
@@ -4605,25 +5968,25 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           const hasRecruitmentPeriod=!!(recruitment.start||recruitment.end)
           return <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={()=>setDashboardSettings(null)}>
             <div style={{width:500,maxWidth:"92vw",maxHeight:"88vh",overflowY:"auto" as const,padding:24,borderRadius:16,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-              <div style={{fontSize:17,fontWeight:600,color:A.t1,marginBottom:5}}>폼 설정</div>
+              <div style={{fontSize:17,fontWeight:700,color:A.t1,marginBottom:5,letterSpacing:"-.2px"}}>폼 설정</div>
               <div style={{fontSize:12.5,color:A.t3,marginBottom:20}}>폼 제목, 브랜드, 폼 유형과 운영 기준을 정합니다.</div>
-              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 제목</div>
+              <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>폼 제목</div>
               <input value={dashboardSettings.formName} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formName:e.target.value}))} placeholder="폼 제목" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16,boxSizing:"border-box" as const}}/>
-              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>브랜드</div>
-              <select value={dashboardSettings.brand} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,brand:e.target.value as BrandId}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
-                <option value="SNIPERFACTORY">스나이퍼팩토리</option><option value="INSIDEOUT">인사이드아웃</option><option value="SFACSPACE">스팩스페이스</option>
-              </select>
-              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 유형</div>
-              <select value={dashboardSettings.formTypeTag} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formTypeTag:e.target.value as DashboardFormType}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
-                {DASHBOARD_FORM_TYPES.map(type=><option key={type.value} value={type.value}>{type.label}</option>)}
-              </select>
-              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>편집 비밀번호</div>
+              <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>브랜드</div>
+              <div style={{marginBottom:16}}><PanelSelect value={dashboardSettings.brand} onChange={v=>setDashboardSettings(prev=>prev&&({...prev,brand:v as BrandId}))} A={A} height={38} options={[{value:"SNIPERFACTORY",label:"스나이퍼팩토리"},{value:"INSIDEOUT",label:"인사이드아웃"},{value:"SFACSPACE",label:"스팩스페이스"}]}/></div>
+              <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>폼 유형</div>
+              <div style={{marginBottom:16}}><PanelSelect value={dashboardSettings.formTypeTag} onChange={v=>setDashboardSettings(prev=>prev&&({...prev,formTypeTag:v as DashboardFormType}))} A={A} height={38} options={DASHBOARD_FORM_TYPES.map(t=>({value:t.value,label:t.label}))}/></div>
+              <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>전환 점검</div>
+            <PanelCheckRow label="이 폼은 전환 점검에서 제외" on={dashboardSettings.conversionCheckOff}
+              toggle={()=>setDashboardSettings(prev=>prev&&({...prev,conversionCheckOff:!prev.conversionCheckOff}))} A={A}/>
+            <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,margin:"6px 0 16px"}}>결과물 제출, 사후 설문처럼 전환율이 의미 없는 폼은 꺼두세요. 끄면 대시보드의 전환 점검 알림에 나타나지 않습니다.</div>
+            <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>편집 비밀번호</div>
               {!!dashboardSettings.item.config?.dashboard?.editPasswordHash&&!canMasterReset(authRole)&&<input type="password" value={dashboardSettings.currentEditPasswordDraft} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,currentEditPasswordDraft:e.target.value}))} placeholder="변경 또는 해제 시 현재 비밀번호" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:8,boxSizing:"border-box" as const}}/>}
               <input type="password" value={dashboardSettings.editPasswordDraft} disabled={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,editPasswordDraft:e.target.value}))} placeholder={dashboardSettings.item.config?.dashboard?.editPasswordHash?"새 비밀번호 입력 시 변경":"비밀번호 입력 시 편집 보호"} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,opacity:dashboardSettings.clearEditPassword?.55:1}}/>
               <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,margin:"6px 0 9px"}}>{canMasterReset(authRole)&&dashboardSettings.item.config?.dashboard?.editPasswordHash?"master 권한 계정은 현재 비밀번호 없이 편집 비밀번호를 변경하거나 해제할 수 있어요.":"설정하면 대시보드에서 편집을 열 때 비밀번호를 확인합니다. 원문 대신 해시값만 저장됩니다."}</div>
               {!!dashboardSettings.item.config?.dashboard?.editPasswordHash&&<label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:16}}><input type="checkbox" checked={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,clearEditPassword:e.target.checked,editPasswordDraft:e.target.checked?"":prev.editPasswordDraft}))}/>편집 비밀번호 해제</label>}
               {hasRecruitmentPeriod&&<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB의 {recruitmentPeriodLabel(recruitmentMode)}을 기본 운영 기간으로 불러왔어요.<br/>필요하면 아래에서 기간을 추가하거나 수정할 수 있습니다.<br/>{recruitmentPeriodText(recruitment,"기간 데이터 없음")}</div>}
-              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
+              <div style={{fontSize:12,fontWeight:600,color:A.t3,marginBottom:9}}>폼 운영 기간</div>
               <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:8}}>
                 <input type="checkbox" checked={dashboardSettings.alwaysOpen} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,alwaysOpen:e.target.checked,manualStatus:""}))}/>
                 상시 운영
@@ -4638,7 +6001,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               </div>
               <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
                 <button onClick={()=>setDashboardSettings(null)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
-                <button onClick={saveDashboardSettings} disabled={dashboardSettingsSaving} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>{dashboardSettingsSaving?"저장 중...":"저장"}</button>
+                <button onClick={saveDashboardSettings} disabled={dashboardSettingsSaving} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>{dashboardSettingsSaving?"저장 중...":"저장"}</button>
               </div>
             </div>
           </div>
@@ -4649,7 +6012,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <div style={{width:40,height:40,borderRadius:A.r,background:A.blue2,color:A.blue,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:14}}>
                 <svg width="19" height="19" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="2" stroke="currentColor" strokeWidth="1.4"/><path d="M5 7V5a3 3 0 0 1 6 0v2M8 10v1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
               </div>
-              <div style={{fontSize:17,fontWeight:600,color:A.t1,marginBottom:5}}>편집 비밀번호 확인</div>
+              <div style={{fontSize:17,fontWeight:700,color:A.t1,marginBottom:5,letterSpacing:"-.2px"}}>편집 비밀번호 확인</div>
               <div style={{fontSize:12.5,color:A.t3,lineHeight:1.55,marginBottom:15}}>이 폼은 편집 보호가 설정되어 있어요.</div>
               <input autoFocus type="password" value={editPasswordPrompt.password} onChange={e=>setEditPasswordPrompt(prev=>prev&&({...prev,password:e.target.value,error:""}))} onKeyDown={e=>e.key==="Enter"&&verifyEditPassword()} placeholder="비밀번호 입력" style={{width:"100%",height:40,padding:"0 11px",borderRadius:A.r,border:`1px solid ${editPasswordPrompt.error?A.red:A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,outline:"none"}}/>
               {editPasswordPrompt.error&&<div style={{fontSize:12,color:A.red,marginTop:7}}>{editPasswordPrompt.error}</div>}
@@ -4657,44 +6020,73 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 <button onClick={()=>canMasterReset(authRole)?resetEditPasswordFromPrompt():setEditPasswordPrompt(prev=>prev&&({...prev,error:"비밀번호 원문은 복구할 수 없어요. master 권한 계정으로 비밀번호를 초기화해주세요."}))} disabled={editPasswordPrompt.checking} style={{height:38,padding:"0 4px",border:"none",background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12.5,cursor:"pointer"}}>{canMasterReset(authRole)?"비밀번호 초기화":"비밀번호 찾기"}</button>
                 <div style={{display:"flex",gap:8}}>
                 <button onClick={()=>setEditPasswordPrompt(null)} disabled={editPasswordPrompt.checking} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
-                <button onClick={verifyEditPassword} disabled={editPasswordPrompt.checking} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>{editPasswordPrompt.checking?"확인 중...":"편집 열기"}</button>
+                <button onClick={verifyEditPassword} disabled={editPasswordPrompt.checking} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>{editPasswordPrompt.checking?"확인 중...":"편집 열기"}</button>
                 </div>
               </div>
             </div>
           </div>
         )}
         {formTrashOpen&&(
-          <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}} onClick={()=>!formTrashBusy&&setFormTrashOpen(false)}>
-            <div style={{width:560,maxWidth:"92vw",maxHeight:"78vh",background:A.card,border:`1px solid ${A.border}`,borderRadius:16,boxShadow:A.shadow,display:"flex",flexDirection:"column" as const,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
-              <div style={{height:58,padding:"0 18px",borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
-                <div style={{width:34,height:34,borderRadius:A.r,background:"rgba(232,92,92,0.10)",color:A.red,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  <svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v8M8 6v8M11 6v8M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                </div>
+          <div style={{position:"absolute" as const,inset:0,background:"rgba(21,24,29,.42)",display:"flex",alignItems:"center",justifyContent:"center",padding:40,zIndex:1000}} onClick={()=>!formTrashBusy&&setFormTrashOpen(false)}>
+            <div style={{width:"100%",maxWidth:560,maxHeight:"100%",background:A.card,border:adminDark?`1px solid ${A.border}`:"none",borderRadius:16,boxShadow:"0 24px 64px -12px rgba(16,24,40,.45)",display:"flex",flexDirection:"column" as const,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+              <div style={{flexShrink:0,display:"flex",alignItems:"flex-start",gap:12,padding:"22px 22px 16px"}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:16,fontWeight:600,color:A.t1}}>폼 휴지통</div>
-                  <div style={{fontSize:12,color:A.t3,marginTop:2}}>삭제한 폼을 다시 복구할 수 있어요.</div>
+                  <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px"}}>폼 휴지통</div>
+                  <div style={{fontSize:12.5,color:A.t3,marginTop:4}}>영구 삭제하기 전까지 보관되며 언제든 복구할 수 있어요.</div>
                 </div>
-                <button onClick={()=>setFormTrashOpen(false)} disabled={!!formTrashBusy} style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,cursor:formTrashBusy?"not-allowed":"pointer",fontSize:18,lineHeight:1}}>×</button>
+                <button onClick={()=>setFormTrashOpen(false)} disabled={!!formTrashBusy}
+                  style={{width:32,height:32,flexShrink:0,border:"none",borderRadius:A.r,background:"transparent",color:A.t3,cursor:formTrashBusy?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
+                  onMouseEnter={e=>{if(!formTrashBusy){(e.currentTarget as HTMLElement).style.background=A.card2;(e.currentTarget as HTMLElement).style.color=A.t2}}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}>
+                  <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                </button>
               </div>
-              <div style={{padding:14,overflowY:"auto" as const}}>
+              <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:8,padding:"0 22px 12px"}}>
+                <span style={{fontSize:12,fontWeight:600,color:A.t3}}>{formTrashItems.length}개 항목</span>
+                <div style={{flex:1}}/>
+                {formTrashItems.length>0&&<button onClick={purgeAllFormsFromTrash} disabled={!!formTrashBusy}
+                  style={{height:30,padding:"0 11px",border:"none",borderRadius:A.r,background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:formTrashBusy?"not-allowed":"pointer"}}
+                  onMouseEnter={e=>{if(!formTrashBusy){(e.currentTarget as HTMLElement).style.background=adminDark?"rgba(240,107,107,0.14)":"#FDECEC";(e.currentTarget as HTMLElement).style.color=A.red}}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}>
+                  {formTrashBusy==="__all__"?"비우는 중...":"휴지통 비우기"}
+                </button>}
+              </div>
+              <div style={{flex:1,minHeight:0,overflowY:"auto" as const,padding:"0 22px 8px"}}>
                 {formTrashItems.length===0
                   ? <div style={{padding:"44px 12px",textAlign:"center" as const,color:A.t3,fontSize:13}}>폼 휴지통이 비어 있어요.</div>
                   : formTrashItems.map((item:any)=>{
                     const trashedAt=formTrashedAtOf(item)
-                    const busy=formTrashBusy===item.id
-                    return <div key={item.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,marginBottom:8}}>
+                    const busy=formTrashBusy===item.id||formTrashBusy==="__all__"
+                    const brand=BRANDS.find(b=>b.id===canonicalBrand(item.config?.brand||item.brand||""))
+                    return <div key={item.id}
+                      style={{display:"flex",alignItems:"center",gap:12,padding:"13px 4px",boxShadow:`inset 0 -1px 0 ${A.card2}`}}
+                      onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=adminDark?A.card2:"#FAFBFC"}
+                      onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name||"이름 없는 폼"}</div>
-                        <div style={{fontSize:11.5,color:A.t3,marginTop:4,display:"flex",gap:8,flexWrap:"wrap" as const}}>
-                          <span>{brandDisplayName(item.config?.brand||item.brand||"")}</span>
-                          {trashedAt&&<span>{new Date(trashedAt).toLocaleString("ko-KR")}</span>}
+                        <div style={{fontSize:13.5,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.name||"이름 없는 폼"}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:7,marginTop:4}}>
+                          <span style={{width:5,height:5,borderRadius:3,flexShrink:0,background:brand?.color||A.t4}}/>
+                          <span style={{fontSize:11.5,color:A.t3}}>{brandDisplayName(item.config?.brand||item.brand||"")}</span>
+                          {trashedAt&&<><span style={{fontSize:11.5,color:A.t4}}>·</span>
+                          <span style={{fontSize:11.5,color:A.t3}}>{new Date(trashedAt).toLocaleString("ko-KR")}</span></>}
                         </div>
                       </div>
-                      <button onClick={()=>restoreFormFromTrash(item)} disabled={busy} style={{height:34,padding:"0 12px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:busy?"wait":"pointer",flexShrink:0}}>{busy?"처리 중...":"복구"}</button>
-                      <button onClick={()=>purgeFormFromTrash(item)} disabled={busy} style={{height:34,padding:"0 12px",borderRadius:A.r,border:`1px solid ${A.red}44`,background:A.card,color:A.red,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:busy?"wait":"pointer",flexShrink:0}}>영구 삭제</button>
+                      <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                        <button onClick={()=>restoreFormFromTrash(item)} disabled={busy}
+                          style={{height:30,padding:"0 12px",border:"none",borderRadius:A.r,background:A.blue2,color:A.blue,fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:busy?"wait":"pointer"}}>
+                          {formTrashBusy===item.id?"처리 중...":"복구"}
+                        </button>
+                        <button onClick={()=>purgeFormFromTrash(item)} disabled={busy}
+                          style={{height:30,padding:"0 12px",border:"none",borderRadius:A.r,background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:busy?"wait":"pointer"}}
+                          onMouseEnter={e=>{if(!busy){(e.currentTarget as HTMLElement).style.background=adminDark?"rgba(240,107,107,0.14)":"#FDECEC";(e.currentTarget as HTMLElement).style.color=A.red}}}
+                          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}>
+                          영구 삭제
+                        </button>
+                      </div>
                     </div>
                   })}
               </div>
+              <div style={{flexShrink:0,padding:"12px 22px",background:adminDark?A.card2:"#FAFBFC",fontSize:11.5,color:A.t3}}>영구 삭제한 폼은 응답과 QR · 분석 기록까지 함께 삭제되며 복구할 수 없어요.</div>
             </div>
           </div>
         )}
@@ -4703,7 +6095,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={()=>setShowBrandModal(false)}>
             <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:16,padding:"28px 28px 24px",width:380,boxShadow:A.shadow,position:"relative" as const}} onClick={e=>e.stopPropagation()}>
               <button onClick={()=>setShowBrandModal(false)} style={{position:"absolute",top:14,right:14,width:28,height:28,borderRadius:"50%",border:`1px solid ${A.border}`,background:A.card2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:A.t3,fontFamily:FONT,lineHeight:1}}>×</button>
-              <div style={{fontSize:18,fontWeight:600,color:A.t1,marginBottom:22,letterSpacing:"-0.3px"}}>어떤 브랜드 폼을 만들까요?</div>
+              <div style={{fontSize:17,fontWeight:700,color:A.t1,marginBottom:22,letterSpacing:"-0.2px"}}>어떤 브랜드 폼을 만들까요?</div>
               <div style={{display:"flex",flexDirection:"column" as const,gap:12}}>
                 <button onClick={()=>startNewForm("SNIPERFACTORY")}
                   style={{width:"100%",padding:"22px 28px",borderRadius:12,border:`1px solid ${A.border2}`,background:"transparent",cursor:"pointer",textAlign:"left" as const,fontFamily:FONT,transition:"all .15s"}}
@@ -4734,7 +6126,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <button onClick={()=>{setShowTemplateModal(false);setPendingBrand(null)}} style={{position:"absolute",top:14,right:14,width:28,height:28,borderRadius:"50%",border:`1px solid ${A.border}`,background:A.card2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:A.t3,lineHeight:1}}>×</button>
             {/* 왼쪽: 기본 폼 종류 */}
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:18,fontWeight:600,color:A.t1,marginBottom:6,letterSpacing:"-0.3px"}}>어떤 형식의 폼을 만들까요?</div>
+              <div style={{fontSize:18,fontWeight:700,color:A.t1,marginBottom:6,letterSpacing:"-0.2px"}}>어떤 형식의 폼을 만들까요?</div>
               <div style={{fontSize:13,color:A.t3,marginBottom:20}}>
                 {brandDisplayName(pendingBrand||"")} 브랜드 폼
               </div>
@@ -4775,44 +6167,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
         </div>
       )}
-      {/* CONTEXT MENU */}
-      {ctxMenu&&<>
-        <div style={{position:"fixed" as const,inset:0,zIndex:9998}} onClick={()=>setCtxMenu(null)}/>
-        <div style={{position:"fixed" as const,left:ctxMenu.x,top:ctxMenu.y,zIndex:9999,background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:4,boxShadow:A.shadow,minWidth:140}}>
-          <button onClick={()=>{copyForm(ctxMenu.item);setCtxMenu(null)}}
-            style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 12px",border:"none",background:"transparent",cursor:"pointer",color:A.t1,fontFamily:FONT,fontSize:13,borderRadius:A.r,textAlign:"left" as const}}
-            onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=A.card2}
-            onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            폼 복사
-          </button>
-          {ctxMenu.source==="dashboard"&&<>
-            <div style={{height:1,background:A.border,margin:"4px 0"}}/>
-            <button onClick={()=>{setRenameModal({id:ctxMenu.item.id,name:ctxMenu.item.name});setRenameName(ctxMenu.item.name);setCtxMenu(null)}}
-              style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 12px",border:"none",background:"transparent",cursor:"pointer",color:A.t1,fontFamily:FONT,fontSize:13,borderRadius:A.r,textAlign:"left" as const}}
-              onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=A.card2}
-              onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              폼 이름 변경
-            </button>
-            <div style={{height:1,background:A.border,margin:"4px 0"}}/>
-            <button onClick={()=>{delCfg(ctxMenu.item.id,ctxMenu.item.name);setCtxMenu(null)}}
-              style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"8px 12px",border:"none",background:"transparent",cursor:"pointer",color:A.red,fontFamily:FONT,fontSize:13,borderRadius:A.r,textAlign:"left" as const}}
-              onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background=A.card2}
-              onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background="transparent"}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              휴지통으로 이동
-            </button>
-          </>}
-        </div>
-      </>}
-      {/* TOAST */}
       {/* RENAME MODAL */}
       {renameModal&&<div style={{position:"fixed" as const,inset:0,zIndex:10000,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setRenameModal(null)}>
         <div style={{background:A.card,borderRadius:16,padding:"28px 24px",width:360,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-          <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:6}}>폼 이름 변경</div>
+          <div style={{fontSize:17,fontWeight:700,color:A.t1,marginBottom:6,letterSpacing:"-.2px"}}>폼 이름 변경</div>
           <div style={{fontSize:12.5,color:A.t3,marginBottom:18}}>새로운 폼 이름을 입력해주세요.</div>
-          <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 이름</div>
+          <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>폼 이름</div>
           <input value={renameName} onChange={e=>setRenameName(e.target.value)}
             onKeyDown={e=>{if(e.key==="Enter"&&renameName.trim())renameCfg(renameModal.id,renameName)}}
             placeholder="폼 이름을 입력해주세요"
@@ -4822,7 +6182,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <button onClick={()=>setRenameModal(null)}
               style={{flex:1,height:40,borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
             <button onClick={()=>renameCfg(renameModal.id,renameName)}
-              style={{flex:2,height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>변경하기</button>
+              style={{flex:2,height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>변경하기</button>
           </div>
         </div>
       </div>}
@@ -4861,10 +6221,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       {renderActionLoading()}
       {/* TOAST */}
       {toast&&(
-        <div style={{position:"absolute" as const,bottom:24,left:"50%",background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:"10px 16px",fontSize:13,fontWeight:600,color:toast.ok?A.t1:A.red,zIndex:99999,display:"flex",alignItems:"center",gap:8,boxShadow:A.shadow,whiteSpace:"nowrap" as const,animation:`${toastLeaving?"toastOut":"toastIn"} .3s cubic-bezier(.4,0,.2,1) forwards`}}>
-          <span>{toast.ok?"✓":"✗"}</span><span>{toast.msg}</span>
+        <div style={{position:"absolute" as const,top:122,right:20,background:"#15181D",border:"none",borderRadius:10,padding:"12px 14px",fontSize:12.5,fontWeight:500,color:"#fff",zIndex:99999,display:"flex",alignItems:"center",gap:9,boxShadow:"0 8px 28px -6px rgba(16,24,40,.4)",whiteSpace:"nowrap" as const,animation:`${toastLeaving?"toastOut":"toastIn"} .3s cubic-bezier(.4,0,.2,1) forwards`}}>
+          <span style={{width:16,height:16,borderRadius:8,background:toast.ok?A.green:A.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:10,fontWeight:700,color:"#fff"}}>{toast.ok?"✓":"!"}</span><span>{toast.msg}</span>
           {toast.undo&&<button onClick={toast.undo}
-            style={{marginLeft:8,padding:"2px 10px",borderRadius:4,border:"none",background:"transparent",cursor:"pointer",color:A.blue,fontFamily:FONT,fontSize:12,fontWeight:600}}>실행 취소</button>}
+            style={{marginLeft:8,padding:"2px 10px",borderRadius:5,border:"none",background:"rgba(255,255,255,.1)",cursor:"pointer",color:"#fff",fontFamily:FONT,fontSize:12,fontWeight:600}}>실행 취소</button>}
+          {toast.action&&<button onClick={()=>{toast.action?.onClick();setToast(null)}}
+            style={{marginLeft:10,flexShrink:0,height:26,padding:"0 11px",borderRadius:6,border:"none",background:"rgba(255,255,255,.16)",cursor:"pointer",color:"#fff",fontFamily:FONT,fontSize:12,fontWeight:600}}>{toast.action.label}</button>}
         </div>
       )}
       {/* GUIDE MODAL */}
@@ -5053,7 +6415,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   // ── Nav items ─────────────────────────────────────────────────────────
   const NAV=[
     {group:"콘텐츠",items:[
-      {id:"header",label:"헤더"},
+      {id:"header",label:"기본 정보"},
       {id:"notice",label:"안내 문구"},
       {id:"ad",label:"광고",badge:cfg.ad?.enabled?"ON":"OFF"},
       {id:"form",label:"폼 질문"},
@@ -5072,11 +6434,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     ]},
   ]
 
-  const selS:React.CSSProperties={width:"100%",background:A.card2,border:`1.5px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:13,padding:"7px 26px 7px 10px",outline:"none",cursor:"pointer",boxSizing:"border-box" as const,colorScheme:adminDark?"dark" as any:"light" as any}
+  const selS:React.CSSProperties={width:"100%",height:40,background:panelFieldBg(A),border:"none",borderRadius:9,color:A.t1,fontFamily:FONT,fontSize:12.5,padding:"0 30px 0 12px",outline:"none",cursor:"pointer",boxSizing:"border-box" as const,colorScheme:adminDark?"dark" as any:"light" as any}
 
   // ── Panel content ─────────────────────────────────────────────────────
   function renderPanel():React.ReactNode {
-    const pd:React.CSSProperties={padding:"16px 18px 48px"}
+    const pd:React.CSSProperties={padding:"0 20px 22px"}
     switch(sec){
       case "header": return <div style={pd}>
         <FG title="대표 이미지" A={A}>
@@ -5087,8 +6449,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <button onClick={()=>uh("imageUrl","")} style={{position:"absolute",top:6,right:6,width:22,height:22,borderRadius:"50%",background:"rgba(0,0,0,0.65)",border:"none",color:"#fff",cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
             {renderImageCropControls(cfg.header,()=>openImageCropModal("header",cfg.header),()=>setCfg(p=>({...p,header:{...p.header,imageFit:"contain"}})))}
           </div>}
-          <label style={{display:"flex",alignItems:"center",gap:8,padding:"9px 13px",borderRadius:A.r,background:A.card2,border:`1.5px dashed ${A.border2}`,cursor:"pointer",fontSize:13,color:A.t2,fontFamily:FONT}}>
-            <span>↑ 이미지 업로드</span><span style={{marginLeft:"auto",fontSize:11,color:A.t3,fontWeight:400}}>1400 × 400</span><input type="file" accept="image/*" onChange={onImg} style={{display:"none"}}/>
+          <label style={{height:52,display:"flex",alignItems:"center",gap:8,padding:"0 12px",borderRadius:10,background:panelFieldBg(A),border:"none",cursor:"pointer",fontSize:12.5,color:A.t2,fontFamily:FONT,boxSizing:"border-box" as const}}>
+            <span style={{display:"flex",alignItems:"center",gap:7,fontWeight:600}}>
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 12.5V3.5M4.5 7 8 3.5 11.5 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              이미지 업로드
+            </span>
+            <span style={{marginLeft:"auto",fontSize:11.5,color:A.t3,fontWeight:400}}>1400 × 400</span><input type="file" accept="image/*" onChange={onImg} style={{display:"none"}}/>
           </label>
         </FG>
         <FG title="프로그램" A={A}>
@@ -5100,7 +6466,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
           {!cfg.header.programUnlinked&&<F label="과정 선택" A={A}>
             {programCatalogLoading&&progs.length===0
-              ? <div style={{padding:"10px 11px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,fontSize:12.5,lineHeight:1.55}}>교육과정 목록을 불러오는 중이에요.</div>
+              ? <div style={{padding:"11px 11px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,display:"flex",flexDirection:"column" as const,gap:9}}>
+                  {[0,1,2].map(i=><div key={i} style={{height:12,width:`${72-i*16}%`,borderRadius:6,background:A.card2,animation:"skeletonPulse 1.4s ease-in-out infinite",animationDelay:`${i*0.1}s`}}/>)}
+                </div>
               : programCatalogErr&&progs.length===0
               ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 10px",borderRadius:A.r,border:`1px solid ${A.red}44`,background:`${A.red}10`,color:A.red,fontSize:12.5,lineHeight:1.45}}>
                   <span style={{flex:1}}>교육과정 목록을 불러오지 못했어요. {programCatalogErr}</span>
@@ -5124,16 +6492,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             const linkedProgram=progs.find(p=>p.id===cfg.header.programId)
             const currentMode=recruitmentPeriodModeOf(cfg)
             return <F label="폼 운영 기간 기준" A={A}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                {(["pre","formal"] as RecruitmentPeriodMode[]).map(mode=>{
-                  const period=recruitmentPeriodOf(linkedProgram,mode)
-                  const selected=currentMode===mode
-                  return <button key={mode} onClick={()=>setRecruitmentPeriodMode(mode)}
-                    style={{minHeight:54,padding:"9px 10px",borderRadius:A.r,border:`1.5px solid ${selected?A.blue:A.border}`,background:selected?A.blue2:A.card2,color:selected?A.blue:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:selected?700:600,cursor:"pointer",textAlign:"left" as const,lineHeight:1.45}}>
-                    <div>{recruitmentPeriodLabel(mode)}</div>
-                    <div style={{fontSize:11,color:selected?A.blue:A.t3,fontWeight:400,marginTop:3,wordBreak:"keep-all" as const,overflowWrap:"break-word" as const}}>{recruitmentPeriodText(period)}</div>
-                  </button>
-                })}
+              <PanelSegment value={currentMode} onChange={v=>setRecruitmentPeriodMode(v as RecruitmentPeriodMode)} A={A}
+                options={(["pre","formal"] as RecruitmentPeriodMode[]).map(mode=>({value:mode,label:recruitmentPeriodLabel(mode)}))}/>
+              <div style={{marginTop:8,fontSize:11.5,color:A.t3,lineHeight:1.5,wordBreak:"keep-all" as const,overflowWrap:"break-word" as const}}>
+                {recruitmentPeriodText(recruitmentPeriodOf(linkedProgram,currentMode))}
               </div>
             </F>
           })()}
@@ -5143,29 +6505,37 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </F>
           <F label="지원 유형" A={A}>
             {cfg.formType==="alert"
-              ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12.5,color:A.t3,fontFamily:FONT}}>
+              ? <div style={{height:42,display:"flex",alignItems:"center",gap:8,padding:"0 12px",borderRadius:10,background:panelFieldBg(A),border:"none",fontSize:12.5,color:A.t3,fontFamily:FONT,boxSizing:"border-box" as const}}>
                   <span style={{padding:"2px 8px",borderRadius:4,background:A.blue2,color:A.blue,fontSize:11,fontWeight:600}}>자동</span> 사전 알림
                 </div>
               : cfg.formType==="kdt"
-              ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12.5,color:A.t3,fontFamily:FONT}}>
+              ? <div style={{height:42,display:"flex",alignItems:"center",gap:8,padding:"0 12px",borderRadius:10,background:panelFieldBg(A),border:"none",fontSize:12.5,color:A.t3,fontFamily:FONT,boxSizing:"border-box" as const}}>
                   <span style={{padding:"2px 8px",borderRadius:4,background:A.blue2,color:A.blue,fontSize:11,fontWeight:600}}>자동</span> 정식 신청
                 </div>
-              : <div style={{display:"flex",flexDirection:"column" as const,gap:6}}>
-                  {([{value:"pre",label:"사전 알림"},{value:"formal",label:"정식 신청"}].concat(
-                    (cfg.header.applicationType&&cfg.header.applicationType!=="pre"&&cfg.header.applicationType!=="formal")
-                      ? [{value:cfg.header.applicationType,label:cfg.header.applicationType}] : []
-                  )).map(opt=>{
-                    const sel=cfg.header.applicationType===opt.value
-                    return <button key={opt.value} onClick={()=>uh("applicationType",opt.value)}
-                      style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",borderRadius:A.r,border:`1.5px solid ${sel?A.blue:A.border}`,background:sel?A.blue2:"transparent",cursor:"pointer",fontFamily:FONT,fontSize:12.5,color:sel?A.blue:A.t1,textAlign:"left" as const,transition:"all .12s"}}>
-                      <div style={{width:14,height:14,borderRadius:"50%",border:`1.5px solid ${sel?A.blue:A.border}`,background:sel?A.blue:"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                        {sel&&<div style={{width:5,height:5,borderRadius:"50%",background:"#fff"}}/>}
-                      </div>
-                      <span style={{fontWeight:sel?600:400}}>{opt.label}</span>
-                    </button>
-                  })}
-                  <TIn value={(cfg.header.applicationType!=="pre"&&cfg.header.applicationType!=="formal")?cfg.header.applicationType||"":""} onChange={v=>uh("applicationType",v)} placeholder="직접 입력 (예: interview)" A={A}/>
-                </div>
+              : (()=>{
+                  const custom=!!cfg.header.applicationType&&cfg.header.applicationType!=="pre"&&cfg.header.applicationType!=="formal"
+                  return <div style={{display:"flex",flexDirection:"column" as const,gap:8}}>
+                    <PanelSegment value={cfg.header.applicationType||""} A={A}
+                      onChange={v=>{setShowCustomAppType(false);setCfg(p=>({...p,header:{...p.header,applicationType:v,applicationTypeIsConversion:false}}))}}
+                      options={[{value:"pre",label:"사전 알림"},{value:"formal",label:"정식 신청"}]}/>
+                    {custom||showCustomAppType
+                      ? <div style={{display:"flex",alignItems:"center",gap:10}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <TIn value={custom?cfg.header.applicationType||"":""} onChange={v=>uh("applicationType",v)} placeholder="직접 입력 (예: interview)" A={A}/>
+                          </div>
+                          {/* 직접 입력한 유형도 전환(메타 픽셀 Lead)으로 볼지 폼 작성자가 직접 정한다. */}
+                          <span style={{flexShrink:0}} title="체크하면 이 폼의 제출을 광고 전환으로 집계합니다.">
+                            <PanelCheckRow label="전환" on={!!cfg.header.applicationTypeIsConversion}
+                              toggle={()=>uh("applicationTypeIsConversion",!cfg.header.applicationTypeIsConversion)} A={A}/>
+                          </span>
+                        </div>
+                      : <button onClick={()=>setShowCustomAppType(true)}
+                          style={{alignSelf:"flex-start" as const,height:28,padding:"0 2px",border:"none",background:"transparent",color:A.t2,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+                          <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                          직접 입력
+                        </button>}
+                  </div>
+                })()
             }
           </F>
         </FG>
@@ -5174,12 +6544,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <EducationSchedulesEditor schedules={educationSchedulesFromHeader(cfg.header)} onChange={setEducationSchedules} A={A}/>
           </F>
           <F label="수강료" A={A}>
-            <TRow label={cfg.header.tuitionFree?"무료 ✓":"유료 ✓"} on={cfg.header.tuitionFree} toggle={()=>uh("tuitionFree",!cfg.header.tuitionFree)} A={A}/>
+            <div style={{marginBottom:8}}>
+              <PanelSegment value={cfg.header.tuitionFree?"free":"paid"} onChange={v=>uh("tuitionFree",v==="free")} A={A}
+                options={[{value:"free",label:"무료"},{value:"paid",label:"유료"}]}/>
+            </div>
             {cfg.header.tuitionFree
               ?<TIn value={cfg.header.tuitionFreeText} onChange={v=>uh("tuitionFreeText",v)} placeholder="수강료 전액 무료" A={A}/>
               :<div style={{display:"flex",alignItems:"center",gap:8}}>
                 <input type="text" value={cfg.header.tuitionAmount} onChange={e=>uh("tuitionAmount",fmtNum(e.target.value))} placeholder="0" inputMode="numeric"
-                  style={{flex:1,background:A.card2,border:`1.5px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:13,padding:"8px 10px",outline:"none",textAlign:"right" as const,boxSizing:"border-box" as const}}/>
+                  style={{flex:1,height:40,background:panelFieldBg(A),border:"none",borderRadius:9,color:A.t1,fontFamily:FONT,fontSize:12.5,padding:"0 12px",outline:"none",textAlign:"right" as const,boxSizing:"border-box" as const}}/>
                 <span style={{color:A.t2,flexShrink:0,fontFamily:FONT,fontSize:13}}>원</span>
               </div>}
           </F>
@@ -5191,24 +6564,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <FG A={A} last>
           <TRow label="안내 문구 표시" on={cfg.header.noticeEnabled} toggle={()=>uh("noticeEnabled",!cfg.header.noticeEnabled)} A={A}/>
           <F label="박스 모양" A={A}>
-            <div style={{display:"flex",gap:8}}>
-              {([["pill","알약형"],["rect","사각형"]] as const).map(([val,label])=>{
-                const cur=(cfg.header.noticeShape||"pill")===val
-                return <button key={val} onClick={()=>uh("noticeShape",val)}
-                  style={{flex:1,height:52,borderRadius:A.r,border:`1.5px solid ${cur?A.blue:A.border}`,background:cur?A.blue2:"transparent",cursor:"pointer",display:"flex",flexDirection:"column" as const,alignItems:"center",justifyContent:"center",gap:5,transition:"all .15s"}}>
-                  {/* Line preview */}
-                  <svg width="44" height="18" viewBox="0 0 44 18" fill="none">
-                    <rect x="1" y="1" width="42" height="16" rx={val==="pill"?8:3} stroke={cur?A.blue:A.t3} strokeWidth="1.5" fill={cur?A.blue+"18":"transparent"}/>
-                    <line x1="10" y1="9" x2="34" y2="9" stroke={cur?A.blue:A.t3} strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                  <span style={{fontSize:11,color:cur?A.blue:A.t2,fontWeight:cur?600:400,fontFamily:FONT}}>{label}</span>
-                </button>
-              })}
-            </div>
+            <PanelSegment value={cfg.header.noticeShape||"pill"} onChange={v=>uh("noticeShape",v as "pill"|"rect")} A={A}
+              options={[
+                {value:"pill",label:"알약형",icon:<svg width="30" height="14" viewBox="0 0 44 18" fill="none" style={{flexShrink:0}}><rect x="1" y="1" width="42" height="16" rx="8" stroke="currentColor" strokeWidth="1.8" fill="transparent"/></svg>},
+                {value:"rect",label:"사각형",icon:<svg width="30" height="14" viewBox="0 0 44 18" fill="none" style={{flexShrink:0}}><rect x="1" y="1" width="42" height="16" rx="3" stroke="currentColor" strokeWidth="1.8" fill="transparent"/></svg>},
+              ]}/>
           </F>
-          <F label="안내 문구" A={A}><ConsentBodyEditor value={cfg.header.noticeText} onChange={v=>uh("noticeText",v)} A={A}/></F>
-          <TRow label="아이콘 표시" on={cfg.header.noticeIconEnabled} toggle={()=>uh("noticeIconEnabled",!cfg.header.noticeIconEnabled)} A={A}/>
+          <div style={{marginBottom:12}}>
+            <PanelCheckRow label="아이콘 표시" on={!!cfg.header.noticeIconEnabled} toggle={()=>uh("noticeIconEnabled",!cfg.header.noticeIconEnabled)} A={A}/>
+          </div>
           {cfg.header.noticeIconEnabled&&<F label="아이콘 텍스트" A={A}><TIn value={cfg.header.noticeIconText} onChange={v=>uh("noticeIconText",v)} A={A}/></F>}
+          <F label="안내 문구" A={A}><ConsentBodyEditor value={cfg.header.noticeText} onChange={v=>uh("noticeText",v)} A={A}/></F>
         </FG>
       </div>
 
@@ -5221,18 +6587,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </FG>
           <FG title="광고 소재" A={A} last>
             <F label="소재 방식" A={A}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                {[
-                  {key:"image" as AdMode,label:"이미지 배너"},
-                  {key:"split" as AdMode,label:"텍스트 + 요소"},
-                ].map(item=>{
-                  const selected=ad.adMode===item.key
-                  return <button key={item.key} onClick={()=>uad("adMode",item.key)}
-                    style={{height:38,borderRadius:A.r,border:`1.5px solid ${selected?A.blue:A.border}`,background:selected?A.blue2:A.card2,color:selected?A.blue:A.t2,fontFamily:FONT,fontSize:13,fontWeight:selected?700:500,cursor:"pointer"}}>
-                    {item.label}
-                  </button>
-                })}
-              </div>
+              <PanelSegment value={ad.adMode} onChange={v=>uad("adMode",v as AdMode)} A={A}
+                options={[{value:"image",label:"이미지 배너"},{value:"split",label:"텍스트 + 요소"}]}/>
             </F>
             {ad.adMode==="image"
               ? <F label="이미지 배너" hint="광고 구좌 전체를 채우는 배너 이미지를 넣습니다." A={A}>
@@ -5279,7 +6635,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                           <button onClick={()=>uad("adElementImageUrl","")} style={{height:32,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:12,cursor:"pointer"}}>삭제</button>
                         </div>
                       : <div>
-                          <label htmlFor="form_ad_element_upload" style={{display:"flex",alignItems:"center",justifyContent:"center",height:36,borderRadius:A.r,border:`1.5px dashed ${A.border}`,background:A.card2,cursor:"pointer",fontSize:12.5,color:A.t3,fontFamily:FONT,fontWeight:600}}>이미지 업로드</label>
+                          <label htmlFor="form_ad_element_upload" style={{display:"flex",alignItems:"center",justifyContent:"center",height:36,borderRadius:A.r,border:`1.5px dashed ${A.border}`,background:A.card2,cursor:"pointer",fontSize:12.5,color:A.t3,fontFamily:FONT,fontWeight:700}}>이미지 업로드</label>
                           <input id="form_ad_element_upload" type="file" accept="image/*" style={{display:"none"}}
                             onChange={async e=>{
                               const file=e.target.files?.[0]
@@ -5313,14 +6669,191 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           ? (cfg.kdtFields||[]).filter(f=>f.page===pvPage)
           : isMultiPage ? (cfg.form.fields||[]).filter(f=>(f.page||1)===pvPage) : cfg.form.fields||[]
         const pageLabels=["기본 정보","상세 정보","자격 요건 및 동의"]
-        return <div style={{padding:"12px 14px 48px"}}>
+        const recommendations=buildFieldRecommendations()
+        const emptyNotes=recommendations.length?[]:buildEmptyRecommendationNotes()
+        const insightReady=!!builderInsight&&!builderInsight.loading&&builderInsight.formId===loadedId
+        const insightRate=builderInsight&&builderInsight.sessions?Math.round((builderInsight.completed/builderInsight.sessions)*1000)/10:0
+        const insightTone=adminDark?"#F5B546":"#B26A00"
+        const aiRead=!!aiFeedback&&aiFeedback.formId===loadedId&&!aiFeedback.loading
+        const insightLine=adminDark?"rgba(245,158,11,0.28)":"#F6E3BE"
+        return <div style={pd}>
+          {/* 수정 권장 질문 — 평소엔 한 줄, 누르면 그 항목만 펼쳐 근거와 조치를 보여준다.
+              편집 패널이 좁아서 항목마다 전부 펼쳐두면 정작 질문 목록이 한참 아래로 밀린다. */}
+          {(!insightReady||recommendations.length>0||emptyNotes.length>0)&&<div style={{marginBottom:18,padding:10,borderRadius:11,background:panelFieldBg(A)}}>
+            <style>{`
+              /* 좁은 패널에서는 말풍선을 물음표에 붙이면 옆으로 삐져나가 잘린다.
+                 지표 박스 폭에 맞춰 통째로 띄우면 어느 칸을 가리켜도 잘릴 일이 없다. */
+              .cf-rec-stats{position:relative}
+              .cf-rec-tip::after{content:attr(data-tip);position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:40;
+                padding:9px 11px;border-radius:8px;background:${A.t1};color:${A.card};
+                font-size:11px;font-weight:500;line-height:1.6;white-space:normal;text-align:left;
+                opacity:0;visibility:hidden;transition:opacity .12s;pointer-events:none;box-shadow:0 8px 24px -8px rgba(16,24,40,.4)}
+              .cf-rec-tip:hover::after,.cf-rec-tip:focus-visible::after{opacity:1;visibility:visible}
+            `}</style>
+            <div style={{display:"flex",alignItems:"center",gap:7,padding:"0 4px 9px"}}>
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,color:insightTone}}>
+                <path d="M8 2.2 14 13H2L8 2.2Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
+                <path d="M8 6.4v3M8 11.2v.1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              <span style={{fontSize:12,fontWeight:600,color:A.t3,flexShrink:0}}>수정 권장</span>
+              {insightReady&&recommendations.length>0&&<span style={{fontSize:12,fontWeight:700,color:A.t2,fontVariantNumeric:"tabular-nums" as const}}>{recommendations.length}</span>}
+              <div style={{flex:1}}/>
+              <span style={{flexShrink:0,fontSize:11,color:A.t3,fontVariantNumeric:"tabular-nums" as const}}>
+                {insightReady?`전환 ${insightRate}% · 참여 ${builderInsight?.sessions||0}`:"분석 중"}
+              </span>
+            </div>
+
+            {/* AI 피드백 — 규칙으로 만든 문장보다 구체적인 제안을 받는다. 요청할 때만 호출한다. */}
+            {insightReady&&recommendations.length>0&&<div style={{marginBottom:8,padding:"9px 11px",borderRadius:9,background:A.card}}>
+              {!aiRead
+                ? <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{flex:1,minWidth:0,fontSize:11.5,color:A.t3,lineHeight:1.55}}>AI가 이 폼의 질문을 읽고 고칠 문구까지 제안합니다.</span>
+                    <button onClick={requestAiFeedback} disabled={aiFeedback?.loading}
+                      style={{flexShrink:0,height:27,padding:"0 11px",border:"none",borderRadius:7,cursor:aiFeedback?.loading?"default":"pointer",
+                        fontFamily:FONT,fontSize:11.5,fontWeight:700,background:A.blue,color:"#fff",opacity:aiFeedback?.loading?0.6:1}}>
+                      {aiFeedback?.loading?"분석 중…":"AI 피드백"}
+                    </button>
+                  </div>
+                : aiFeedback?.error
+                ? <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{flex:1,minWidth:0,fontSize:11.5,color:A.red,lineHeight:1.55}}>{aiFeedback.error}</span>
+                    <button onClick={requestAiFeedback} style={{flexShrink:0,height:27,padding:"0 11px",border:"none",borderRadius:7,cursor:"pointer",fontFamily:FONT,fontSize:11.5,fontWeight:700,background:A.card2,color:A.t2}}>다시 시도</button>
+                  </div>
+                : <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{flexShrink:0,height:18,padding:"0 7px",borderRadius:5,display:"inline-flex",alignItems:"center",fontSize:10,fontWeight:700,background:A.blue2,color:A.blue}}>AI</span>
+                    <span style={{flex:1,minWidth:0,fontSize:11.5,color:A.t3}}>질문을 펼치면 AI 피드백이 함께 나옵니다.</span>
+                    <button onClick={requestAiFeedback} style={{flexShrink:0,height:24,padding:"0 9px",border:"none",borderRadius:6,background:"transparent",color:A.t3,cursor:"pointer",fontFamily:FONT,fontSize:11.5,fontWeight:600}}
+                      onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A===ALT?"#F1F3F6":A.card2}}
+                      onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
+                      다시 분석
+                    </button>
+                  </div>}
+            </div>}
+
+            {!insightReady
+              ? <div style={{display:"flex",flexDirection:"column" as const,gap:4}}>
+                  {[0,1,2].map(i=><div key={i} style={{height:36,borderRadius:9,background:A.card,animation:"skeletonPulse 1.4s ease-in-out infinite",animationDelay:`${i*0.1}s`}}/>)}
+                </div>
+              : <>
+                {emptyNotes.length>0&&<div style={{padding:"11px 12px",borderRadius:9,background:A.card,display:"flex",flexDirection:"column" as const,gap:7}}>
+                  <div style={{fontSize:11.5,fontWeight:700,color:A.t2}}>지목할 만한 질문이 아직 없어요</div>
+                  {emptyNotes.map((note:string,i:number)=><div key={i} style={{fontSize:11.5,color:A.t3,lineHeight:1.65}}>{note}</div>)}
+                </div>}
+                {recommendations.length>0&&<div style={{display:"flex",flexDirection:"column" as const,gap:4}}>
+                  {recommendations.map((rec:any)=>{
+                    const id=String(rec.field.id)
+                    const open=openRecommendationId===id
+                    const high=rec.tone==="high"
+                    const badgeBg=high?(adminDark?"rgba(232,92,92,0.2)":"#FBE0E0"):(adminDark?"rgba(245,158,11,0.2)":"#FBE7C2")
+                    const badgeFg=high?(adminDark?"#FF9A9A":"#C0392B"):(adminDark?"#F5B546":"#9A5B00")
+                    const actions=recommendationActions(rec)
+                    return <div key={id} style={{borderRadius:9,background:A.card}}>
+                      <div role="button" tabIndex={0} aria-expanded={open}
+                        onClick={()=>setOpenRecommendationId(open?"":id)}
+                        onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();setOpenRecommendationId(open?"":id)}}}
+                        style={{height:36,display:"flex",alignItems:"center",gap:8,padding:"0 9px 0 8px",cursor:"pointer",outline:"none",borderRadius:open?"9px 9px 0 0":9}}
+                        onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A===ALT?"#F7F9FC":A.card2}}
+                        onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
+                        <span style={{flexShrink:0,minWidth:38,height:19,padding:"0 6px",borderRadius:5,display:"inline-flex",alignItems:"center",justifyContent:"center",
+                          fontSize:10.5,fontWeight:700,background:badgeBg,color:badgeFg,fontVariantNumeric:"tabular-nums" as const}}>{rec.dropRate}%</span>
+                        <span title={rec.title} style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{rec.title}</span>
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A.t3,transform:open?"rotate(180deg)":"none",transition:"transform .15s"}}>
+                          <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                      {open&&<div style={{padding:"2px 10px 11px",display:"flex",flexDirection:"column" as const,gap:9,wordBreak:"break-word" as const}}>
+                        {/* 누를 수 없는 정보라 칩으로 감싸지 않는다. 상자가 겹겹이 쌓이면 정작 내용이 안 읽힌다. */}
+                        <div style={{fontSize:11,color:A.t3,lineHeight:1.6}}>
+                          {rec.tags.map((tag:string,tagIdx:number)=>(
+                            <React.Fragment key={tag}>
+                              {tagIdx>0&&<span style={{margin:"0 5px",opacity:.5}}>·</span>}
+                              <span style={tag==="필수"?{color:adminDark?"#FF9A9A":"#C0392B",fontWeight:700}:undefined}>{tag}</span>
+                            </React.Fragment>
+                          ))}
+                        </div>
+                        {/* 문장으로 늘어놓으면 좁은 폭에서 안 읽힌다. 숫자는 숫자대로 세워서 훑게 한다. */}
+                        <div className="cf-rec-stats" style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8,padding:"9px 11px",borderRadius:8,background:A===ALT?"#F7F9FC":A.card2}}>
+                          {[
+                            {label:"도달",value:String(rec.reach),tip:"이 질문까지 내려온 사람 수입니다."},
+                            {label:"이탈",value:String(rec.drop),tip:"이 질문을 마지막으로 건드리고 제출하지 않은 사람 수입니다."},
+                            {label:"이탈 비중",value:`${rec.share}%`,tip:`이 폼에서 생긴 전체 이탈 ${builderInsight?.dropTotal||0}건 중 이 질문이 차지하는 비율입니다. 이 값이 클수록 폼 전체에 미치는 영향이 큽니다.`},
+                          ].map((stat,statIdx)=>(
+                            <div key={stat.label} style={{minWidth:0}}>
+                              <div style={{display:"flex",alignItems:"center",gap:4,minWidth:0}}>
+                                <span style={{fontSize:10,color:A.t3,whiteSpace:"nowrap" as const,overflow:"hidden",textOverflow:"ellipsis"}}>{stat.label}</span>
+                                <span className="cf-rec-tip" data-tip={stat.tip} tabIndex={0} aria-label={stat.tip}
+                                  style={{flexShrink:0,width:12,height:12,borderRadius:"50%",display:"inline-flex",alignItems:"center",justifyContent:"center",
+                                    background:A===ALT?"#E7EAEF":A.bg,color:A.t3,fontSize:8.5,fontWeight:700,cursor:"help",outline:"none"}}>?</span>
+                              </div>
+                              <div style={{fontSize:15,fontWeight:700,color:A.t1,marginTop:2,fontVariantNumeric:"tabular-nums" as const}}>{stat.value}</div>
+                            </div>
+                          ))}
+                        </div>
+                        {(()=>{
+                          const ai=aiFeedback&&!aiFeedback.loading&&!aiFeedback.error&&aiFeedback.formId===loadedId
+                            ? aiFeedback.items.find((item:any)=>String(item?.label||"").trim()===String(rec.title).trim())
+                            : null
+                          // AI 피드백이 같은 이야기를 더 자세히 하므로, 있을 때는 규칙으로 만든 한 줄을 감춘다.
+                          if(!ai)return <div style={{fontSize:11.5,color:A.t2,lineHeight:1.55}}>{rec.cause}</div>
+                          const actions=Array.isArray(ai.actions)?ai.actions.filter(Boolean):[]
+                          return <div style={{display:"flex",gap:7,padding:"9px 10px",borderRadius:8,background:A.blue2}}>
+                            <span style={{flexShrink:0,fontSize:10,fontWeight:700,color:A.blue,lineHeight:1.7}}>AI</span>
+                            <div style={{minWidth:0,flex:1,display:"flex",flexDirection:"column" as const,gap:6}}>
+                              {ai.diagnosis&&<span style={{fontSize:11.5,color:A.t2,lineHeight:1.65}}>{ai.diagnosis}</span>}
+                              {String(ai.rewrite||"").trim()&&<div style={{padding:"7px 9px",borderRadius:7,background:A.card}}>
+                                <div style={{fontSize:10,fontWeight:600,color:A.t3,marginBottom:3}}>이렇게 바꿔보세요</div>
+                                <div style={{fontSize:11.5,color:A.t1,fontWeight:600,lineHeight:1.6}}>{ai.rewrite}</div>
+                              </div>}
+                              {String(ai.helperRewrite||"").trim()&&<div style={{padding:"7px 9px",borderRadius:7,background:A.card}}>
+                                <div style={{fontSize:10,fontWeight:600,color:A.t3,marginBottom:3}}>도움말 문구</div>
+                                <div style={{fontSize:11.5,color:A.t1,lineHeight:1.6}}>{ai.helperRewrite}</div>
+                              </div>}
+                              {actions.length>0&&<div style={{display:"flex",flexDirection:"column" as const,gap:3}}>
+                                {actions.map((action:string,ai2:number)=>(
+                                  <div key={ai2} style={{display:"flex",gap:6,fontSize:11.5,color:A.t1,lineHeight:1.6}}>
+                                    <span style={{flexShrink:0,color:A.blue,fontWeight:700}}>·</span>
+                                    <span style={{minWidth:0}}>{action}</span>
+                                  </div>
+                                ))}
+                              </div>}
+                            </div>
+                          </div>
+                        })()}
+                        <div style={{display:"flex",flexWrap:"wrap" as const,gap:6}}>
+                          {actions.map(action=>(
+                            <button key={action.label} onClick={e=>{e.stopPropagation();action.run()}}
+                              style={{height:28,padding:"0 11px",borderRadius:7,cursor:"pointer",fontFamily:FONT,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const,
+                                background:A.card,color:A.t1,border:`1px solid ${A===ALT?"#E3E7EC":A.border}`,transition:"background .12s, border-color .12s"}}
+                              onMouseEnter={e=>{const el=e.currentTarget as HTMLElement;el.style.background=A===ALT?"#F7F9FC":A.card2;el.style.borderColor=A===ALT?"#C9D4E6":A.border2}}
+                              onMouseLeave={e=>{const el=e.currentTarget as HTMLElement;el.style.background=A.card;el.style.borderColor=A===ALT?"#E3E7EC":A.border}}>
+                              {action.label}
+                            </button>
+                          ))}
+                          <button onClick={e=>{e.stopPropagation();focusCanvasField(id,rec.page)}}
+                            style={{height:28,padding:"0 9px",display:"inline-flex",alignItems:"center",gap:4,border:"1px solid transparent",borderRadius:7,cursor:"pointer",fontFamily:FONT,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const,
+                              background:"transparent",color:A.t3,transition:"background .12s"}}
+                            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A===ALT?"#F1F3F6":A.card2}}
+                            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
+                            질문 보기
+                            <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{transform:"rotate(-90deg)",opacity:.7}}>
+                              <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </button>
+                        </div>
+                      </div>}
+                    </div>
+                  })}
+                </div>}
+              </>}
+          </div>}
+
           {/* Page tabs — 세로 리스트 */}
-          <div style={{marginBottom:14,background:A.card2,borderRadius:A.r,border:`1px solid ${A.border}`,overflow:"hidden"}}>
+          <div style={{marginBottom:18,padding:10,background:panelFieldBg(A),borderRadius:11,border:"none"}}>
             {/* 헤더 */}
-            <div style={{display:"flex",alignItems:"center",padding:"8px 10px",borderBottom:`1px solid ${A.border}`}}>
-              <span style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.6px",textTransform:"uppercase" as const,flex:1}}>섹션 목록</span>
+            <div style={{display:"flex",alignItems:"center",padding:"0 4px 10px"}}>
+              <span style={{fontSize:12,fontWeight:600,color:A.t3,flex:1}}>섹션 목록</span>
               <button onClick={()=>{if(isKdt){const newPage=formPages+1;setCfg(p=>({...p,kdtFields:[...(p.kdtFields||[]),{id:"kdt_p"+newPage+"_"+Date.now(),label:"새 질문",type:"text" as const,page:newPage,required:false}]}));setPvPage(newPage)}else{addPage();setPvPage(formPages+1)}}}
-                style={{display:"flex",alignItems:"center",gap:4,height:24,padding:"0 8px",borderRadius:A.r,border:`1px dashed ${A.border2}`,background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12,fontWeight:600}}>
+                style={{display:"flex",alignItems:"center",gap:4,height:30,padding:"0 11px",borderRadius:8,border:`1.5px dashed ${A.border2}`,background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12,fontWeight:600}}>
                 <span style={{fontSize:14,lineHeight:1}}>+</span> 섹션 추가
               </button>
             </div>
@@ -5347,10 +6880,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   setSectionDragIdx(null);setSectionDragOver(null);setSectionDragInsertAt(null)
                 }}
                 onDragLeave={()=>{setSectionDragOver(null);setSectionDragInsertAt(null)}}
-                style={{position:"relative" as const,borderBottom:p<formPages?`1px solid ${A.border}`:"none",opacity:isDragging?0.45:1,transition:"opacity .15s"}}>
+                style={{position:"relative" as const,opacity:isDragging?0.45:1,transition:"opacity .15s"}}>
                 {sectionDragInsertAt===i&&sectionDragIdx!==i&&<div style={{position:"absolute" as const,top:-1,left:10,right:10,height:2,borderRadius:1,background:A.blue,zIndex:5,pointerEvents:"none" as const}}/>}
                 {sectionDragInsertAt===i+1&&sectionDragIdx!==i&&i===formPages-1&&<div style={{position:"absolute" as const,bottom:-1,left:10,right:10,height:2,borderRadius:1,background:A.blue,zIndex:5,pointerEvents:"none" as const}}/>}
-                <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 10px",background:isActive?A.blue2:"transparent",cursor:"pointer",transition:"background .1s"}}
+                <div style={{height:42,display:"flex",alignItems:"center",gap:9,padding:"0 11px",borderRadius:9,background:isActive?(adminDark?A.blue2:"#E4EDFC"):"transparent",cursor:"pointer",transition:"background .1s"}}
                   onClick={()=>{setPvPage(p);setEditIdx(null)}}>
                   <div
                     draggable
@@ -5376,18 +6909,18 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     <DragHandleIcon size={13}/>
                   </div>
                   {/* 활성 인디케이터 */}
-                  <div style={{width:3,height:16,borderRadius:2,background:isActive?A.blue:A.border,flexShrink:0,transition:"background .15s"}}/>
+                  <div style={{width:3,height:15,borderRadius:2,background:isActive?A.blue:A.border2,flexShrink:0,transition:"background .15s"}}/>
                   {/* 이름 — 더블클릭 시 편집 */}
                   <span
                     onDoubleClick={e=>{e.stopPropagation();const el=e.currentTarget;el.contentEditable="true";el.focus();const r=document.createRange();r.selectNodeContents(el);window.getSelection()?.removeAllRanges();window.getSelection()?.addRange(r)}}
                     onBlur={e=>{e.currentTarget.contentEditable="false";setPageLabel(p,e.currentTarget.textContent||getPageLabel(p))}}
                     onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();(e.currentTarget as HTMLElement).blur()}e.stopPropagation()}}
                     onClick={()=>{setPvPage(p);setEditIdx(null)}}
-                    style={{flex:1,color:isActive?A.blue:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:isActive?600:500,outline:"none",cursor:"default",minWidth:0,userSelect:"none" as const}}>
+                    style={{flex:1,color:isActive?A.blue:A.t1,fontFamily:FONT,fontSize:isActive?13:12.5,fontWeight:isActive?700:500,outline:"none",cursor:"default",minWidth:0,userSelect:"none" as const}}>
                     {getPageLabel(p)}
                   </span>
                   {/* 필드 개수 뱃지 */}
-                  <span style={{fontSize:10,color:A.t3,flexShrink:0,background:A.card,padding:"1px 6px",borderRadius:999,border:`1px solid ${A.border}`}}>
+                  <span style={{fontSize:11,fontWeight:600,color:A.t3,flexShrink:0,background:A.card,padding:"2px 8px",borderRadius:999,border:"none"}}>
                     {isKdt?(cfg.kdtFields||[]).filter(f=>f.page===p).length:cfg.form.fields.filter(f=>(f.page||1)===p).length}개
                   </span>
                   {/* 삭제 버튼 */}
@@ -5402,8 +6935,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
           {/* Layer list */}
           <div style={{marginBottom:12}}>
-            {isKdt&&<div style={{fontSize:11,fontWeight:600,color:A.t3,marginBottom:8}}>{getPageLabel(pvPage)}</div>}
-            {!isKdt&&<div style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,marginBottom:10}}>필드 레이어</div>}
+            {isKdt&&<div style={{fontSize:11,fontWeight:700,color:A.t3,marginBottom:8}}>{getPageLabel(pvPage)}</div>}
+            {!isKdt&&<div style={{fontSize:12,fontWeight:600,color:A.t3,marginBottom:8}}>필드 레이어</div>}
             {pageFields.length===0&&<div style={{padding:"16px",textAlign:"center" as const,fontSize:12.5,color:A.t3,borderRadius:A.r,border:`1px dashed ${A.border2}`}}>필드를 추가해주세요</div>}
             {pageFields.map((field,idx)=>(
               <div key={(field as any).id||idx}
@@ -5427,38 +6960,38 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	                    <DragHandleIcon size={13}/>
 	                  </div>
                   <div
-                    style={{flex:1,display:"flex",alignItems:"center",gap:6,padding:"7px 8px",borderRadius:A.r,border:`1px solid ${editIdx===idx?A.blue:"transparent"}`,background:editIdx===idx?A.blue2:"transparent",cursor:"pointer",transition:"all .1s",minWidth:0}}
+                    style={{flex:1,height:48,display:"flex",alignItems:"center",gap:10,padding:"0 8px",borderRadius:10,border:"none",background:editIdx===idx?A.blue2:"transparent",boxShadow:editIdx===idx?`inset 0 0 0 1.5px ${A.blue}`:"none",cursor:"pointer",transition:"all .1s",minWidth:0}}
                     onClick={()=>{setPanelDragIdx(null);setPanelDragOver(null);setOptionDrag(null);setOptionDragOver(null);setEditIdx(editIdx===idx?null:idx)}}>
-                    <div style={{width:22,height:22,borderRadius:5,background:A.card2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:`1px solid ${A.border}`,color:A.t2}}>
+                    <div style={{width:34,height:34,borderRadius:9,background:panelFieldBg(A),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:"none",color:A.t2}}>
                       {FTYPE_ICONS[(field as any).type as string]||FTYPE_ICONS.text}
                     </div>
                     <span style={{flex:1,fontSize:12.5,fontWeight:500,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{(field as any).label||"(라벨 없음)"}</span>
-                    {(field as any).required&&<span style={{fontSize:9,color:accentBg,fontWeight:600,flexShrink:0}}>필수</span>}
+                    {(field as any).required&&<span style={{fontSize:11.5,color:accentBg,fontWeight:700,flexShrink:0}}>필수</span>}
                   </div>
                   {!isKdt&&<button
                     onClick={e=>{e.stopPropagation();duplicateField(cfg.form.fields.indexOf(pageFields[idx] as FormField))}}
                     title="복사"
-                    style={{width:24,height:24,borderRadius:5,border:"none",background:"transparent",cursor:"pointer",color:A.t3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"color .1s"}}
+                    style={{width:26,height:26,borderRadius:7,border:"none",background:"transparent",cursor:"pointer",color:A.t3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"color .1s"}}
                     onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.color=A.blue;(e.currentTarget as HTMLElement).style.background=A.card2}}
                     onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.color=A.t3;(e.currentTarget as HTMLElement).style.background="transparent"}}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </button>}
                   <button
                     onClick={e=>{e.stopPropagation();if(isKdt){const kf=cfg.kdtFields||[];const pf=kf.filter((f:any)=>f.page===pvPage);const globalIdx=kf.indexOf(pf[idx]);setCfg(p=>({...p,kdtFields:p.kdtFields!.filter((_,i)=>i!==globalIdx)}))}else{removeField(cfg.form.fields.indexOf(pageFields[idx] as FormField))};setEditIdx(null)}}
-                    style={{width:24,height:24,borderRadius:5,border:"none",background:"transparent",cursor:"pointer",color:A.t3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"color .1s"}}
+                    style={{width:26,height:26,borderRadius:7,border:"none",background:"transparent",cursor:"pointer",color:A.t3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"color .1s"}}
                     onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.color=A.red;(e.currentTarget as HTMLElement).style.background=A.card2}}
                     onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.color=A.t3;(e.currentTarget as HTMLElement).style.background="transparent"}}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </button>
                 </div>
-                {editIdx===idx&&<div style={{borderRadius:A.r,background:adminDark?"#1E2230":"#F7F8F9",marginBottom:4,overflow:"hidden"}}>
-                  {!isKdt&&<div style={{padding:"10px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                    <span style={{fontSize:12,fontWeight:600,color:A.t2}}>유형</span>
-                    <select value={(field as any).type||"text"} onChange={e=>patchActiveField(idx,{type:e.target.value as FieldType})}
-                      style={{background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:12.5,padding:"4px 8px",outline:"none",cursor:"pointer",maxWidth:140}}>
-                      {FTYPES.filter(ft=>!ft.divider).map(ft=><option key={ft.type} value={ft.type}>{ft.label}</option>)}
-                    </select>
+                {editIdx===idx&&<div style={{borderRadius:10,background:A.card,boxShadow:`inset 0 0 0 1px ${A.border}`,marginBottom:6,overflow:"hidden"}}>
+                  {!isKdt&&<div style={{padding:"12px 12px 0"}}>
+                    <F label="유형" A={A}>
+                      <PanelSelect value={(field as any).type||"text"} onChange={v=>patchActiveField(idx,{type:v as FieldType})} A={A} height={40} fontSize={12.5} radius={9} padX={12}
+                        options={FTYPES.filter(ft=>!ft.divider).map(ft=>({value:ft.type,label:ft.label}))}/>
+                    </F>
                   </div>}
+                  {!isDisplayOnlyFieldType((field as any).type)&&<div style={{padding:"0 12px 14px"}}><PanelCheckRow label="필수 입력" on={!!(field as any).required} toggle={()=>patchActiveField(idx,{required:!(field as any).required})} A={A}/></div>}
                   {!isDisplayOnlyFieldType((field as any).type)&&<div style={{padding:"10px 12px"}}><F label="질문 텍스트" A={A}><TArea value={(field as any).label||""} onChange={v=>patchActiveField(idx,{label:v})} minH={36} A={A}/></F></div>}
                   {/* 안내 문구 (helper) — info 제외 */}
                   {!isDisplayOnlyFieldType((field as any).type)&&(()=>{
@@ -5466,9 +6999,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     const helpers:HelperItem[]=rawHelpers.map((h:any)=>typeof h==="string"?{text:h,callout:false}:h)
                     const setHelpers=(arr:HelperItem[])=>patchActiveField(idx,{helpers:arr,helper:arr[0]?.text||""})
                     return <div style={{padding:"10px 12px"}}>
-                      <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>보조 안내 문구
-                        <span style={{fontWeight:400,color:A.t3,marginLeft:5}}>질문 아래 작게 표시</span>
-                      </div>
+                      <div style={{fontSize:12.5,fontWeight:600,color:A.t1,marginBottom:4}}>보조 안내 문구</div>
+                      <div style={{fontSize:11.5,color:A.t3,lineHeight:1.5,marginBottom:8}}>질문 아래 작게 표시됩니다.</div>
                       {helpers.map((h,hi)=>(
                         <div key={hi} style={{marginBottom:8}}>
                           <div style={{display:"flex",gap:5,marginBottom:4}}>
@@ -5479,14 +7011,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                               style={{width:28,height:28,borderRadius:A.r,border:"none",background:"transparent",cursor:"pointer",color:A.red,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0,alignSelf:"flex-start",marginTop:2}}>×</button>
                           </div>
                           <button onClick={()=>{const a=[...helpers];a[hi]={...a[hi],callout:!a[hi].callout};setHelpers(a)}}
-                            style={{display:"flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:A.r,border:`1px solid ${h.callout?A.blue:A.border}`,background:h.callout?A.blue2:"transparent",cursor:"pointer",color:h.callout?A.blue:A.t3,fontFamily:FONT,fontSize:11.5,fontWeight:h.callout?600:400,transition:"all .15s"}}>
+                            style={{display:"flex",alignItems:"center",gap:5,height:28,padding:"0 10px",borderRadius:7,border:"none",background:h.callout?A.blue2:panelFieldBg(A),cursor:"pointer",color:h.callout?A.blue:A.t3,fontFamily:FONT,fontSize:11.5,fontWeight:600,transition:"background .15s, color .15s"}}>
                             <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.4"/><path d="M5 12l2 2 2-2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/><path d="M5 6h6M5 9h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
                             콜아웃 박스
                           </button>
                         </div>
                       ))}
                       <button onClick={()=>setHelpers([...helpers,{text:"",callout:false}])}
-                        style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:A.r,border:`1px dashed ${A.border2}`,background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12}}>
+                        style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5,width:"100%",height:36,borderRadius:9,border:`1.5px dashed ${A.border2}`,background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600}}>
                         + 안내 문구 추가
                       </button>
                     </div>
@@ -5495,12 +7027,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   {((field as any).type==="text"||(field as any).type==="name"||(field as any).type==="phone"||(field as any).type==="email"||(field as any).type==="textarea")&&
                     <div style={{padding:"10px 12px"}}><F label="예시 텍스트" hint="입력 칸 안에 흐리게 표시됩니다" A={A}><TIn value={(field as any).placeholder||""} onChange={v=>patchActiveField(idx,{placeholder:v})} A={A}/></F></div>}
                   {(field as any).type==="info"&&<div style={{padding:"10px 12px"}}>
-                    <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>내용
-                      <span style={{fontWeight:400,color:A.t3,marginLeft:5}}>볼드·밑줄·링크 지원</span>
-                    </div>
+                    <div style={{fontSize:12.5,fontWeight:600,color:A.t1,marginBottom:4}}>내용</div>
+                    <div style={{fontSize:11.5,color:A.t3,lineHeight:1.5,marginBottom:8}}>볼드 · 밑줄 · 링크를 쓸 수 있어요.</div>
                     <ConsentBodyEditor value={(field as any).placeholder||""} onChange={v=>patchActiveField(idx,{placeholder:v})} A={A}/>
                     <div style={{marginTop:12}}>
-                      <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>이미지 <span style={{fontWeight:400,color:A.t3}}>선택</span></div>
+                      <div style={{fontSize:12.5,fontWeight:600,color:A.t2,marginBottom:8}}>이미지 <span style={{fontWeight:400,color:A.t3}}>선택</span></div>
                       {(field as any).imageUrl
                         ? <div>
                             <div style={{...imagePreviewBoxStyle(field,160),border:`1px solid ${A.border}`,marginBottom:6}}>
@@ -5663,22 +7194,18 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       </div>}
                     </div>
                   })()}
-                  {!isDisplayOnlyFieldType((field as any).type)&&<div style={{padding:"4px 12px"}}><TRow label="필수 입력" on={!!(field as any).required} toggle={()=>patchActiveField(idx,{required:!(field as any).required})} A={A}/></div>}
                   {((field as any).type==="dropdown"||(field as any).type==="button_select"||(field as any).type==="checkbox")&&(()=>{
                     return <div style={{padding:"10px 12px"}}>
                       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:8}}>
                         <div>
-                          <span style={{fontSize:12,fontWeight:600,color:A.t2}}>답변 옵션</span>
+                          <span style={{fontSize:12.5,fontWeight:600,color:A.t1}}>답변 옵션</span>
                           <div style={{fontSize:11.5,color:A.t3,lineHeight:1.45,marginTop:3}}>옵션 문구는 더블클릭해서 수정할 수 있어요.</div>
                         </div>
-                        {((field as any).type==="button_select"||(field as any).type==="checkbox")&&<div style={{display:"flex",alignItems:"center",gap:4}}>
-                          <span style={{fontSize:11,color:A.t3}}>열</span>
-                          {[1,2,3].map(c=>{const cur=((field as any).cols||0)===c||(!(field as any).cols&&c===1);return(
-                            <button key={c} onClick={()=>patchActiveField(idx,{cols:c})}
-                              style={{width:24,height:20,borderRadius:4,border:`1px solid ${cur?A.blue:A.border}`,background:cur?A.blue2:"transparent",color:cur?A.blue:A.t3,fontFamily:FONT,fontSize:11,fontWeight:cur?600:400,cursor:"pointer"}}>
-                              {c}
-                            </button>
-                          )})}
+                        {((field as any).type==="button_select"||(field as any).type==="checkbox")&&<div style={{display:"flex",alignItems:"center",gap:7,flexShrink:0}}>
+                          <span style={{fontSize:11.5,fontWeight:600,color:A.t3}}>열</span>
+                          <PanelSegment inline value={String((field as any).cols||1)} onChange={v=>patchActiveField(idx,{cols:Number(v)})} A={A}
+                            height={26} fontSize={12} trackBg={A===ALT?"#E7EAEF":A.bg}
+                            options={[{value:"1",label:"1"},{value:"2",label:"2"},{value:"3",label:"3"}]}/>
                         </div>}
                       </div>
                       <div style={{display:"flex",flexDirection:"column" as const,gap:4,marginBottom:8}}>
@@ -5704,12 +7231,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                               style={{flex:1,fontSize:12.5,color:A.t1,whiteSpace:"pre-wrap" as const,lineHeight:1.4,outline:"none",cursor:"text",borderRadius:3,padding:"1px 2px"}}>{o.label}</span>
                             {!isKdt&&isMultiPage&&<div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
                               <span style={{fontSize:10,color:A.t3}}>→</span>
-                              <select value={o.nextPage||""} onChange={e=>{const newOpts=[...((field as any).opts||[])];newOpts[oi]={...newOpts[oi],nextPage:e.target.value?Number(e.target.value):undefined};patchActiveField(idx,{opts:newOpts})}}
-                                style={{height:22,padding:"0 4px",borderRadius:4,border:`1px solid ${o.nextPage?A.blue:A.border}`,background:o.nextPage?A.blue2:A.card2,color:o.nextPage?A.blue:A.t3,fontFamily:FONT,fontSize:10,cursor:"pointer",outline:"none",maxWidth:80}}>
-                                <option value="">섹션 없음</option>
-                                {Array.from({length:formPages},(_,pi)=>pi+1).map(p=><option key={p} value={p}>{getPageLabel(p)}</option>)}
-                                <option value="9999">설문지 제출</option>
-                              </select>
+                              <PanelSelect value={o.nextPage?String(o.nextPage):""} A={A} height={24} fontSize={10.5} radius={5} padX={6} width={92}
+                                onChange={v=>{const newOpts=[...((field as any).opts||[])];newOpts[oi]={...newOpts[oi],nextPage:v?Number(v):undefined};patchActiveField(idx,{opts:newOpts})}}
+                                options={[{value:"",label:"섹션 없음"},...Array.from({length:formPages},(_,pi)=>pi+1).map(p=>({value:String(p),label:getPageLabel(p)})),{value:"9999",label:"설문지 제출"}]}/>
                             </div>}
                             <button onClick={()=>patchActiveField(idx,{opts:((field as any).opts||[]).filter((_:any,i:number)=>i!==oi)})}
                               style={{fontSize:14,color:A.t3,border:"none",background:"none",cursor:"pointer",padding:0,lineHeight:1,display:"flex",alignItems:"center",flexShrink:0}}>×</button>
@@ -5719,12 +7243,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       <FieldOptAdder fieldIdx={idx} onAdd={(lbl:string,val:string)=>{const cur=(field as any).opts||[];const v=val||lbl;patchActiveField(idx,{opts:[...cur,{label:lbl,value:v,isEtc:lbl==="기타"}]})}} A={A}/>
                     </div>
                   })()}
-                  {!isKdt&&isMultiPage&&<div style={{padding:"10px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                    <span style={{fontSize:12,fontWeight:600,color:A.t2,flexShrink:0}}>섹션 지정</span>
-                    <select value={(field as any).page||1} onChange={e=>patchActiveField(idx,{page:Number(e.target.value)})}
-                      style={{flex:1,background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:12.5,padding:"4px 8px",outline:"none",cursor:"pointer",boxSizing:"border-box" as const}}>
-                      {Array.from({length:formPages},(_,i)=>i+1).map(p=><option key={p} value={p}>{getPageLabel(p)}</option>)}
-                    </select>
+                  {!isKdt&&isMultiPage&&<div style={{padding:"0 12px 12px"}}>
+                    <F label="섹션 지정" A={A}>
+                      <PanelSelect value={String((field as any).page||1)} onChange={v=>patchActiveField(idx,{page:Number(v)})} A={A} height={40} fontSize={12.5} radius={9} padX={12}
+                        options={Array.from({length:formPages},(_,i)=>i+1).map(p=>({value:String(p),label:getPageLabel(p)}))}/>
+                    </F>
                   </div>}
                 </div>}
               </div>
@@ -5732,13 +7255,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
           {/* Add field button — 모든 폼 유형 */}
           <div style={{position:"relative" as const,marginBottom:16}}>
-            <button onClick={()=>setShowAddField(v=>!v)}
-              style={{width:"100%",height:34,borderRadius:A.r,border:`1.5px dashed ${A.border2}`,background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            <button ref={addFieldBtnRef} onClick={()=>{if(showAddField)setShowAddField(false);else openAddFieldMenu()}}
+              style={{width:"100%",height:44,borderRadius:11,border:`1.5px dashed ${showAddField?A.blue:A.border2}`,background:showAddField?(adminDark?A.blue2:"#F5F9FF"):"transparent",cursor:"pointer",color:showAddField?A.blue:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"all .12s"}}>
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
               질문 추가
             </button>
-            {showAddField&&<div style={{position:"absolute" as const,top:"100%",left:0,right:0,marginTop:4,background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:8,zIndex:50,boxShadow:A.shadow,display:"grid",gridTemplateColumns:"1fr 1fr",gap:2}}>
-              {FTYPES_DATA.map(ft=>ft.divider?<div key={ft.type} style={{gridColumn:"1 / -1",height:1,background:A.border,margin:"4px 0"}}/>:<button key={ft.type} onClick={()=>{
+            {showAddField&&<>
+            <div onClick={()=>setShowAddField(false)} style={{position:"fixed" as const,inset:0,zIndex:79,background:"transparent"}}/>
+            <div style={{position:"fixed" as const,top:addFieldMenuTop,right:rightPanelW+24,zIndex:80,width:320,maxHeight:`calc(100vh - ${addFieldMenuTop + 24}px)`,overflowY:"auto" as const,background:A.card,border:adminDark?`1px solid ${A.border}`:"none",borderRadius:14,padding:8,boxShadow:"0 1px 2px rgba(16,24,40,.08), 0 16px 40px -10px rgba(16,24,40,.28)",display:"grid",gridTemplateColumns:"1fr 1fr",gap:2,alignContent:"start" as const}}>
+              {FTYPES_DATA.map(ft=>ft.divider?<div key={ft.type} style={{gridColumn:"1 / -1",height:1,background:A.border,margin:"6px 4px"}}/>:<button key={ft.type} onClick={()=>{
                 if(isKdt){
                   const id="kdt_"+Date.now()
                   const adExtra=ft.type==="ad"?{adMode:"image" as AdMode,adMainText:"지금 가장 많이 찾는 프로그램",adSubText:"혜택과 모집 일정을 한눈에 확인해보세요.",adElementText:"자세히 보기",adBg:"#FEE500",adTextColor:"#191919",adHref:"",imageFit:"cover" as const,imagePosX:50,imagePosY:50,imageCropX:0,imageCropY:0,imageCropW:100,imageCropH:100}:{}
@@ -5755,13 +7280,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 }
                 setShowAddField(false)
               }}
-                style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:A.r,border:"none",background:"transparent",cursor:"pointer",color:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:500,textAlign:"left" as const,transition:"background .1s"}}
+                style={{height:40,display:"flex",alignItems:"center",gap:9,padding:"0 10px",borderRadius:9,border:"none",background:"transparent",cursor:"pointer",color:A.t1,fontFamily:FONT,fontSize:13,fontWeight:600,textAlign:"left" as const,transition:"background .1s"}}
                 onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2}}
                 onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
                 <span style={{color:A.t3,display:"flex",alignItems:"center"}}>{FTYPE_ICONS[ft.type]}</span>
                 <span style={{whiteSpace:"nowrap" as const}}>{ft.label}</span>
               </button>)}
-            </div>}
+            </div>
+            </>}
           </div>
           {!isKdt&&<FG title="오류 메시지" A={A} last>
             <F label="중복 신청 안내" A={A}><TArea value={cfg.form.dupText} onChange={v=>uf("dupText",v)} A={A}/></F>
@@ -5770,48 +7296,56 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
 
       case "consent": return <div style={pd}>
+        <div style={{marginBottom:22}}>
         <F label="동의 위치" hint="폼 시작 부분 또는 제출 직전 중 어디에 동의 섹션을 표시할지 선택합니다." A={A}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            {[
-              {key:"start" as ConsentPosition,label:"맨앞"},
-              {key:"end" as ConsentPosition,label:"맨뒤"},
-            ].map(item=>{
-              const selected=(cfg.form.consentPosition||"end")===item.key
-              return <button key={item.key} onClick={()=>setCfg(p=>({...p,form:{...p.form,consentPosition:item.key}}))}
-                style={{height:36,borderRadius:A.r,border:`1.5px solid ${selected?A.blue:A.border}`,background:selected?A.blue2:A.card2,color:selected?A.blue:A.t2,fontFamily:FONT,fontSize:13,fontWeight:selected?700:500,cursor:"pointer"}}>
-                {item.label}
-              </button>
-            })}
-          </div>
+          <PanelSegment value={cfg.form.consentPosition||"end"} A={A}
+            onChange={v=>setCfg(p=>({...p,form:{...p.form,consentPosition:v as ConsentPosition}}))}
+            options={[{value:"start",label:"맨앞"},{value:"end",label:"맨뒤"}]}/>
         </F>
-        {cfg.consents.map((cs,idx)=><FG key={idx} A={A} last={idx===cfg.consents.length-1}>
-          <div style={{display:"flex",alignItems:"center",marginBottom:12}}>
-            <span style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const}}>동의 항목 {idx+1}</span>
+        </div>
+        {cfg.consents.map((cs,idx)=>{
+        const consentOpen=openConsentIdx[idx]===true
+        const consentSummary=consentLabelForType(cs.consentType||consentTypeFromTitle(cs.title))||cs.title||"동의 유형 미선택"
+        return <div key={idx} style={{marginTop:idx>0?18:0,paddingTop:idx>0?18:0,borderTop:idx>0?`1px solid ${A.border}`:"none"}}>
+          <div onClick={()=>setOpenConsentIdx(prev=>({...prev,[idx]:!consentOpen}))}
+            style={{display:"flex",alignItems:"center",gap:8,marginBottom:consentOpen?9:0,cursor:"pointer",userSelect:"none" as const}}>
+            <svg width="11" height="11" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A.t3,transform:consentOpen?"none":"rotate(-90deg)",transition:"transform .15s"}}>
+              <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <span style={{fontSize:12,fontWeight:600,color:A.t3,flexShrink:0}}>동의 항목 {idx+1}</span>
+            {!consentOpen&&<span style={{minWidth:0,fontSize:12.5,fontWeight:600,color:cs.enabled?A.t1:A.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{consentSummary}</span>}
+            {!consentOpen&&!cs.enabled&&<span style={{flexShrink:0,padding:"2px 7px",borderRadius:6,background:panelFieldBg(A),color:A.t3,fontSize:10.5,fontWeight:700,letterSpacing:".3px"}}>OFF</span>}
             <div style={{flex:1}}/>
-            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:A.t2,fontFamily:FONT}}>
-              <span>필수</span>
-              <div onClick={()=>uc(idx,"required",!cs.required)} style={{width:32,height:18,borderRadius:9,background:cs.required?A.blue:A.border2,position:"relative",transition:"background .2s",cursor:"pointer",flexShrink:0}}>
-                <div style={{position:"absolute",width:13,height:13,borderRadius:"50%",background:"#fff",top:2.5,left:cs.required?16:2.5,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,0.2)"}}/>
-              </div>
-            </div>
-            {idx>0&&<button onClick={()=>removeConsent(idx)} style={{fontSize:11,color:A.red,border:"none",background:"transparent",cursor:"pointer",fontFamily:FONT,padding:0,marginLeft:12}}>삭제</button>}
+            <span onClick={e=>e.stopPropagation()} style={{display:"flex",flexShrink:0}}>
+              <PanelCheckRow label="필수 동의" on={!!cs.required} toggle={()=>uc(idx,"required",!cs.required)} A={A}/>
+            </span>
+            {idx===0&&<span title="기본 동의 항목이라 삭제할 수 없어요" style={{width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:11.5,fontWeight:600,color:A.t3,fontFamily:FONT}}>기본</span>}
+            {idx>0&&<button onClick={e=>{e.stopPropagation();removeConsent(idx)}} title="동의 항목 삭제" aria-label="동의 항목 삭제"
+              style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,padding:0}}
+              onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=panelFieldBg(A);(e.currentTarget as HTMLElement).style.color=A.red}}
+              onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 7h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                <path d="M9.5 4.5h5a1 1 0 0 1 1 1V7h-7V5.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+                <path d="M6 7.5h12l-.85 11.1a1.5 1.5 0 0 1-1.5 1.4H8.35a1.5 1.5 0 0 1-1.5-1.4L6 7.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+              </svg>
+            </button>}
           </div>
+          {consentOpen&&<>
           <TRow label="동의 섹션 표시" on={cs.enabled} toggle={()=>uc(idx,"enabled",!cs.enabled)} A={A}/>
           <F label="동의 유형 선택" A={A}>
-            <select value={cs.consentType||""} onChange={e=>{
-              const nextType=e.target.value
-              const ct=CONSENT_TYPES.find(c=>c.key===nextType)
-              const nextPolicyUrl=policyUrlForConsent(nextType,currentBrand)
-              patchConsent(idx,{
-                consentType:nextType,
-                ...(ct?{title:ct.label}:{}),
-                ...(cs.policyMode==="custom"?{}:{policyUrl:nextPolicyUrl}),
-                ...(cs.policyMode==="custom"&&!cs.customPolicyTitle&&ct?{customPolicyTitle:ct.label}:{}),
-              })
-            }} style={{...selS}}>
-              <option value="">— 동의 유형을 선택해주세요 —</option>
-              {CONSENT_TYPES.map(ct=><option key={ct.key} value={ct.key}>{ct.label}</option>)}
-            </select>
+            <PanelSelect value={cs.consentType||""} placeholder="동의 유형을 선택해주세요" height={46} A={A}
+              options={CONSENT_TYPES.map(ct=>({value:ct.key,label:ct.label}))}
+              onChange={nextType=>{
+                const ct=CONSENT_TYPES.find(c=>c.key===nextType)
+                const nextPolicyUrl=policyUrlForConsent(nextType,currentBrand)
+                patchConsent(idx,{
+                  consentType:nextType,
+                  ...(ct?{title:ct.label}:{}),
+                  ...(cs.policyMode==="custom"?{}:{policyUrl:nextPolicyUrl}),
+                  ...(cs.policyMode==="custom"&&!cs.customPolicyTitle&&ct?{customPolicyTitle:ct.label}:{}),
+                })
+              }}/>
           </F>
           <F label="법적 문서" hint="브랜드 기본 문서를 쓰거나, 이 폼 전용 문서를 직접 작성할 수 있어요." A={A}>
             {(()=>{
@@ -5821,32 +7355,27 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               const resolvedUrl=autoUrl||cs.policyUrl||""
               const customBody=String(cs.customPolicyBody||"").trim()
               return <div style={{display:"flex",flexDirection:"column" as const,gap:9,fontFamily:FONT}}>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-                  {([{key:"brand",label:"브랜드 기본 문서"},{key:"custom",label:"직접 작성 문서"}] as {key:ConsentDocMode;label:string}[]).map(item=>{
-                    const selected=policyMode===item.key
-                    return <button key={item.key} onClick={()=>{
-                      if(item.key==="brand"){
-                        patchConsent(idx,{policyMode:"brand",policyUrl:autoUrl||cs.policyUrl||""})
-                      }else{
-                        patchConsent(idx,{
-                          policyMode:"custom",
-                          customPolicyTitle:cs.customPolicyTitle||consentLabelForType(type)||cs.title||"법적 문서",
-                          customPolicyBody:cs.customPolicyBody||cs.body||"",
-                        })
-                      }
-                    }} style={{height:34,borderRadius:A.r,border:`1.5px solid ${selected?A.blue:A.border}`,background:selected?A.blue2:A.card2,color:selected?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:selected?700:500,cursor:"pointer"}}>
-                      {item.label}
-                    </button>
-                  })}
-                </div>
+                <PanelSegment value={policyMode} A={A}
+                  options={[{value:"brand",label:"브랜드 기본 문서"},{value:"custom",label:"직접 작성 문서"}]}
+                  onChange={v=>{
+                    if(v==="brand"){
+                      patchConsent(idx,{policyMode:"brand",policyUrl:autoUrl||cs.policyUrl||""})
+                    }else{
+                      patchConsent(idx,{
+                        policyMode:"custom",
+                        customPolicyTitle:cs.customPolicyTitle||consentLabelForType(type)||cs.title||"법적 문서",
+                        customPolicyBody:cs.customPolicyBody||cs.body||"",
+                      })
+                    }
+                  }}/>
                 {policyMode==="brand"
-                  ? <div style={{border:`1.5px solid ${resolvedUrl?A.border:A.red}`,borderRadius:A.r,background:A.card2,padding:"9px 10px"}}>
-                      <div style={{fontSize:12.5,fontWeight:600,color:resolvedUrl?A.t1:A.red,marginBottom:4}}>
+                  ? <div style={{border:"none",borderRadius:10,background:panelFieldBg(A),padding:"13px 14px",boxShadow:resolvedUrl?"none":`inset 0 0 0 1.5px ${A.red}`}}>
+                      <div style={{fontSize:13,fontWeight:700,color:resolvedUrl?A.t1:A.red}}>
                         {type?consentLabelForType(type):"동의 유형을 먼저 선택해주세요"}
                       </div>
                       {resolvedUrl
-                        ? <a href={resolvedUrl} target="_blank" rel="noopener" style={{fontSize:11.5,color:A.blue,textDecoration:"none",wordBreak:"break-all"}}>{resolvedUrl}</a>
-                        : <div style={{fontSize:11.5,color:A.red}}>동의 유형 선택 시 자동으로 연결됩니다.</div>}
+                        ? <a href={resolvedUrl} target="_blank" rel="noopener" style={{display:"block",marginTop:6,fontSize:12.5,color:A.blue,textDecoration:"none",wordBreak:"break-all"}}>{resolvedUrl}</a>
+                        : <div style={{marginTop:6,fontSize:12.5,color:A.red}}>동의 유형 선택 시 자동으로 연결됩니다.</div>}
                     </div>
                   : <div style={{display:"flex",flexDirection:"column" as const,gap:9}}>
                       <TIn value={cs.customPolicyTitle||consentLabelForType(type)||cs.title||"법적 문서"} onChange={v=>uc(idx,"customPolicyTitle",v)} placeholder="문서 제목" A={A}/>
@@ -5865,9 +7394,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <ConsentBodyEditor value={cs.body} onChange={v=>uc(idx,"body",v)} A={A}/>
           </F>
           <F label="체크박스 라벨" A={A}><TIn value={cs.checkLabel} onChange={v=>uc(idx,"checkLabel",v)} A={A}/></F>
-        </FG>)}
+          </>}
+        </div>})}
         <button onClick={addConsent}
-          style={{width:"100%",padding:"10px",borderRadius:A.r,border:`1px dashed ${A.border2}`,background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginTop:4}}>
+          style={{width:"100%",height:46,borderRadius:11,border:`1.5px dashed ${A.border2}`,background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginTop:18}}>
           <span style={{fontSize:16,lineHeight:1}}>+</span> 동의 항목 추가
         </button>
       </div>
@@ -5875,15 +7405,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       case "login": return <div style={pd}>
         <FG title="로그인 설정" A={A} last>
           <TRow label="로그인 필수" on={cfg.auth.enabled} toggle={()=>ua("enabled",!cfg.auth.enabled)} A={A}/>
-          <F label="로그인 URL" A={A}><TIn value={cfg.auth.loginUrl} onChange={v=>ua("loginUrl",v)} A={A}/></F>
           <F label="에러 메시지" A={A}><TIn value={cfg.auth.errText} onChange={v=>ua("errText",v)} A={A}/></F>
         </FG>
       </div>
 
       case "integrations": {
         const gs={...DEFAULT_GOOGLE_SHEETS,...(cfg.integrations?.googleSheets||{})}
-        const effectiveWebhookUrl=String(gs.webhookUrl||googleSheetsWebhookUrl||"").trim()
-        const usingGlobalWebhook=!String(gs.webhookUrl||"").trim()&&!!googleSheetsWebhookUrl
+        const effectiveWebhookUrl=String(googleSheetsWebhookUrl||"").trim()
         const ready=!!gs.enabled&&!!effectiveWebhookUrl
         const statusLabel=!gs.enabled?"연동 꺼짐":!effectiveWebhookUrl?"설정 필요":gs.lastSyncStatus==="sent"?"전송 요청 완료":gs.lastSyncStatus==="error"?"최근 전송 실패":"연동 대기"
         const statusColor=!gs.enabled?A.t3:!effectiveWebhookUrl?A.red:gs.lastSyncStatus==="error"?A.red:A.green
@@ -5893,61 +7421,118 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         const syncMessage=/<!doctype html|<html[\s>]|Google Drive|unable to open the file|Page Not Found/i.test(syncMessageRaw)
           ?"Google Drive/Docs 오류 페이지가 응답했어요. Apps Script Web App URL이 `https://script.google.com/macros/s/.../exec` 형식인지 확인해주세요."
           :syncMessageRaw
-        return <div style={pd}>
-          <FG title="구글 스프레드시트" A={A}>
-            <TRow label="응답 자동 연동" on={!!gs.enabled} toggle={()=>ug("enabled",!gs.enabled)} A={A}/>
-            <F label="연동할 계정" A={A}><TIn value={gs.accountEmail} onChange={v=>ug("accountEmail",v)} placeholder="google@example.com" A={A}/></F>
-            <F label="응답 데이터를 어디로 보낼까요?" A={A}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                {(["existing","new"] as const).map(mode=>{
-                  const on=gs.mode===mode
-                  return <button key={mode} onClick={()=>ug("mode",mode)}
-                    style={{height:42,borderRadius:A.r,border:`1.5px solid ${on?A.blue:A.border}`,background:on?A.blue2:A.card2,color:on?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
-                    {mode==="existing"?"기존 스프레드시트 사용":"새 스프레드시트 생성"}
-                  </button>
-                })}
-              </div>
-            </F>
-            <F label={gs.mode==="existing"?"연결할 시트 링크":"생성할 시트 이름"} A={A}>
-              <TIn value={gs.mode==="existing"?gs.sheetUrl:gs.sheetName} onChange={v=>gs.mode==="existing"?ug("sheetUrl",v):ug("sheetName",v)} placeholder={gs.mode==="existing"?"https://docs.google.com/spreadsheets/d/...":"예) 5월 신청 응답"} A={A}/>
-            </F>
-            <F label="Apps Script Web App URL" A={A}>
-              <TIn value={gs.webhookUrl} onChange={v=>ug("webhookUrl",v)} placeholder="https://script.google.com/macros/s/..." A={A}/>
-              {usingGlobalWebhook&&<div style={{fontSize:11.5,color:A.green,lineHeight:1.55,marginTop:6}}>
-                Vercel 공통 URL이 자동 적용 중이에요. 이 칸은 폼별로 다른 URL을 써야 할 때만 입력하면 됩니다.
-              </div>}
-            </F>
-            <F label="연동 상태" A={A}>
-              <div style={{padding:"12px",borderRadius:A.r,border:`1px solid ${statusColor}44`,background:statusColor+"10",display:"grid",gap:8}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,color:statusColor,fontSize:13,fontWeight:600}}>
-                    <span style={{width:8,height:8,borderRadius:999,background:statusColor,display:"inline-block"}} />{statusLabel}
-                  </div>
-                  <button onClick={()=>sheetOpenUrl?window.open(sheetOpenUrl,"_blank","noopener,noreferrer"):showToast(gs.mode==="new"?"테스트 전송 후 생성된 시트 링크가 저장되면 이동할 수 있어요.":"연결할 시트 링크를 입력하면 바로 이동할 수 있어요.",false)}
-                    disabled={!sheetOpenUrl}
-                    style={{height:30,padding:"0 10px",borderRadius:A.r,border:`1px solid ${sheetOpenUrl?A.border2:A.border}`,background:sheetOpenUrl?A.card:A.card2,color:sheetOpenUrl?A.t1:A.t3,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:sheetOpenUrl?"pointer":"not-allowed"}}>
-                    시트로 이동
-                  </button>
-                </div>
-                <div style={{fontSize:11.5,color:A.t2,lineHeight:1.6}}>
-                  {ready?`마지막 상태: ${lastSyncText}`:"계정 이메일만으로는 연동되지 않아요. 공통 Apps Script URL을 Vercel 환경변수에 넣거나, 이 폼에 직접 URL을 입력해야 제출 응답이 시트로 전송됩니다."}
-                  {syncMessage&&<div style={{marginTop:4,color:gs.lastSyncStatus==="error"?A.red:A.t2}}>{syncMessage}</div>}
-                </div>
-              </div>
-            </F>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              <button onClick={()=>loadedId?updateCfg(false):setShowSave(true)}
-                style={{height:40,borderRadius:A.r,border:`1px solid ${A.border2}`,background:A.card,color:A.t1,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
-                설정 저장
-              </button>
-              <button onClick={testGoogleSheetsIntegration}
-                style={{height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
-                테스트 전송
-              </button>
+        // 시트가 실제로 연결된 상태인지 (기존 시트는 링크, 새로 생성은 만들어진 기록으로 판단)
+        const sheetLinked=gs.mode==="existing"?!!String(gs.sheetUrl||"").trim():!!gs.createdSheetName
+        const stepTargetDone=!!gs.mode
+        const stepInputDone=gs.mode==="existing"?!!String(gs.sheetUrl||"").trim():!!String(gs.sheetName||"").trim()
+        const actionLabel=gs.mode==="existing"?(sheetLinked?"연결 확인":"시트 연결하기"):(sheetLinked?"테스트 전송":"시트 만들기")
+        // 세로 스테퍼 — 좌측에 번호와 연결선을 두고, 컨트롤은 다른 패널과 같은 형태를 유지한다.
+        const stepRow=(n:number,title:string,done:boolean,hint:string,body:React.ReactNode,last=false)=>(
+          <div style={{display:"flex",gap:12}}>
+            <div style={{width:22,flexShrink:0,display:"flex",flexDirection:"column" as const,alignItems:"center"}}>
+              <span style={{width:22,height:22,borderRadius:11,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                fontSize:11,fontWeight:700,fontFamily:FONT,
+                background:done?A.blue:"transparent",color:done?"#fff":A.t3,
+                boxShadow:done?"none":`inset 0 0 0 1.5px ${A===ALT?"#DFE3E9":A.border2}`}}>
+                {done?"✓":n}
+              </span>
+              {!last&&<span style={{flex:1,width:1.5,marginTop:4,marginBottom:4,borderRadius:1,background:A===ALT?"#E7EAEF":A.border,minHeight:12}}/>}
             </div>
-          </FG>
-          <div style={{padding:"12px 14px",borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,color:A.blue,fontSize:12.5,lineHeight:1.7,marginBottom:10}}>
-            이 설정은 <b>설정 저장</b> 또는 우측 상단 <b>저장</b>을 눌러야 실제 배포된 폼에 반영돼요. 저장 후 <b>테스트 전송</b>을 눌러 시트에 테스트 행이 생기는지 먼저 확인해주세요.
+            <div style={{flex:1,minWidth:0,paddingBottom:last?0:18}}>
+              <div style={{fontSize:12.5,fontWeight:700,color:A.t1,marginTop:3,marginBottom:hint?4:9}}>{title}</div>
+              {hint&&<div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginBottom:9}}>{hint}</div>}
+              {body}
+            </div>
+          </div>
+        )
+        return <div style={pd}>
+          <div style={{display:"flex",flexDirection:"column" as const,gap:14}}>
+            {/* 켜고 끄기 — 꺼져 있으면 아래 단계는 의미가 없으므로 감춘다 */}
+            <div style={{padding:14,borderRadius:12,background:panelFieldBg(A),marginBottom:4}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                <span style={{fontSize:13.5,fontWeight:700,color:A.t1}}>응답 자동 연동</span>
+                <div onClick={()=>ug("enabled",!gs.enabled)} style={{width:44,height:25,borderRadius:13,background:gs.enabled?A.blue:(A===ALT?"#DFE3E9":A.border2),position:"relative" as const,transition:"background .2s",cursor:"pointer",flexShrink:0}}>
+                  <div style={{position:"absolute" as const,width:19,height:19,borderRadius:"50%",background:"#fff",top:3,left:gs.enabled?22:3,transition:"left .2s",boxShadow:"0 1px 3px rgba(16,24,40,0.24)"}}/>
+                </div>
+              </div>
+              <div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,marginTop:6}}>
+                {gs.enabled?"제출된 응답이 아래 시트에 한 줄씩 쌓입니다.":"켜면 제출된 응답을 구글 시트로 자동 전송합니다."}
+              </div>
+            </div>
+
+            {gs.enabled&&<div>
+              {stepRow(1,"어디에 보낼지 고르기",stepTargetDone,"",
+                <PanelSegment value={gs.mode} onChange={v=>ug("mode",v as "existing"|"new")} A={A}
+                  options={[{value:"existing",label:"기존 시트"},{value:"new",label:"새로 생성"}]}/>)}
+
+              {gs.mode!=="existing"&&stepRow(2,"시트를 공유받을 계정",!!String(gs.accountEmail||"").trim(),
+                "새로 만드는 시트는 연동 서버 계정 소유가 됩니다. 여기 적은 계정에 편집 권한을 줍니다.",
+                <TIn value={gs.accountEmail} onChange={v=>ug("accountEmail",v)} placeholder="google@example.com" A={A}/>)}
+
+              {stepRow(gs.mode==="existing"?2:3,gs.mode==="existing"?"시트 링크 붙여넣기":"만들 시트 이름 정하기",stepInputDone,
+                gs.mode==="existing"?"응답을 쌓을 구글 스프레드시트 주소를 넣어주세요.":"",
+                <div>
+                  <TIn value={gs.mode==="existing"?gs.sheetUrl:gs.sheetName}
+                    onChange={v=>{
+                      if(gs.mode==="existing"){ug("sheetUrl",v);setSheetTabs(null);setSheetTabsErr("");setNewTabMode(false)}
+                      else ug("sheetName",v)
+                    }}
+                    placeholder={gs.mode==="existing"?"https://docs.google.com/spreadsheets/d/...":"예) 5월 신청 응답"} A={A}/>
+                  {gs.mode==="existing"&&!!String(gs.sheetUrl||"").trim()&&sheetTabs?.url!==String(gs.sheetUrl||"").trim()&&
+                    <button onClick={()=>loadSheetTabs(gs.sheetUrl)} disabled={sheetTabsLoading}
+                      style={{marginTop:8,height:34,padding:"0 12px",borderRadius:9,border:`1.5px dashed ${A.border2}`,background:"transparent",
+                        color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:sheetTabsLoading?"default":"pointer"}}>
+                      {sheetTabsLoading?"시트 읽는 중…":"시트 연결하고 탭 불러오기"}
+                    </button>}
+                  {sheetTabsErr&&<div style={{marginTop:7,fontSize:11.5,color:A.red,lineHeight:1.55}}>{sheetTabsErr}</div>}
+                </div>)}
+
+              {/* 어느 탭에 쌓을지 고른다. 기존 시트는 실제 탭 목록에서, 새로 생성은 이름을 직접 적는다. */}
+              {gs.mode==="existing"
+                ? sheetTabs?.url===String(gs.sheetUrl||"").trim()&&(()=>{
+                    const tabs=sheetTabs?.tabs||[]
+                    const tabName=String(gs.tabName||"").trim()
+                    // 목록에 없는 이름이 저장돼 있으면 새로 만들 탭으로 본다.
+                    const creating=newTabMode||(!!tabName&&!tabs.includes(tabName))
+                    return stepRow(3,"어느 탭에 쌓을지 고르기",!!tabName,
+                      creating?"이 이름의 탭을 새로 만들어 응답을 쌓습니다.":"선택한 탭에 응답이 한 줄씩 추가됩니다.",
+                      <div>
+                        <PanelSelect value={creating?"__new__":tabName} A={A} height={44} radius={9}
+                          placeholder="탭을 선택해주세요"
+                          onChange={v=>{
+                            if(v==="__new__"){setNewTabMode(true);setCfg(p=>({...p,integrations:{...(p.integrations||{}),googleSheets:{...DEFAULT_GOOGLE_SHEETS,...(p.integrations?.googleSheets||{}),tabName:"",tabGid:""}}}))}
+                            else{setNewTabMode(false);setCfg(p=>({...p,integrations:{...(p.integrations||{}),googleSheets:{...DEFAULT_GOOGLE_SHEETS,...(p.integrations?.googleSheets||{}),tabName:v,tabGid:sheetTabs?.gids?.[v]||""}}}))}
+                          }}
+                          options={[...tabs.map(t=>({value:t,label:t})),{value:"__new__",label:"+ 새 탭 만들기"}]}/>
+                        {creating&&<div style={{marginTop:8}}>
+                          <TIn value={gs.tabName||""} onChange={v=>ug("tabName",v)} placeholder="예) 9월 응답" A={A}/>
+                        </div>}
+                      </div>)
+                  })()
+                : stepRow(4,"탭 이름 정하기",!!String(gs.tabName||"").trim(),
+                    "비워두면 첫 번째 탭을 씁니다.",
+                    <TIn value={gs.tabName||""} onChange={v=>ug("tabName",v)} placeholder="예) 응답" A={A}/>)}
+
+              {stepRow(gs.mode==="existing"?4:5,"연결하고 확인하기",sheetLinked&&gs.lastSyncStatus==="sent","",
+                <div>
+                  <button onClick={()=>{if(!loadedId){setShowSave(true);return}updateCfg(false);testGoogleSheetsIntegration()}}
+                    disabled={!stepInputDone}
+                    style={{width:"100%",height:44,borderRadius:10,border:"none",background:stepInputDone?A.blue:(A===ALT?"#E7EAEF":A.border2),color:stepInputDone?"#fff":A.t3,
+                      fontFamily:FONT,fontSize:13,fontWeight:700,cursor:stepInputDone?"pointer":"not-allowed"}}>
+                    {actionLabel}
+                  </button>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:12}}>
+                    <span style={{width:6,height:6,borderRadius:3,background:statusColor,flexShrink:0}}/>
+                    <span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:600,color:statusColor}}>{statusLabel}</span>
+                    {sheetOpenUrl&&<button onClick={()=>window.open(sheetOpenUrl,"_blank","noopener,noreferrer")}
+                      style={{flexShrink:0,height:28,padding:"0 10px",borderRadius:7,border:"none",background:panelFieldBg(A),color:A.t2,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                      시트 열기
+                    </button>}
+                  </div>
+                  {(ready?lastSyncText:"")&&<div style={{fontSize:11.5,color:A.t3,lineHeight:1.6,marginTop:6}}>마지막 전송: {lastSyncText}</div>}
+                  {syncMessage&&<div style={{fontSize:11.5,lineHeight:1.6,marginTop:6,color:gs.lastSyncStatus==="error"?A.red:A.t3}}>{syncMessage}</div>}
+                </div>,true)}
+            </div>}
           </div>
         </div>
       }
@@ -5959,12 +7544,26 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <FG title="폼 슬러그" A={A} last>
             <F label="슬러그" A={A}>
               <TIn value={slugDraft} onChange={v=>setSlugDraft(v)} placeholder="my-form-slug" A={A}/>
-              <div style={{marginTop:7,fontSize:11.5,lineHeight:1.5,color:slugHasInvalidChars?A.red:A.t3}}>
+              <div style={{marginTop:8,fontSize:12.5,lineHeight:1.6,color:slugHasInvalidChars?A.red:A.t3}}>
                 한글, 공백, 특수문자는 사용할 수 없어요. 영문, 숫자, 하이픈(-)만 입력해주세요.
               </div>
             </F>
-            {preview&&<F label="미리보기 URL" A={A}><div style={{padding:"9px 10px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:11.5,color:A.t2,wordBreak:"break-all" as const,fontFamily:"Courier New,monospace"}}>{preview}</div></F>}
-            <button onClick={updateFormSlug} style={{width:"100%",height:40,borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>
+            {preview&&<F label="미리보기 URL" A={A}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"13px 14px",borderRadius:10,background:panelFieldBg(A),border:"none"}}>
+                <span style={{flex:1,minWidth:0,fontFamily:FONT,fontSize:12.5,color:A.t3,lineHeight:1.6,wordBreak:"break-all" as const}}>{preview}</span>
+                <button onClick={()=>{navigator.clipboard?.writeText(preview).then(()=>showToast("미리보기 URL을 복사했어요.")).catch(()=>showToast("복사에 실패했어요.",false))}}
+                  title="URL 복사" aria-label="URL 복사"
+                  style={{width:30,height:30,flexShrink:0,border:"none",borderRadius:8,background:A.card,color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0}}
+                  onMouseEnter={e=>(e.currentTarget as HTMLElement).style.color=A.blue}
+                  onMouseLeave={e=>(e.currentTarget as HTMLElement).style.color=A.t3}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect x="9" y="9" width="11" height="11" rx="2.6" stroke="currentColor" strokeWidth="1.7"/>
+                    <path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              </div>
+            </F>}
+            <button onClick={updateFormSlug} style={{width:"100%",height:50,borderRadius:11,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:14,fontWeight:700,cursor:"pointer"}}>
               {loadedId?"슬러그 저장":"저장 전 슬러그 적용"}
             </button>
           </FG>
@@ -6056,20 +7655,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         }
         return <div style={pd}>
           <FG title="QR 만들기" A={A}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-              {([{id:"form",label:"폼 QR"},{id:"custom",label:"상세페이지 QR"}] as const).map(item=>{
-                const active=qrMode===item.id
-                return <button key={item.id} onClick={()=>setQrMode(item.id)}
-                  style={{height:38,borderRadius:A.r,border:`1.5px solid ${active?A.blue:A.border}`,background:active?A.blue2:A.card,color:active?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
-                  {item.label}
-                </button>
-              })}
+            <div style={{marginBottom:16}}>
+              <PanelSegment value={qrMode} onChange={v=>setQrMode(v as "form"|"custom")} A={A}
+                options={[{value:"form",label:"폼 QR"},{value:"custom",label:"상세페이지 QR"}]}/>
             </div>
             <F label={qrMode==="form"?"폼 URL":"상세페이지 URL"} A={A}>
               {qrMode==="form"
                 ? formUrl
-                  ? <textarea readOnly value={formUrl} style={{width:"100%",height:56,background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t2,fontFamily:"Courier New,monospace",fontSize:11.5,padding:"8px",outline:"none",resize:"none" as const,boxSizing:"border-box" as const,wordBreak:"break-all" as const}}/>
-                  : <div style={{padding:"10px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12.5,color:A.t3,lineHeight:1.5}}>
+                  ? <div style={{padding:"13px 14px",borderRadius:10,background:panelFieldBg(A),border:"none",fontFamily:FONT,fontSize:12.5,color:A.t3,lineHeight:1.6,wordBreak:"break-all" as const}}>{formUrl}</div>
+                  : <div style={{padding:"13px 14px",borderRadius:10,background:panelFieldBg(A),border:"none",fontSize:12.5,color:A.t3,lineHeight:1.6}}>
                       {!hasBase&&!hasSaved?"배포 페이지 URL과 저장된 슬러그가 필요해요.":!hasBase?"브랜드별 배포 페이지 URL이 필요해요.":"폼을 먼저 저장하면 QR을 만들 수 있어요."}
                     </div>
                 : <TIn value={qrCustomUrl} onChange={setQrCustomUrl} placeholder="https://example.com/detail" A={A}/>}
@@ -6087,33 +7681,33 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
           <FG title="미리보기 / 다운로드" A={A} last>
             <div style={{display:"flex",flexDirection:"column" as const,alignItems:"center",gap:14}}>
-              <div style={{width:236,height:236,borderRadius:A.r2,background:"#fff",border:`1px solid ${A.border}`,boxShadow:A.shadow,display:"flex",alignItems:"center",justifyContent:"center",padding:10,boxSizing:"border-box" as const}}>
+              <div style={{width:"100%",aspectRatio:"1",borderRadius:14,background:adminDark?A.card2:"#FAFBFC",border:"none",boxShadow:`inset 0 0 0 1px ${A.border}`,display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box" as const}}>
                 {qrMatrix
-                  ? <div style={{width:212,height:212}} dangerouslySetInnerHTML={{__html:qrMatrixToSvgMarkup(qrMatrix,212)}}/>
-                  : <div style={{textAlign:"center" as const,color:A.t3,fontSize:12.5,lineHeight:1.6,padding:16}}>
-                      {qrError||"QR 생성 버튼을 누르면 미리보기가 표시됩니다."}
+                  ? <div style={{width:"100%",maxWidth:212,aspectRatio:"1"}} dangerouslySetInnerHTML={{__html:qrMatrixToSvgMarkup(qrMatrix,212)}}/>
+                  : <div style={{textAlign:"center" as const,color:A.t3,fontSize:13,lineHeight:1.6,wordBreak:"keep-all" as const}}>
+                      {qrError||<>QR 생성 버튼을 누르면<br/>미리보기가 표시됩니다.</>}
                     </div>}
               </div>
               <button onClick={onQrGenerate} disabled={!activeQrUrl}
-                style={{width:"100%",height:40,borderRadius:A.r,border:"none",background:activeQrUrl?A.blue:A.border2,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:activeQrUrl?"pointer":"not-allowed"}}>
+                style={{width:"100%",height:48,borderRadius:11,border:"none",background:activeQrUrl?A.blue:A.border2,color:"#fff",fontFamily:FONT,fontSize:13.5,fontWeight:700,cursor:activeQrUrl?"pointer":"not-allowed"}}>
                 {detailQrTargetChanged?"링크 변경 저장":qrMatrix?"QR 다시 생성":"QR 생성"}
               </button>
               {qrError&&<div style={{fontSize:12,color:A.red,lineHeight:1.5,textAlign:"center" as const}}>{qrError}</div>}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,width:"100%"}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:9,width:"100%"}}>
                 {(["png","svg","jpg"] as QrFileFormat[]).map(format=>(
                   <button key={format} onClick={()=>onQrDownload(format)} disabled={!qrMatrix}
-                    style={{height:38,borderRadius:A.r,border:`1px solid ${qrMatrix?A.border2:A.border}`,background:qrMatrix?A.card:A.card2,color:qrMatrix?A.t1:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:qrMatrix?"pointer":"not-allowed",textTransform:"uppercase" as const}}>
+                    style={{height:44,borderRadius:10,border:"none",background:qrMatrix?panelFieldBg(A):(A===ALT?"#F1F3F6":A.card2),color:qrMatrix?A.t1:A.t4,fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:qrMatrix?"pointer":"not-allowed",textTransform:"uppercase" as const}}>
                     {format}
                   </button>
                 ))}
               </div>
-              <div style={{display:"flex",gap:8,width:"100%"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,width:"100%"}}>
                 <button onClick={()=>{if(activeQrUrl){navigator.clipboard.writeText(activeQrUrl);showToast("QR URL 복사 완료!")}}} disabled={!activeQrUrl}
-                  style={{flex:1,height:36,borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:activeQrUrl?A.t2:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:activeQrUrl?"pointer":"not-allowed"}}>
+                  style={{height:44,borderRadius:10,border:`1px solid ${A===ALT?"#E3E7EC":A.border}`,background:A.card,color:activeQrUrl?A.t2:A.t3,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:activeQrUrl?"pointer":"not-allowed"}}>
                   URL 복사
                 </button>
                 <button onClick={()=>activeQrUrl&&window.open(activeQrUrl,"_blank")} disabled={!activeQrUrl}
-                  style={{flex:1,height:36,borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:activeQrUrl?A.t2:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:activeQrUrl?"pointer":"not-allowed"}}>
+                  style={{height:44,borderRadius:10,border:`1px solid ${A===ALT?"#E3E7EC":A.border}`,background:A.card,color:activeQrUrl?A.t2:A.t3,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:activeQrUrl?"pointer":"not-allowed"}}>
                   URL 열기
                 </button>
               </div>
@@ -6148,7 +7742,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <F label="버튼 클릭 후 URL" A={A}><TIn value={cfg.modal.btnUrl} onChange={v=>um("btnUrl",v)} placeholder="https://..." A={A}/></F>
         </FG>
         <FG title="공유 버튼" A={A} last>
-          <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginBottom:8}}>
+          <div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,margin:"6px 0 10px"}}>
             완료 모달에 표시할 공유 버튼을 선택합니다.
           </div>
           {shareOptions.map(({key,label})=>(
@@ -6161,41 +7755,32 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       case "styles": return <div style={pd}>
         <FG title="시니어 모드" A={A}>
           <TRow label="시니어 모드 활성화" on={!!cfg.styles.seniorMode} toggle={()=>us("seniorMode",!cfg.styles.seniorMode)} A={A}/>
-          <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginTop:-2}}>
+          <div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,marginTop:9}}>
             고령자가 더 쉽게 읽고 입력할 수 있도록 폰트와 입력 영역을 키우고, 글씨 색을 검정에 가깝게 표시합니다.
           </div>
         </FG>
         <FG title="폼 테마" A={A}>
-          {cfg.styles.seniorMode&&<div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginBottom:10}}>
+          {cfg.styles.seniorMode&&<div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,marginBottom:10}}>
             시니어 모드가 켜져 있어도 테마와 입력 박스 색은 유지되고, 글자색과 크기만 가독성 중심으로 바뀝니다.
           </div>}
-          <div style={{display:"flex",gap:10}}>
-            {(["dark","light"] as Theme[]).map(t=>{const a=cfg.styles.theme===t;return(
-              <div key={t} onClick={()=>us("theme",t)} style={{flex:1,padding:"12px 10px",borderRadius:A.r,border:`2px solid ${a?A.blue:A.border}`,cursor:"pointer",textAlign:"center" as const,transition:"border .12s"}}>
-                <div style={{width:"100%",height:28,borderRadius:6,background:t==="dark"?"#0B0C0E":"#FFFFFF",border:"1px solid rgba(128,128,128,0.2)",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>
-                  {t==="dark"?<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M13.5 8.5A5.5 5.5 0 0 1 7 2a6 6 0 1 0 6.5 6.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M8 1v1.5M8 13.5V15M15 8h-1.5M2.5 8H1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1M12.6 12.6l-1.1-1.1M4.5 4.5 3.4 3.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
-                </div>
-                <div style={{fontSize:12.5,fontWeight:600,color:a?A.blue:A.t2}}>{t==="dark"?"다크":"라이트"}</div>
-              </div>
-            )})}
-          </div>
+          <PanelSegment value={cfg.styles.theme} onChange={v=>us("theme",v as Theme)} A={A} height={42}
+            options={[
+              {value:"light",label:"라이트",icon:<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M8 1v1.5M8 13.5V15M15 8h-1.5M2.5 8H1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1M12.6 12.6l-1.1-1.1M4.5 4.5 3.4 3.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
+              {value:"dark",label:"다크",icon:<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><path d="M13.5 8.5A5.5 5.5 0 0 1 7 2a6 6 0 1 0 6.5 6.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>},
+            ]}/>
         </FG>
         <FG title="브랜드 컬러" A={A}>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            {[{c:"#529DFF",l:"스나이퍼팩토리"},{c:"#EA594D",l:"인사이드아웃"}].map(({c,l})=>(
-              <button key={c} onClick={()=>{ut("bg",c)}} title={l}
-                style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px 6px 8px",borderRadius:A.r,border:`1.5px solid ${cfg.cta.bg===c?c:A.border}`,background:cfg.cta.bg===c?c+"15":"transparent",cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:cfg.cta.bg===c?600:400,color:cfg.cta.bg===c?c:A.t2,flexShrink:0,transition:"all .15s"}}>
-                <div style={{width:18,height:18,borderRadius:"50%",background:c,flexShrink:0}}/>
-                {l}
-              </button>
-            ))}
-          </div>
+          <PanelSegment value={cfg.cta.bg} onChange={v=>ut("bg",v)} A={A} height={42}
+            options={[{c:"#529DFF",l:"스나이퍼팩토리"},{c:"#EA594D",l:"인사이드아웃"}].map(({c,l})=>({
+              value:c,label:l,
+              icon:<span style={{width:18,height:18,borderRadius:9,background:c,flexShrink:0,display:"block"}}/>,
+            }))}/>
         </FG>
         <FG title="CTA 버튼 색상" A={A}>
           <F label="배경색" A={A}>
             <div style={{display:"flex",gap:6,marginBottom:8}}>
               {[{c:"#529DFF",l:"SF"},{c:"#EA594D",l:"IO"},{c:"#3182F6",l:"기본"}].map(({c,l})=>(
-                <button key={c} onClick={()=>ut("bg",c)} title={l} style={{width:28,height:28,borderRadius:6,background:c,border:`2px solid ${cfg.cta.bg===c?A.t1:"transparent"}`,cursor:"pointer",flexShrink:0}}/>
+                <button key={c} onClick={()=>ut("bg",c)} title={l} style={{width:32,height:32,borderRadius:9,background:c,border:"none",boxShadow:cfg.cta.bg===c?`inset 0 0 0 2px #fff, 0 0 0 2px ${A.blue}`:"none",cursor:"pointer",flexShrink:0}}/>
               ))}
             </div>
             <CIn value={cfg.cta.bg} onChange={v=>ut("bg",v)} A={A}/>
@@ -6233,15 +7818,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const clearError=(id:string)=>setPvFieldErrors(p=>{const n={...p};delete n[id];return n})
 
 
-    return <div style={{flex:1,overflowY:"auto" as const,display:"flex",justifyContent:"center",padding:seniorMode?"44px 20px 88px":"40px 20px 80px",background:FC.bg,"--link-color":accentBg} as React.CSSProperties}>
-      <div style={{width:"100%",maxWidth:cfg.styles.maxW,fontFamily:FONT}}>
+    return <div style={{flex:1,display:"flex",justifyContent:"center",padding:0,background:"transparent","--link-color":accentBg} as React.CSSProperties}>
+      <div style={{width:"100%",maxWidth:cfg.styles.maxW,fontFamily:FONT,padding:seniorMode?"44px 34px 48px":"36px 34px 32px",borderRadius:14,background:FC.bg,boxShadow:cfg.styles.theme==="dark"?"0 1px 2px rgba(0,0,0,.18), 0 12px 32px -20px rgba(0,0,0,.6)":ALT.shadow,height:"fit-content",boxSizing:"border-box" as const}}>
         {cfg.header.imageUrl&&<div style={{...imagePreviewBoxStyle(cfg.header,200),borderRadius:fr2,marginBottom:22,background:FC.fieldBg}}>
           <img src={cfg.header.imageUrl} alt="" style={imagePreviewImgStyle(cfg.header)}/>
         </div>}
         <div style={{textAlign:"center" as const,marginBottom:22}}>
-          {cfg.header.overline&&<div style={{fontSize:fs(12),fontWeight:600,color:accentText,marginBottom:8}}>{cfg.header.overline}</div>}
-          <div style={{fontSize:fs(22),fontWeight:600,color:FC.t1,lineHeight:1.25,letterSpacing:seniorMode?0:"-0.5px",marginBottom:10,whiteSpace:"pre-line" as const}}>{cfg.header.title}</div>
-          <div style={{display:"flex",justifyContent:"center",gap:8,fontSize:fs(12.5),color:FC.t2,flexWrap:"wrap" as const}}>
+          {cfg.header.overline&&<div style={{fontSize:fs(12.5),fontWeight:700,color:accentText,marginBottom:8,textAlign:"center" as const}}>{cfg.header.overline}</div>}
+          <div style={{fontSize:fs(26),fontWeight:700,color:FC.t1,lineHeight:1.25,letterSpacing:seniorMode?0:"-0.4px",marginBottom:12,whiteSpace:"pre-line" as const,textAlign:"center" as const}}>{cfg.header.title}</div>
+          <div style={{display:"flex",justifyContent:"center",gap:"8px 16px",fontSize:fs(12.5),color:FC.t2,flexWrap:"wrap" as const,lineHeight:1.55}}>
             {(()=>{
               const schedules=educationScheduleSummaries(cfg.header)
               const hasTuition=cfg.header.tuitionFree||!!cfg.header.tuitionAmount
@@ -6261,7 +7846,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           {renderPreviewAdSlot({...DEFAULT_FORM_AD,...cfg.ad})}
         </div>}
         {pvPage===1&&cfg.header.noticeEnabled&&<div style={{display:"flex",justifyContent:"center",marginBottom:24}}>
-          <div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"9px 16px",borderRadius:(cfg.header.noticeShape||"pill")==="pill"?999:10,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,fontSize:fs(12.5),color:FC.t2}}>
+          <div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"12px 14px",borderRadius:(cfg.header.noticeShape||"pill")==="pill"?999:10,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`,fontSize:fs(12.5),color:FC.t2,textAlign:"center" as const,lineHeight:1.6}}>
             {cfg.header.noticeIconEnabled&&<span style={{width:seniorMode?20:17,height:seniorMode?20:17,borderRadius:"50%",border:`1px solid ${FC.fieldBorder}`,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:fs(10),flexShrink:0}}>{cfg.header.noticeIconText}</span>}
             <span style={{lineHeight:1.5}} dangerouslySetInnerHTML={{__html:mdToHtml(cfg.header.noticeText)}}/>
           </div>
@@ -6272,11 +7857,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <div style={{flex:1,height:3,borderRadius:2,background:FC.fieldBorder,overflow:"hidden"}}>
               <div style={{height:"100%",borderRadius:2,background:accentBg,width:`${(pvPage/formPages)*100}%`,transition:"width .35s cubic-bezier(.4,0,.2,1)"}}/>
             </div>
-            <span style={{fontSize:fs(11),color:FC.t3,flexShrink:0,fontFamily:FONT}}>{pvPage}/{formPages}</span>
+            <span style={{fontSize:fs(11.5),fontWeight:600,color:FC.t3,flexShrink:0,fontFamily:FONT}}>{pvPage}/{formPages}</span>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <div style={{width:4,height:18,borderRadius:2,background:accentBg,flexShrink:0}}/>
-            <span style={{fontSize:fs(15),fontWeight:600,color:FC.t1,fontFamily:FONT,letterSpacing:seniorMode?0:"-0.2px"}}>{getPageLabel(pvPage)}</span>
+            <span style={{fontSize:fs(15),fontWeight:700,color:FC.t1,fontFamily:FONT,letterSpacing:seniorMode?0:"-0.2px"}}>{getPageLabel(pvPage)}</span>
           </div>
         </div>}
         {/* Dynamic fields */}
@@ -6284,7 +7869,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           {fields.map((field:any,i:number)=>{
           // KDT section_desc
           if(field.type==="section_desc") return <div key={field.id} style={{padding:"14px 16px",borderRadius:fr2,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`}}>
-            <div style={{fontSize:fs(14),fontWeight:600,color:FC.t1,marginBottom:field.desc?6:0}}>{field.label}</div>
+            <div style={{fontSize:fs(15),fontWeight:700,color:FC.t1,marginBottom:field.desc?6:0,lineHeight:1.45}}>{field.label}</div>
             {field.desc&&<div style={{fontSize:fs(12.5),color:FC.t3,lineHeight:1.7,whiteSpace:"pre-line" as const}}>{field.desc}</div>}
           </div>
           const id=field.id
@@ -6313,6 +7898,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {type:"textarea" as FieldType,label:"장문 입력"},
           ]
           return <div key={field.id}
+            data-cf-field={field.id}
             draggable
             onDragStart={()=>setDragIdx(i)}
             onDragOver={e=>{
@@ -6349,7 +7935,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {/* Label row */}
             {!isDisplayOnlyFieldType(field.type)&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:cfg.styles.labelGap??8}}>
               {isSelected&&<span style={{cursor:"grab",color:FC.t3,fontSize:14,lineHeight:1,flexShrink:0,userSelect:"none" as const}}>⠿</span>}
-              <div style={{fontSize:fs(13.5),fontWeight:600,color:FC.t1,flex:1,whiteSpace:"pre-line" as const,lineHeight:1.35}}>
+              <div style={{fontSize:fs(12.5),fontWeight:600,color:FC.t1,flex:1,whiteSpace:"pre-line" as const,lineHeight:1.45}}>
                 {field.label}{field.required&&<span style={{color:accentBg,marginLeft:3}}>*</span>}
               </div>
               {isSelected&&<div style={{position:"relative" as const}}>
@@ -6377,11 +7963,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               if(isDisplayOnlyFieldType(field.type))return null
               return hs.filter(h=>h.text.trim()).map((h,hi)=>
                 h.callout
-                  ?<div key={hi} style={{display:"flex",gap:8,padding:"9px 12px",borderRadius:fr2,background:accentC+"0d",border:`1px solid ${accentC}33`,marginBottom:hi===hs.filter(item=>item.text.trim()).length-1?helperCalloutGap:6}}>
+                  ?<div key={hi} style={{display:"flex",gap:8,padding:"10px 12px",borderRadius:fr2,background:accentC+"0d",border:`1px solid ${accentC}33`,marginBottom:hi===hs.filter(item=>item.text.trim()).length-1?helperCalloutGap:6}}>
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><circle cx="8" cy="8" r="6" stroke={accentC} strokeWidth="1.4"/><path d="M8 7v4M8 5.5v.5" stroke={accentC} strokeWidth="1.4" strokeLinecap="round"/></svg>
-                    <div style={{fontSize:fs(12),color:accentText,lineHeight:1.6,fontWeight:500}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>
+                    <div style={{fontSize:fs(12.5),color:accentText,lineHeight:1.6,fontWeight:500}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>
                   </div>
-                  :<div key={hi} style={{fontSize:fs(12),color:FC.t3,marginBottom:hi===hs.filter(item=>item.text.trim()).length-1?helperGap:4,lineHeight:1.6}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>
+                  :<div key={hi} style={{fontSize:fs(12.5),color:FC.t3,marginBottom:hi===hs.filter(item=>item.text.trim()).length-1?helperGap:4,lineHeight:1.6}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>
               )
             })()}
             {(field.type==="text"||field.type==="name")&&
@@ -6674,11 +8260,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         {/* CTA — first: next only, middle: prev+next, last: submit */}
         <div style={{display:"flex",gap:10}}>
           {isMultiPage&&pvPage>1&&<button onClick={goPreviewPrevious}
-            style={{flex:1,height:seniorFieldHeight(seniorMode,cfg.cta.height),borderRadius:fr2,border:"none",background:FC.fieldBg||"#F2F4F6",color:FC.t2,fontFamily:FONT,fontSize:fs(14),fontWeight:600,cursor:"pointer"}}>이전</button>}
+            style={{flex:1,height:seniorFieldHeight(seniorMode,cfg.cta.height),borderRadius:fr2,border:"none",background:FC.fieldBg||"#F2F4F6",color:FC.t2,fontFamily:FONT,fontSize:fs(14.5),fontWeight:700,cursor:"pointer"}}>이전</button>}
           {isMultiPage&&pvPage<formPages
             ?<button onClick={goPreviewNext}
-                style={{flex:2,height:seniorFieldHeight(seniorMode,cfg.cta.height),borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color,fontFamily:FONT,fontSize:fs(14),fontWeight:600,cursor:"pointer"}}>다음</button>
-            :<button style={{flex:2,height:seniorFieldHeight(seniorMode,cfg.cta.height),borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color,fontFamily:FONT,fontSize:fs(14),fontWeight:600,cursor:"pointer"}}>{cfg.cta.label}</button>}
+                style={{flex:2,height:seniorFieldHeight(seniorMode,cfg.cta.height),borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color,fontFamily:FONT,fontSize:fs(14.5),fontWeight:700,cursor:"pointer"}}>다음</button>
+            :<button style={{flex:2,height:seniorFieldHeight(seniorMode,cfg.cta.height),borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color,fontFamily:FONT,fontSize:fs(14.5),fontWeight:700,cursor:"pointer"}}>{cfg.cta.label}</button>}
         </div>
       </div>
     </div>
@@ -6691,12 +8277,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const fr2 = seniorMode?"10px":cfg.styles.theme==="dark"?"6px":"8px"
     const qg = seniorGap(seniorMode,cfg.styles.qGap||20)
     const lg = seniorGap(seniorMode,cfg.styles.labelGap??8)
-    return <div style={{flex:1,overflowY:"auto" as const,display:"flex",justifyContent:"center",padding:seniorMode?"44px 20px 88px":"40px 20px 80px",background:FC.bg}}>
-      <div style={{width:"100%",maxWidth:cfg.styles.maxW,fontFamily:FONT}}>
+    return <div style={{flex:1,display:"flex",justifyContent:"center",padding:0,background:"transparent"}}>
+      <div style={{width:"100%",maxWidth:cfg.styles.maxW,fontFamily:FONT,padding:seniorMode?"44px 34px 48px":"36px 34px 32px",borderRadius:14,background:FC.bg,boxShadow:cfg.styles.theme==="dark"?"0 1px 2px rgba(0,0,0,.18), 0 12px 32px -20px rgba(0,0,0,.6)":ALT.shadow,height:"fit-content",boxSizing:"border-box" as const}}>
         {/* 헤더 */}
         {cfg.header.title&&<div style={{marginBottom:24}}>
-          {cfg.header.overline&&<div style={{fontSize:fs(12),fontWeight:600,color:accentText,marginBottom:6}}>{cfg.header.overline}</div>}
-          <div style={{fontSize:fs(22),fontWeight:600,color:FC.t1,lineHeight:1.25,letterSpacing:seniorMode?0:"-0.5px",whiteSpace:"pre-line" as const}}>{cfg.header.title}</div>
+          {cfg.header.overline&&<div style={{fontSize:fs(12.5),fontWeight:700,color:accentText,marginBottom:8,textAlign:"center" as const}}>{cfg.header.overline}</div>}
+          <div style={{fontSize:fs(26),fontWeight:700,color:FC.t1,lineHeight:1.25,letterSpacing:seniorMode?0:"-0.4px",whiteSpace:"pre-line" as const,textAlign:"center" as const}}>{cfg.header.title}</div>
         </div>}
         {cfg.ad?.enabled&&<div onClick={()=>setSec("ad")} style={{marginBottom:24,cursor:"pointer",outline:sec==="ad"?`2px solid ${accentBg}`:"none",outlineOffset:4,borderRadius:14}}>
           {renderPreviewAdSlot({...DEFAULT_FORM_AD,...cfg.ad})}
@@ -6719,7 +8305,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{display:"flex",flexDirection:"column" as const,gap:qg}}>
           {curFields.map((field,idx)=>{
             if(field.type==="section_desc") return <div key={field.id} style={{padding:"14px 16px",borderRadius:fr2,background:FC.fieldBg,border:`1px solid ${FC.fieldBorder}`}}>
-              <div style={{fontSize:fs(14),fontWeight:600,color:FC.t1,marginBottom:field.desc?6:0}}>{field.label}</div>
+              <div style={{fontSize:fs(15),fontWeight:700,color:FC.t1,marginBottom:field.desc?6:0,lineHeight:1.45}}>{field.label}</div>
               {field.desc&&<div style={{fontSize:fs(12.5),color:FC.t3,lineHeight:1.7,whiteSpace:"pre-line" as const}}>{field.desc}</div>}
             </div>
             const kdtId=field.id
@@ -6735,7 +8321,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               {dragInsertAt===idx&&dragIdx!==idx&&<div style={{position:"absolute" as const,top:-qg/2-1,left:0,right:0,height:2,borderRadius:1,background:accentBg,zIndex:10,pointerEvents:"none" as const}}/>}
               {!isDisplayOnlyFieldType(field.type)&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:lg}}>
                 {kdtIsSelected&&<span style={{cursor:"grab",color:FC.t3,fontSize:14,lineHeight:1,flexShrink:0,userSelect:"none" as const}}>⠿</span>}
-                <div style={{fontSize:fs(13.5),fontWeight:600,color:FC.t1,flex:1,whiteSpace:"pre-line" as const,lineHeight:1.35}}>
+                <div style={{fontSize:fs(12.5),fontWeight:600,color:FC.t1,flex:1,whiteSpace:"pre-line" as const,lineHeight:1.45}}>
                   {field.label}{field.required&&<span style={{color:accentBg,marginLeft:3}}>*</span>}
                 </div>
                 {kdtIsSelected&&<div style={{position:"relative" as const}}>
@@ -6756,7 +8342,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   </div>}
                 </div>}
               </div>}
-              {(()=>{if(isDisplayOnlyFieldType(field.type))return null;const rawH:any[]=((field as any).helpers&&(field as any).helpers.length)?(field as any).helpers:((field as any).helper)?[{text:(field as any).helper,callout:false}]:[];const hs=rawH.map((h:any)=>typeof h==="string"?{text:h,callout:false}:h);return hs.filter((h:any)=>h.text&&h.text.trim()).map((h:any,hi:number)=>h.callout?<div key={hi} style={{display:"flex",gap:8,padding:"9px 12px",borderRadius:fr2,background:accentBg+"0d",border:`1px solid ${accentBg}33`,marginBottom:6}}><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><circle cx="8" cy="8" r="6" stroke={accentBg} strokeWidth="1.4"/><path d="M8 7v4M8 5.5v.5" stroke={accentBg} strokeWidth="1.4" strokeLinecap="round"/></svg><div style={{fontSize:fs(12),color:accentText,lineHeight:1.6,fontWeight:500}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>  </div>:<div key={hi} style={{fontSize:fs(12),color:FC.t3,marginBottom:4,lineHeight:1.6}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>)})()}
+              {(()=>{if(isDisplayOnlyFieldType(field.type))return null;const rawH:any[]=((field as any).helpers&&(field as any).helpers.length)?(field as any).helpers:((field as any).helper)?[{text:(field as any).helper,callout:false}]:[];const hs=rawH.map((h:any)=>typeof h==="string"?{text:h,callout:false}:h);return hs.filter((h:any)=>h.text&&h.text.trim()).map((h:any,hi:number)=>h.callout?<div key={hi} style={{display:"flex",gap:8,padding:"10px 12px",borderRadius:fr2,background:accentBg+"0d",border:`1px solid ${accentBg}33`,marginBottom:6}}><svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><circle cx="8" cy="8" r="6" stroke={accentBg} strokeWidth="1.4"/><path d="M8 7v4M8 5.5v.5" stroke={accentBg} strokeWidth="1.4" strokeLinecap="round"/></svg><div style={{fontSize:fs(12.5),color:accentText,lineHeight:1.6,fontWeight:500}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>  </div>:<div key={hi} style={{fontSize:fs(12.5),color:FC.t3,marginBottom:4,lineHeight:1.6}} dangerouslySetInnerHTML={{__html:mdToHtml(h.text)}}/>)})()}
               {(field.type==="text"||field.type==="name")&&<input
                 value={pvKdtVals[field.id]||""}
                 onChange={e=>setPvKdtVals(v=>({...v,[field.id]:e.target.value}))}
@@ -6835,9 +8421,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </div>
         {/* 페이지 이동 */}
         <div style={{display:"flex",gap:10,marginTop:28}}>
-          {isMultiPage&&pvPage>1&&<button onClick={()=>setPvPage(p=>p-1)} style={{flex:1,height:fh,borderRadius:fr2,border:`1px solid ${FC.fieldBorder}`,background:"transparent",color:FC.t2,fontFamily:FONT,fontSize:fs(14),fontWeight:600,cursor:"pointer"}}>이전</button>}
-          {pvPage<3?<button onClick={()=>setPvPage(p=>p+1)} style={{flex:1,height:fh,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color||"#fff",fontFamily:FONT,fontSize:fs(14),fontWeight:600,cursor:"pointer"}}>다음</button>
-          :<button style={{flex:1,height:fh,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color||"#fff",fontFamily:FONT,fontSize:fs(14),fontWeight:600,cursor:"pointer"}}>{cfg.cta.label}</button>}
+          {isMultiPage&&pvPage>1&&<button onClick={()=>setPvPage(p=>p-1)} style={{flex:1,height:fh,borderRadius:fr2,border:`1px solid ${FC.fieldBorder}`,background:"transparent",color:FC.t2,fontFamily:FONT,fontSize:fs(14.5),fontWeight:700,cursor:"pointer"}}>이전</button>}
+          {pvPage<3?<button onClick={()=>setPvPage(p=>p+1)} style={{flex:1,height:fh,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color||"#fff",fontFamily:FONT,fontSize:fs(14.5),fontWeight:700,cursor:"pointer"}}>다음</button>
+          :<button style={{flex:1,height:fh,borderRadius:fr2,border:"none",background:accentBg,color:cfg.cta.color||"#fff",fontFamily:FONT,fontSize:fs(14.5),fontWeight:700,cursor:"pointer"}}>{cfg.cta.label}</button>}
         </div>
       </div>
     </div>
@@ -6853,7 +8439,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const hasSaved = savedSlug.length > 0
     const formUrl = hasSaved ? buildPublicFormUrl(savedSlug) : ""
     const brandLabel = brandDisplayName(currentBrand)
-    const brandColor = isSF ? "#6366F1" : currentBrand==="SFACSPACE" ? "#073B70" : A.red
+    const brandColor = isSF ? "#529DFF" : currentBrand==="SFACSPACE" ? "#073B70" : A.red
     const urlPropName = usesCatchformDirect ? "CatchForm 직접 URL" : "Form Base URL"
 
     return <div style={{flex:1,overflowY:"auto" as const,padding:20,display:"flex",flexDirection:"column" as const,gap:14}}>
@@ -6872,7 +8458,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           <div style={{fontSize:12.5,fontWeight:600,color:A.t1}}>배포 페이지 URL</div>
         </div>
         <div style={{fontSize:12,color:A.t3,marginBottom:10,lineHeight:1.5}}>{usesCatchformDirect?`${brandLabel} 폼은 외부 base URL 없이 캐치폼 직접 링크를 사용합니다.`:`환경변수 ${urlPropName} 에 배포된 페이지 주소를 입력하세요.`}</div>
-        <div style={{padding:"9px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${hasBase?A.blue:A.border}`,fontSize:12,fontFamily:"Courier New,monospace",color:hasBase?A.t1:A.t3}}>
+        <div style={{padding:"9px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${hasBase?A.blue:A.border}`,fontSize:12.5,fontFamily:FONT,lineHeight:1.6,wordBreak:"break-all" as const,color:hasBase?A.t1:A.t3}}>
           {hasBase?base:`미설정 — 환경변수에서 입력`}
         </div>
       </div>
@@ -6885,7 +8471,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </div>
         <div style={{fontSize:12,color:A.t3,marginBottom:10,lineHeight:1.5}}>현재 설정을 Supabase에 저장하면 slug가 생성됩니다.</div>
         {hasSaved
-          ?<div style={{padding:"8px 12px",borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,fontFamily:"Courier New,monospace",color:A.blue}}>✓ {savedSlug}</div>
+          ?<div style={{padding:"8px 12px",borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,fontFamily:FONT,fontWeight:600,color:A.blue}}>✓ {savedSlug}</div>
           :<Btn onClick={()=>setShowSave(true)} variant="blue" sm A={A}>DB에 저장하기</Btn>}
       </div>
 
@@ -6897,7 +8483,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </div>
         {formUrl
           ?<>
-            <textarea readOnly value={formUrl} style={{width:"100%",height:52,background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t2,fontFamily:"Courier New,monospace",fontSize:11,padding:"8px",outline:"none",resize:"none" as const,boxSizing:"border-box" as const,wordBreak:"break-all" as const,marginBottom:10}}/>
+            <textarea readOnly value={formUrl} style={{width:"100%",height:52,background:A.card2,border:`1px solid ${A.border}`,borderRadius:A.r,color:A.t2,fontFamily:FONT,fontSize:12,padding:"8px",outline:"none",resize:"none" as const,boxSizing:"border-box" as const,wordBreak:"break-all" as const,marginBottom:10}}/>
             <div style={{display:"flex",gap:6}}>
             <button onClick={()=>{navigator.clipboard.writeText(formUrl);showToast("폼 링크 복사 완료! 🔗")}}
               style={{display:"flex",alignItems:"center",gap:5,height:30,padding:"0 12px",borderRadius:A.r,border:"none",background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:500,transition:"background .1s"}}
@@ -6923,13 +8509,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   function renderAnalyticsPage(){
     try{
 	    const chartBlue="#5EA5F8", chartGreen="#49D38F", chartYellow="#F1C153", chartSlate="#8F9DB2", chartPurple="#9A86F4", chartOrange="#F39A62", chartCyan="#50C8D8", chartPink="#E879B3"
-	    const accent=chartBlue, accentSoft=A.blue2
+	    const accent=chartBlue
 	    const rows=Array.isArray(analyticsRows)?analyticsRows:[]
 	    const events=Array.isArray(analyticsEvents)?analyticsEvents:[]
 	    const rawEvents=Array.isArray(analyticsTrashEvents)?analyticsTrashEvents:[]
 	    const trashRecords=activeAnalyticsTrashRecords()
 	    const eventMeta=(e:any)=>analyticsEventMeta(e)
-	    const fields=getAnalyticsFields()
+	    const fields=analyticsFieldsMemo
 	    const colors=[chartBlue,chartGreen,chartYellow,chartSlate,chartPurple,chartOrange,chartCyan,chartPink]
     const pageName=(p:any)=>{
       const n=Number(p||1)
@@ -6949,118 +8535,59 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const selectedAnalyticsPage=analyticsPages.includes(Number(analyticsSection))?Number(analyticsSection):Number(currentQuestion?.page||analyticsPages[0]||1)
     const sectionQuestionFields=fields.filter(f=>Number(f.page||1)===selectedAnalyticsPage)
     const analyticsQuestionNeedle=analyticsQuestionQuery.trim().toLowerCase()
-    const visibleSectionQuestionFields=analyticsQuestionNeedle
-      ? sectionQuestionFields.filter((f:any)=>`${f.label||""} ${fieldTypeName(f.type)}`.toLowerCase().includes(analyticsQuestionNeedle))
-      : sectionQuestionFields
-    const activeField=sectionQuestionFields.find(f=>f.id===analyticsQuestionId)||sectionQuestionFields[0]||currentQuestion||fields[0]
-    const grouped:any={}
-    events.forEach((e:any)=>{const sid=e.session_id||e.id||"unknown";(grouped[sid]=grouped[sid]||[]).push(e)})
-    const sessions=Object.keys(grouped).map(k=>(grouped[k]||[]).sort((a:any,b:any)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime())) as any[][]
-    const draftResponseRows=sessions.filter(evs=>!evs.some(e=>e.event_type==="completed")).map(evs=>{
-      const latest=[...evs].reverse().find(e=>e.event_type==="draft_saved")
-      if(!latest)return null
-      const meta=eventMeta(latest)
-      const formData=Array.isArray(meta.draft_answers)?meta.draft_answers:[]
-      if(!formData.length)return null
-      const direct=(id:string)=>formData.find((item:any)=>item.answerKey===id)?.answer||""
-      return {
-        id:`draft:${latest.session_id||latest.id}`,
-        __draft:true,
-        __sessionId:latest.session_id||"",
-        __page:latest.page||1,
-        created_at:meta.draft_updated_at||latest.created_at,
-        form_data:formData,
-        name:direct("name"),
-        phone:direct("phone"),
-        email:direct("email"),
-      }
-    }).filter(Boolean) as any[]
-    const responseRows=analyticsResponseScope==="draft"?draftResponseRows:rows
-    const responseFields=getAnalyticsFields({includeConsentFields:true,includeAttributionFields:analyticsResponseScope==="submitted",rows:responseRows})
+    // 섹션을 여러 개 펼칠 수 있으므로, 선택된 질문은 특정 섹션이 아니라 전체에서 찾는다.
+    const activeField=fields.find((f:any)=>f.id===analyticsQuestionId)||sectionQuestionFields[0]||currentQuestion||fields[0]
+    const sessions=analyticsSessionsMemo
+    const draftResponseRows=draftResponseRowsMemo
+    const responseRows=responseRowsMemo
+    const responseFields=responseFieldsMemo
     const editResponseFields=editResponse?getAnalyticsFields({includeConsentFields:true,rows:[editResponse.row]}):[]
     const responseRowIds=responseRows.map((row:any)=>analyticsRowKey(row))
-    const selectedResponseRows=responseRows.filter((row:any)=>selectedAnalyticsRowIds.includes(analyticsRowKey(row)))
+    // 선택 여부를 배열 includes로 확인하면 행 수의 제곱만큼 비교가 생긴다. Set으로 한 번에 조회한다.
+    const selectedRowIdSet=new Set(selectedAnalyticsRowIds)
+    const selectedResponseRows=responseRows.filter((row:any)=>selectedRowIdSet.has(analyticsRowKey(row)))
     const canDeleteSelectedResponses=selectedResponseRows.length>0&&!analyticsSelectedDeleteBusy
-    const allResponseRowsSelected=responseRowIds.length>0&&responseRowIds.every((id:string)=>selectedAnalyticsRowIds.includes(id))
+    const allResponseRowsSelected=responseRowIds.length>0&&responseRowIds.every((id:string)=>selectedRowIdSet.has(id))
     const toggleAllResponseRows=()=>setSelectedAnalyticsRowIds(prev=>{
-      if(allResponseRowsSelected)return prev.filter(id=>!responseRowIds.includes(id))
+      if(allResponseRowsSelected){const drop=new Set(responseRowIds);return prev.filter(id=>!drop.has(id))}
       return Array.from(new Set([...prev,...responseRowIds]))
     })
+    const toggleAnalyticsOpenRow=(key:string)=>setAnalyticsOpenRowKey(prev=>prev===key?"":key)
     const toggleResponseRow=(id:string)=>setSelectedAnalyticsRowIds(prev=>prev.includes(id)?prev.filter(item=>item!==id):[...prev,id])
-    const duplicateLookupValue=(row:any,keys:string[],labels:string[])=>{
-      const direct=keys.map(key=>row?.[key]).find(value=>value!==undefined&&value!==null&&String(value).trim()!=="")
-      if(direct!==undefined&&direct!==null&&String(direct).trim()!=="")return String(direct)
-      const labelSet=new Set(labels.map(label=>label.replace(/\s+/g,"").toLowerCase()))
-      const fd=Array.isArray(row?.form_data)?row.form_data:[]
-      const hit=fd.find((item:any)=>keys.includes(String(item?.answerKey||"")))||fd.find((item:any)=>labelSet.has(String(item?.question||"").replace(/\s+/g,"").toLowerCase()))
-      const answer=hit?.answer
-      return answer===undefined||answer===null?"":Array.isArray(answer)?answer.join(" / "):String(answer)
-    }
-    const duplicateResponseKey=(row:any)=>{
-      if(analyticsResponseScope!=="submitted"||row?.__draft||row?.user_id)return""
-      const name=duplicateLookupValue(row,["name","applicant_name","manager_name","full_name"],["이름","성함","성명","지원자명","담당자명"]).replace(/\s+/g,"").trim().toLowerCase()
-      const phone=duplicateLookupValue(row,["phone","contact_phone","mobile","tel"],["전화번호","휴대폰번호","연락처","휴대폰"]).replace(/\D/g,"")
-      const email=duplicateLookupValue(row,["email","contact_email"],["이메일","메일","이메일주소"]).trim().toLowerCase()
-      return name&&phone&&email?`${name}::${phone}::${email}`:""
-    }
-    const responseRowGroups=(()=>{
-      const groups:any[]=[]
-      const byKey=new Map<string,any>()
-      responseRows.forEach((row:any)=>{
-        const duplicateKey=duplicateResponseKey(row)
-        if(!duplicateKey){
-          groups.push({key:analyticsRowKey(row),duplicateKey:"",rows:[row]})
-          return
-        }
-        const existing=byKey.get(duplicateKey)
-        if(existing)existing.rows.push(row)
-        else{
-          const group={key:`duplicate:${duplicateKey}`,duplicateKey,rows:[row]}
-          byKey.set(duplicateKey,group)
-          groups.push(group)
-        }
-      })
-      return groups
-    })()
+    const responseRowGroups=responseRowGroupsMemo
     const duplicateFoldedCount=responseRows.length-responseRowGroups.length
     const toggleDuplicateResponseGroup=(key:string)=>setExpandedDuplicateResponseGroups(prev=>prev.includes(key)?prev.filter(item=>item!==key):[...prev,key])
-    const isResizableAnalyticsField=(field:any)=>!field.attributionField&&(field.type==="text"||field.type==="textarea")
-    const analyticsDefaultColumnWidth=(field:any,fileCount=0)=>field.attributionField
-      ? (["landing_page","referrer"].includes(String(field.answerKey||field.id))?280:170)
-      : isResizableAnalyticsField(field)?440:fileCount?260:220
-    const analyticsColumnMeta=responseFields.map((field:any)=>{
-      const fileCount=analyticsFieldFiles(responseRows,field).length
-      const resizable=isResizableAnalyticsField(field)
-      const width=Math.max(resizable?300:analyticsDefaultColumnWidth(field,fileCount),analyticsColumnWidths[field.id]||analyticsDefaultColumnWidth(field,fileCount))
-      return{field,fileCount,resizable,width}
-    })
-    const analyticsControlColumnWidth=150
-    const analyticsDateColumnWidth=190
-    const analyticsTableMinWidth=Math.max(1100,analyticsControlColumnWidth+analyticsDateColumnWidth+analyticsColumnMeta.reduce((sum:number,item:any)=>sum+item.width,0))
-    const startAnalyticsColumnResize=(event:React.MouseEvent,field:any,currentWidth:number)=>{
-      event.preventDefault()
-      event.stopPropagation()
-      const startX=event.clientX
-      const startWidth=currentWidth
-      const onMove=(moveEvent:MouseEvent)=>{
-        const nextWidth=Math.max(300,Math.min(960,startWidth+moveEvent.clientX-startX))
-        setAnalyticsColumnWidths(prev=>({...prev,[field.id]:nextWidth}))
-      }
-      const onUp=()=>{
-        window.removeEventListener("mousemove",onMove)
-        window.removeEventListener("mouseup",onUp)
-      }
-      window.addEventListener("mousemove",onMove)
-      window.addEventListener("mouseup",onUp)
-    }
+    // 열 너비는 시안대로 grid-template-columns로 고정한다. (드래그 조절 없음)
+    // 유입 정보(UTM 등)는 시안대로 표 열에 넣지 않고 상세 패널 하단 접기 영역에서만 보여준다.
+    const attributionFields=responseFields.filter((f:any)=>f.attributionField)
+    const analyticsColumnMeta=analyticsColumnMetaMemo
     const completedSessions=sessions.filter(evs=>evs.some(e=>e.event_type==="completed")).length
     const sessionCount=sessions.length||rows.length
-    const completionRate=sessionCount?Math.min(100,Math.round(((completedSessions||rows.length)/sessionCount)*10000)/100):0
+    // 참여는 세션(탭) 단위라 인앱 브라우저 재진입이 매번 새로 잡힌다.
+    // 방문자는 localStorage의 visitor_id 기준이라 같은 브라우저의 재방문을 한 명으로 센다.
+    // 2026-09-08 이전 이벤트에는 visitor_id가 없어, 값이 하나도 없으면 카드를 감춘다.
+    const visitorIds=new Set<string>()
+    let visitorTrackedSessions=0
+    sessions.forEach(evs=>{
+      const id=evs.map(e=>String(analyticsEventMeta(e).visitor_id||"")).find(Boolean)
+      if(id){visitorIds.add(id);visitorTrackedSessions+=1}
+    })
+    const visitorCount=visitorIds.size
+    const visitorCoverage=sessionCount?visitorTrackedSessions/sessionCount:0
+    // 완료는 이벤트 세션이 아니라 실제 제출 응답을 쓰되, 같은 사람의 재제출은 1명으로 접는다.
+    // 세션 기준으로 세면 한 세션에서 두 번 제출한 경우가 빠지고, 봇 필터에 걸린 만큼도 사라진다.
+    const completedCount=submittedPeopleCountMemo||rows.length||completedSessions
+    // 전환율 = 폼에 들어온 사람 중 실제로 제출까지 간 비율. 광고 성과 결산에 그대로 쓸 수 있는 숫자다.
+    const conversionRate=sessionCount?Math.min(100,Math.round((completedCount/sessionCount)*10000)/100):0
     const durations=sessions.map(evs=>{const done=evs.find(e=>e.event_type==="completed");return done&&evs[0]?Math.max(0,(new Date(done.created_at).getTime()-new Date(evs[0].created_at).getTime())/1000):0}).filter(Boolean)
     const avgSec=durations.length?Math.round(durations.reduce((a,b)=>a+b,0)/durations.length):0
     const avgTime=`${Math.floor(avgSec/60)}:${String(avgSec%60).padStart(2,"0")}`
+    // 탭마다 필요한 집계가 다른데 지금까지는 렌더할 때마다 전부 계산했다.
+    // 응답별 데이터에서 행 하나만 눌러도 기간·QR 통계를 다시 돌리느라 느려서, 보고 있는 탭 것만 계산한다.
+    const activeAnalyticsTab=["questions","responses","period","dropoff","qr"].includes(analyticsTab)?analyticsTab:"responses"
+    const periodStatsOn=activeAnalyticsTab==="period"
     const dropMap:any={}
-    sessions.filter(evs=>!evs.some(e=>e.event_type==="completed")).forEach((evs:any[])=>{
+    ;(activeAnalyticsTab==="dropoff"?sessions.filter(evs=>!evs.some(e=>e.event_type==="completed")):[]).forEach((evs:any[])=>{
       const reversed=[...evs].reverse()
       const last=reversed.find(e=>e.event_type!=="started")||reversed[0]||{}
       const fieldEvent=reversed.find(e=>e.field_id||e.field_label)
@@ -7075,37 +8602,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     })
     const dropRows=Object.keys(dropMap).map(k=>dropMap[k]).sort((a:any,b:any)=>b.count-a.count)
     const dropTotal=dropRows.reduce((a:any,b:any)=>a+b.count,0)
-    const countRows=activeField?rows.reduce((acc:any,row:any)=>{analyticsValues(row,activeField).forEach(v=>{acc[v]=(acc[v]||0)+1});return acc},{}):{}
+    const questionStatsOn=activeAnalyticsTab==="questions"
+    const countRows=questionStatsOn&&activeField?rows.reduce((acc:any,row:any)=>{analyticsValues(row,activeField).forEach(v=>{acc[v]=(acc[v]||0)+1});return acc},{}):{}
     const countEntries=Object.keys(countRows).map(k=>[k,countRows[k]])
     const totalCount=countEntries.reduce((a:any,item:any)=>a+item[1],0)
     const listQuestionTypes=["text","name","phone","email","date","time","textarea","file"]
     const isListQuestion=!!activeField&&listQuestionTypes.includes(activeField.type)
-    const directAnswerRows=activeField?rows.map(row=>({row,raw:analyticsRawAnswer(row,activeField),date:fmtAnalyticsDate(row.created_at)})).filter(item=>!isEmptyAnalyticsAnswer(item.raw)):[]
-    const activeFileCount=activeField?analyticsFieldFiles(rows,activeField).length:0
-    const choiceDirectRows=activeField&&!isListQuestion?rows.map(row=>{
+    const directAnswerRows=questionStatsOn&&activeField?rows.map(row=>({row,raw:analyticsRawAnswer(row,activeField),date:fmtAnalyticsDate(row.created_at)})).filter(item=>!isEmptyAnalyticsAnswer(item.raw)):[]
+    const activeFileCount=questionStatsOn&&activeField?analyticsFieldFiles(rows,activeField).length:0
+    const choiceDirectRows=questionStatsOn&&activeField&&!isListQuestion?rows.map(row=>{
       const raw=analyticsRawAnswer(row,activeField)
       const vals=Array.isArray(raw)?raw:(raw?[raw]:[])
       const answers=vals.map((v:any)=>analyticsOptionLabel(activeField,v)).filter(v=>v.trim().startsWith("기타:")).map(v=>v.replace(/^기타:\s*/,"").trim()).filter(Boolean)
       return {row,answers,date:fmtAnalyticsDate(row.created_at)}
     }).filter(item=>item.answers.length>0):[]
-    let pieDeg=0
-    const pieSlices=countEntries.map((item:any,i)=>{
-      const label=item[0],count=item[1]
-      const part=totalCount?(count/totalCount)*360:0
-      const start=pieDeg
-      pieDeg+=part
-      return {label,count,start,end:pieDeg,color:colors[i%colors.length],pct:totalCount?Math.round((count/totalCount)*1000)/10:0}
-    })
-    const polar=(cx:number,cy:number,r:number,deg:number)=>{const rad=(deg-90)*Math.PI/180;return {x:cx+r*Math.cos(rad),y:cy+r*Math.sin(rad)}}
-    const piePath=(cx:number,cy:number,r:number,start:number,end:number)=>{
-      const s=polar(cx,cy,r,end),e=polar(cx,cy,r,start)
-      const large=end-start<=180?0:1
-      return `M ${cx} ${cy} L ${e.x} ${e.y} A ${r} ${r} 0 ${large} 1 ${s.x} ${s.y} Z`
-    }
-    const byDate=rows.reduce((acc:any,row:any)=>{const d=fmtAnalyticsDate(row.created_at)[0]||"날짜 없음";acc[d]=(acc[d]||0)+1;return acc},{})
-	    const periodRows=Object.keys(byDate).map(k=>[k,byDate[k]]).sort((a:any,b:any)=>String(b[0]).localeCompare(String(a[0])))
-	    const periodChartRows=[...periodRows].sort((a:any,b:any)=>String(a[0]).localeCompare(String(b[0]))).slice(-14)
-	    const maxPeriodCount=Math.max(1,...periodChartRows.map((item:any)=>Number(item[1])||0))
 	    const dayOf=(v:any)=>fmtAnalyticsDate(v)[0]||"날짜 없음"
 	    const countryName=(code:string)=>{
 	      const m:any={KR:"대한민국",US:"미국",JP:"일본",CN:"중국",VN:"베트남",TH:"태국",ID:"인도네시아",PH:"필리핀",SG:"싱가포르",GB:"영국",DE:"독일",FR:"프랑스",AU:"호주",CA:"캐나다"}
@@ -7146,8 +8656,40 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	      return raw
 	    }
 	    const sourceFromMeta=(meta:any)=>normalizeSourceLabel(meta?.source||meta?.utm_source||meta?.referrer_host||"")
+	    // 선택한 구간 안의 데이터만 기간별 인사이트에 쓴다. 구간이 "전체"면 경계가 없다.
+	    const periodRangeBounds=(()=>{
+	      if(periodRangeMode==="custom"){
+	        const startMs=periodRangeStart?new Date(`${periodRangeStart}T00:00:00`).getTime():null
+	        const endMs=periodRangeEnd?new Date(`${periodRangeEnd}T23:59:59.999`).getTime():null
+	        return {start:Number.isNaN(startMs as number)?null:startMs,end:Number.isNaN(endMs as number)?null:endMs}
+	      }
+	      if(periodRangeMode==="all")return {start:null as number|null,end:null as number|null}
+	      const end=new Date();end.setHours(23,59,59,999)
+	      const start=new Date(end);start.setDate(start.getDate()-(Number(periodRangeMode)-1));start.setHours(0,0,0,0)
+	      return {start:start.getTime(),end:end.getTime()}
+	    })()
+	    const inPeriodRange=(value:any)=>{
+	      const t=new Date(value||0).getTime()
+	      if(Number.isNaN(t))return false
+	      if(periodRangeBounds.start!==null&&t<periodRangeBounds.start)return false
+	      if(periodRangeBounds.end!==null&&t>periodRangeBounds.end)return false
+	      return true
+	    }
+	    const qrOsName=(m:any)=>{
+	      const raw=String(m.device_os||m.os||m.platform||m.user_agent||"")
+	      if(/android/i.test(raw))return"Android"
+	      if(/ios|iphone|ipad|ipod/i.test(raw))return"iOS"
+	      if(/windows|win/i.test(raw))return"Windows"
+	      if(/mac|os x|macos/i.test(raw))return"macOS"
+	      if(/chrome os|cros/i.test(raw))return"Chrome OS"
+	      if(/linux/i.test(raw))return"Linux"
+	      return raw||"미확인"
+	    }
+	    const periodSessions=periodStatsOn?sessions.filter((evs:any[])=>inPeriodRange(evs[0]?.created_at)):[]
+	    const periodEvents=periodStatsOn?events.filter((e:any)=>inPeriodRange(e.created_at)):[]
+	    const periodCompletedRows=periodStatsOn?submittedPeopleRowsMemo.filter((row:any)=>inPeriodRange(row.created_at)):[]
 	    const sourceBySession:any={}
-	    const sessionSummaries=sessions.map((evs:any[])=>{
+	    const sessionSummaries=periodSessions.map((evs:any[])=>{
 	      const first=evs[0]||{}
 	      const metaEvent=evs.find(e=>{const m=eventMeta(e);return ["started","page_view"].includes(String(e.event_type||""))&&(m.geo_label||m.latitude||m.country||m.region||m.city||m.district||m.neighborhood)})||evs.find(e=>{const m=eventMeta(e);return m.geo_label||m.latitude||m.country||m.region||m.city||m.district||m.neighborhood})||first
 	      const meta=eventMeta(metaEvent)
@@ -7158,9 +8700,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	      const location=placeFromMeta(meta)
 	      const completed=evs.some(e=>e.event_type==="completed")
 	      sourceBySession[first.session_id||"unknown"]=source
-	      return{session:first.session_id||"unknown",source,country,region,city,location,completed,startedAt:first.created_at}
+	      return{session:first.session_id||"unknown",source,country,region,city,location,completed,startedAt:first.created_at,
+	        os:qrOsName(meta),
+	        utm_source:String(meta.utm_source||"").trim(),utm_medium:String(meta.utm_medium||"").trim(),utm_campaign:String(meta.utm_campaign||"").trim()}
 	    })
-    rows.forEach((row:any)=>{
+    if(periodStatsOn)rows.forEach((row:any)=>{
       if(!sessionSummaries.length){
         const src=normalizeSourceLabel(row.referral_source)
         sourceBySession[row.id]=src
@@ -7172,10 +8716,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       sourceMap[s.source].participation+=1
       if(s.completed)sourceMap[s.source].complete+=1
     })
-    if(!sessionSummaries.length){
+    if(periodStatsOn&&!sessionSummaries.length){
       rows.forEach((row:any)=>{const src=normalizeSourceLabel(row.referral_source);sourceMap[src]=sourceMap[src]||{label:src,participation:0,complete:0,share:0,link:0};sourceMap[src].participation+=1;sourceMap[src].complete+=1})
     }
-    events.forEach((e:any)=>{
+    ;periodEvents.forEach((e:any)=>{
       const m=eventMeta(e)
       const sid=e.session_id||"unknown"
       const src=sourceBySession[sid]||sourceFromMeta(m)
@@ -7184,20 +8728,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       if(e.event_type==="link_click")sourceMap[src].link+=1
     })
     const sourceEntries=Object.keys(sourceMap).map(k=>({...sourceMap[k],conversion:sourceMap[k].participation?Math.round((sourceMap[k].complete/sourceMap[k].participation)*1000)/10:0})).sort((a:any,b:any)=>b.participation-a.participation)
-    const sourceTotal=sourceEntries.reduce((a:any,b:any)=>a+b.participation,0)
-    let donutDeg=0
-    const donutSlices=sourceEntries.map((s:any,i:number)=>{const part=sourceTotal?(s.participation/sourceTotal)*360:0;const start=donutDeg;donutDeg+=part;return{...s,start,end:donutDeg,color:colors[i%colors.length],pct:sourceTotal?Math.round((s.participation/sourceTotal)*1000)/10:0}})
-	    const donutPath=(cx:number,cy:number,r:number,start:number,end:number)=>{
-	      const s=polar(cx,cy,r,start),e=polar(cx,cy,r,end)
-	      const large=end-start<=180?0:1
-	      return`M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y}`
-	    }
-	    const donutGap=(slice:any)=>Math.min(1.5,Math.max(0,(slice.end-slice.start)/4))
-	    const donutFillPath=(cx:number,cy:number,ro:number,ri:number,start:number,end:number)=>{
-	      const o1=polar(cx,cy,ro,end),o2=polar(cx,cy,ro,start),i1=polar(cx,cy,ri,start),i2=polar(cx,cy,ri,end)
-	      const large=end-start<=180?0:1
-	      return`M ${o2.x} ${o2.y} A ${ro} ${ro} 0 ${large} 1 ${o1.x} ${o1.y} L ${i2.x} ${i2.y} A ${ri} ${ri} 0 ${large} 0 ${i1.x} ${i1.y} Z`
-	    }
 	    const locationMap:any={}
 	    sessionSummaries.forEach((s:any)=>{
 	      const label=s.location||"미확인"
@@ -7205,9 +8735,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	    })
 	    const locationSource="접속 metadata"
 	    const locationEntries=Object.keys(locationMap).map(k=>[k,locationMap[k]]).sort((a:any,b:any)=>Number(b[1])-Number(a[1]))
-	    const locationTotal=locationEntries.reduce((a:any,b:any)=>a+Number(b[1]||0),0)
     const shareMap:any={}
-    events.filter((e:any)=>String(e.event_type).includes("share")).forEach((e:any)=>{
+    ;periodEvents.filter((e:any)=>String(e.event_type).includes("share")).forEach((e:any)=>{
       const m=eventMeta(e)
       const ch=m.channel||m.share_channel||m.platform||"공유"
       if(!shareMap[ch])shareMap[ch]={channel:ch,total:0,unique:new Set()}
@@ -7215,11 +8744,154 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       shareMap[ch].unique.add(e.session_id||e.id)
     })
     const shareEntries=Object.keys(shareMap).map(k=>({channel:k,total:shareMap[k].total,unique:shareMap[k].unique.size})).sort((a:any,b:any)=>b.total-a.total)
+    // 공유 버튼도 결국 링크라서 클릭 한 번에 link_click과 share가 둘 다 남는다.
+    // 공유로 이미 센 클릭은 링크 클릭에서 빼야 합계가 두 번 잡히지 않는다.
+    const isShareLinkEvent=(e:any)=>{
+      const m=eventMeta(e)
+      return /share|공유|kakao|facebook|twitter|x\.com|linkedin/.test(`${m.href||""} ${m.text||""}`.toLowerCase())
+    }
     const activityMap:any={}
-    sessionSummaries.forEach(s=>{const d=dayOf(s.startedAt);activityMap[d]=activityMap[d]||{date:d,participation:0,complete:0,share:0,link:0};activityMap[d].participation+=1;if(s.completed)activityMap[d].complete+=1})
-    events.forEach((e:any)=>{const d=dayOf(e.created_at);activityMap[d]=activityMap[d]||{date:d,participation:0,complete:0,share:0,link:0};if(String(e.event_type).includes("share"))activityMap[d].share+=1;if(e.event_type==="link_click")activityMap[d].link+=1})
-    const activityEntries=Object.keys(activityMap).map(k=>activityMap[k]).sort((a:any,b:any)=>String(a.date).localeCompare(String(b.date))).slice(-10)
+    const activityBucket=(d:string)=>(activityMap[d]=activityMap[d]||{date:d,participation:0,complete:0,share:0,link:0})
+    sessionSummaries.forEach(s=>{const bucket=activityBucket(dayOf(s.startedAt));bucket.participation+=1})
+    // 완료는 상단 지표와 같은 기준(중복 제외 인원)으로 센다. 세션 기준으로 세면 재제출·봇 필터만큼 어긋난다.
+    periodCompletedRows.forEach((row:any)=>{activityBucket(dayOf(row.created_at)).complete+=1})
+    ;periodEvents.forEach((e:any)=>{
+      if(e.event_type!=="share"&&e.event_type!=="link_click")return
+      const bucket=activityBucket(dayOf(e.created_at))
+      if(e.event_type==="share"){bucket.share+=1;return}
+      if(!isShareLinkEvent(e))bucket.link+=1
+    })
+    const activityEntries=Object.keys(activityMap).map(k=>activityMap[k]).sort((a:any,b:any)=>String(a.date).localeCompare(String(b.date)))
     const maxActivity=Math.max(1,...activityEntries.flatMap((d:any)=>[d.participation,d.complete,d.share,d.link]))
+    // ── 기간별 인사이트(시안) 전용 파생값 ────────────────────────────────
+    // 시안은 도넛 대신 "가로 막대 + 파비콘" 리스트를 쓰고, 유입경로 축을 도메인/UTM으로 바꿔 볼 수 있다.
+    const periodTrend=activityEntries
+    const periodTrendMax=Math.max(1,...periodTrend.map((d:any)=>Number(d.participation)||0))
+    // 가장 높은 봉우리가 상단 기준선에 딱 붙으면 잘린 것처럼 보인다. 축을 조금 키워 여유를 둔다.
+    const periodTrendAxisMax=periodTrendMax*1.12
+    const utmBucketEntries=(axis:"source"|"medium"|"campaign")=>{
+      const key=`utm_${axis}`
+      const enter:any={}
+      sessionSummaries.forEach((item:any)=>{const v=String(item[key]||"").trim()||"없음";enter[v]=(enter[v]||0)+1})
+      const done:any={}
+      rows.forEach((row:any)=>{const v=String(analyticsAttributionValue(row,key)||"").trim()||"없음";done[v]=(done[v]||0)+1})
+      return Object.keys(enter).map(k=>({label:k,participation:enter[k],complete:done[k]||0}))
+        .sort((a:any,b:any)=>b.participation-a.participation)
+    }
+    const periodSourceList=periodSourceAxis==="domain"?sourceEntries:utmBucketEntries(periodSourceAxis)
+    const periodSourceMax=Math.max(1,...periodSourceList.map((x:any)=>Number(x.participation)||0))
+    // 시안의 path(): 값 배열을 부드러운 곡선 path로 바꾼다. close=true면 아래를 막아 영역 그래프가 된다.
+    const trendPath=(vals:number[],w:number,h:number,max:number,close:boolean)=>{
+      if(!vals.length)return ""
+      const n=vals.length
+      const pts=vals.map((v,i)=>{
+        const x=n===1?0:(i/(n-1))*w
+        const y=h-(max?v/max:0)*(h-6)
+        return [Math.round(x*10)/10,Math.round(y*10)/10]
+      })
+      let d=`M${pts[0][0]},${pts[0][1]}`
+      for(let i=1;i<pts.length;i++){
+        const p0=pts[i-1],p1=pts[i],mx=(p0[0]+p1[0])/2
+        d+=` C${mx},${p0[1]} ${mx},${p1[1]} ${p1[0]},${p1[1]}`
+      }
+      if(close)d+=` L${w},${h} L0,${h} Z`
+      return d
+    }
+    const GLOBE_ICON="data:image/svg+xml;utf8,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.2" stroke="#A8AEB9" stroke-width="1.3"/><path d="M1.8 8h12.4M8 1.8c1.7 1.8 2.6 3.9 2.6 6.2S9.7 12.4 8 14.2C6.3 12.4 5.4 10.3 5.4 8S6.3 3.6 8 1.8z" stroke="#A8AEB9" stroke-width="1.3"/></svg>')
+    const faviconUrl=(domain:string)=>`https://icons.duckduckgo.com/ip3/${domain}.ico`
+    const sourceIconUrl=(name:string)=>{
+      if(periodSourceAxis!=="domain")return GLOBE_ICON
+      let dom=/\./.test(name)?name:""
+      if(name==="QR")dom=""
+      if(name.toLowerCase()==="meta")dom="meta.com"
+      if(dom.startsWith("m."))dom=dom.slice(2)
+      return dom?faviconUrl(dom):GLOBE_ICON
+    }
+    const placeIconUrl=(name:string)=>name.startsWith("대한민국")?"https://flagcdn.com/w40/kr.png":name.startsWith("미국")?"https://flagcdn.com/w40/us.png":GLOBE_ICON
+    const shareIconUrl=(name:string)=>{
+      // CatchForm은 채널명을 한글로 남긴다(카카오톡·페이스북·트위터·링크드인·링크).
+      const map:any={"트위터":"x.com","Twitter":"x.com","X":"x.com","카카오톡":"kakao.com","카카오":"kakao.com",
+        "페이스북":"facebook.com","Facebook":"facebook.com","링크드인":"linkedin.com","LinkedIn":"linkedin.com",
+        "네이버":"naver.com","라인":"line.me","인스타그램":"instagram.com","텔레그램":"telegram.org"}
+      const dom=map[name]
+      return dom?faviconUrl(dom):GLOBE_ICON
+    }
+    // 시안의 막대 행: 회색 알약 안쪽에 비율만큼 옅은 색 막대가 깔린다.
+    const periodBarRow:React.CSSProperties={position:"relative",display:"flex",alignItems:"center",gap:10,height:42,flexShrink:0,padding:"0 12px",borderRadius:10,background:A===ALT?"#F6F7F9":A.card2,overflow:"hidden",cursor:"default"}
+    const periodBarFill=(pct:number,color:string):React.CSSProperties=>({position:"absolute",left:0,top:0,bottom:0,width:`${pct}%`,background:color,opacity:.13,display:"block"})
+    const periodIconWrap:React.CSSProperties={position:"relative",width:18,height:18,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}
+    const periodIconImg=(url:string):React.CSSProperties=>({width:16,height:16,flexShrink:0,display:"block",borderRadius:4,background:`url('${url}') center/contain no-repeat`})
+    const periodHoverIn=(e:any)=>{(e.currentTarget as HTMLElement).style.background=A===ALT?"#F1F3F6":A.bg}
+    const periodHoverOut=(e:any)=>{(e.currentTarget as HTMLElement).style.background=A===ALT?"#F6F7F9":A.card2}
+    const periodPurple="#7C6BF0", periodGreen="#2FBF71", periodSlate="#C4CAD4"
+    // 목록이 위아래로 뚝 잘려 보이지 않도록 가장자리를 흐리게 덮는다.
+    // 맨 위/맨 아래에 닿으면 그쪽 흐림은 끄고, 상태 대신 DOM에 직접 써서 스크롤 중 리렌더가 없게 한다.
+    const applyScrollFade=(el:HTMLElement|null)=>{
+      if(!el)return
+      const fadeTop=el.scrollTop>2
+      const fadeBottom=el.scrollTop+el.clientHeight<el.scrollHeight-2
+      const mask=`linear-gradient(to bottom, ${fadeTop?"transparent 0":"#000 0"}, #000 24px, #000 calc(100% - 24px), ${fadeBottom?"transparent 100%":"#000 100%"})`
+      el.style.maskImage=mask
+      ;(el.style as any).webkitMaskImage=mask
+    }
+    const fadeScrollProps={
+      ref:(el:HTMLDivElement|null)=>applyScrollFade(el),
+      onScroll:(e:React.UIEvent<HTMLDivElement>)=>applyScrollFade(e.currentTarget),
+    }
+    // 지표는 선택한 구간에 맞춰 다시 센다. "전체"를 고르면 아래 값들은 전체 집계와 같아진다.
+    const periodParticipation=sessionSummaries.length
+    const periodCompletedCount=periodCompletedRows.length
+    const periodConversionRate=periodParticipation?Math.min(100,Math.round((periodCompletedCount/periodParticipation)*10000)/100):0
+    const periodVisitorIds=new Set<string>()
+    periodSessions.forEach((evs:any[])=>{
+      const id=evs.map((e:any)=>String(analyticsEventMeta(e).visitor_id||"")).find(Boolean)
+      if(id)periodVisitorIds.add(id)
+    })
+    const periodDurations=periodSessions.map((evs:any[])=>{
+      const done=evs.find((e:any)=>e.event_type==="completed")
+      return done&&evs[0]?Math.max(0,(new Date(done.created_at).getTime()-new Date(evs[0].created_at).getTime())/1000):0
+    }).filter((v:number)=>v>0)
+    const periodAvgSec=periodDurations.length?Math.round(periodDurations.reduce((a:number,b:number)=>a+b,0)/periodDurations.length):0
+    const periodAvgTime=`${Math.floor(periodAvgSec/60)}:${String(periodAvgSec%60).padStart(2,"0")}`
+    const periodSubmissionsInRange=periodStatsOn?rows.filter((row:any)=>inPeriodRange(row.created_at)).length:rows.length
+    const duplicateSubmissions=Math.max(0,periodSubmissionsInRange-periodCompletedCount)
+    // 선택한 채널로 들어온 세션만 모아 위치·기기·언어 분포를 낸다.
+    // 응답 표의 답변이 아니라 접속 metadata를 쓰므로, 답을 안 남기고 이탈한 사람도 포함된다.
+    const periodSourceSessions=(label:string)=>sessionSummaries.filter((item:any)=>
+      periodSourceAxis==="domain"
+        ? item.source===label
+        : (String(item[`utm_${periodSourceAxis}`]||"").trim()||"없음")===label)
+    // 연령은 접속 정보가 아니라 제출한 답변에 있으므로, 채널이 붙은 응답을 따로 모은다.
+    const periodSourceRows=(label:string)=>rows.filter((row:any)=>{
+      if(!inPeriodRange(row.created_at))return false
+      if(periodSourceAxis==="domain"){
+        const utm=normalizeSourceLabel(analyticsAttributionValue(row,"utm_source"))
+        const referral=normalizeSourceLabel(row.referral_source)
+        return utm===label||referral===label
+      }
+      return (String(analyticsAttributionValue(row,`utm_${periodSourceAxis}`)||"").trim()||"없음")===label
+    })
+    const periodBreakdown=(list:any[],pick:(item:any)=>string,limit=6)=>{
+      const map:any={}
+      list.forEach(item=>{const key=pick(item)||"미확인";map[key]=(map[key]||0)+1})
+      const total=list.length||1
+      return Object.keys(map).map(k=>({label:k,count:map[k],pct:Math.round((map[k]/total)*1000)/10}))
+        .sort((a:any,b:any)=>b.count-a.count).slice(0,limit)
+    }
+    const periodRangeLabel=periodRangeMode==="all"
+      ? (periodTrend.length?`${periodTrend[0].date} — ${periodTrend[periodTrend.length-1].date}`:"전체 기간")
+      : periodRangeMode==="custom"
+      ? (periodRangeStart||periodRangeEnd?`${periodRangeStart||"처음"} — ${periodRangeEnd||"오늘"}`:"직접 선택")
+      : `최근 ${periodRangeMode}일`
+    const periodStatList=[
+      {label:"참여",value:String(periodParticipation),tip:"폼을 연 세션 수입니다. 같은 사람이 다른 날 다시 열면 각각 셉니다."},
+      ...(periodVisitorIds.size>0?[{label:"방문자",value:String(periodVisitorIds.size),tip:"같은 브라우저에서 여러 번 들어온 접속을 1명으로 묶은 수입니다."}]:[]),
+      {label:"완료",value:String(periodCompletedCount),
+        tip:`중복 응답자를 제외한 응답 개수입니다. 이름·전화번호·이메일이 모두 같으면 같은 사람으로 봅니다.${duplicateSubmissions>0?` 제출 ${periodSubmissionsInRange}건 중 ${duplicateSubmissions}건이 재제출이라 제외됐습니다.`:""}`},
+      {label:"전환율",value:`${periodConversionRate}%`,
+        tip:"폼에 들어온 사람 중 실제로 제출까지 간 비율입니다. 완료 ÷ 참여로 계산합니다."},
+      {label:"평균 세션시간",value:periodAvgTime,tip:"폼을 연 시점부터 제출까지 걸린 시간의 평균입니다. 중간에 그만둔 세션은 빼고 계산합니다."},
+    ]
     const isQrEvent=(e:any)=>{
       const m=eventMeta(e)
       return e.event_type==="qr_scan"||m.cf_qr==="1"||m.utm_source==="qr"||m.utm_medium==="qrcode"||String(m.source||"").toLowerCase()==="qr"
@@ -7238,7 +8910,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const detailQrLinks=(cfg.integrations?.qrLinks||[]).filter(link=>link.type==="detail")
     const detailQrUrls=new Set(detailQrLinks.map(link=>normalizeQrUrl(link.url)).filter(Boolean))
     const detailQrCodes=new Set(detailQrLinks.map(link=>String(link.code||"")).filter(Boolean))
-    const qrEventSource=(rawEvents.length?rawEvents:events).filter((event:any)=>!analyticsTrashTypes.includes(event.event_type))
+    const qrEventSource=activeAnalyticsTab==="qr"?(rawEvents.length?rawEvents:events).filter((event:any)=>!analyticsTrashTypes.includes(event.event_type)):[]
     const qrEventScope=(e:any):"form"|"detail"|"unknown"=>{
       const m=eventMeta(e)
       const explicitType=String(m.qr_type||m.type||"").toLowerCase()
@@ -7271,7 +8943,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const visit=qrVisitEvents.filter((e:any)=>dayOf(e.created_at)===d)
       return {date:d,total:scan.length,unique:new Set(scan.map((e:any)=>e.session_id||e.id)).size,visits:activeQrScope==="detail"?scan.length:new Set(visit.map((e:any)=>e.session_id||e.id)).size}
     })
-    const qrActivityMax=Math.max(1,...qrActivityRows.flatMap((d:any)=>[d.total,d.unique,d.visits]))
     const qrCounterEntries=(items:any[],getLabel:(e:any)=>string,total=items.length)=>{
       const map:any={}
       items.forEach((e:any)=>{const label=getLabel(e)||"미확인";map[label]=(map[label]||0)+1})
@@ -7290,16 +8961,6 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const qrLocationBase=qrLocationEvents.length?qrLocationEvents:qrBaseEvents
     const qrCountryEntries=qrCounterEntries(qrLocationBase,(e:any)=>countryName(eventMeta(e).country||""),qrLocationBase.length)
     const qrCityEntries=qrCounterEntries(qrLocationBase,(e:any)=>placeFromMeta(eventMeta(e)),qrLocationBase.length)
-    const qrOsName=(m:any)=>{
-      const raw=String(m.device_os||m.os||m.platform||m.user_agent||"")
-      if(/android/i.test(raw))return"Android"
-      if(/ios|iphone|ipad|ipod/i.test(raw))return"iOS"
-      if(/windows|win/i.test(raw))return"Windows"
-      if(/mac|os x|macos/i.test(raw))return"macOS"
-      if(/chrome os|cros/i.test(raw))return"Chrome OS"
-      if(/linux/i.test(raw))return"Linux"
-      return raw||"미확인"
-    }
     const qrOsEntries=qrCounterEntries(qrBaseEvents,(e:any)=>qrOsName(eventMeta(e)))
     const qrHourLabels=Array.from({length:24},(_,i)=>`${String(i).padStart(2,"0")}시`)
     const qrDayLabels=["일","월","화","수","목","금","토"]
@@ -7311,6 +8972,32 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       qrHeat[key]=(qrHeat[key]||0)+1
     })
     const qrHeatMax=Math.max(1,...Object.keys(qrHeat).map(k=>qrHeat[k]))
+    // 시안의 시간대 목록: 스캔이 실제로 있었던 시간만 보여준다.
+    const qrHourEntries=(()=>{
+      const map:any={}
+      qrBaseEvents.forEach((e:any)=>{
+        const dt=new Date(e.created_at)
+        if(isNaN(dt.getTime()))return
+        map[dt.getHours()]=(map[dt.getHours()]||0)+1
+      })
+      const total=qrBaseEvents.length
+      return Object.keys(map).map(k=>({hour:Number(k),label:qrHourLabels[Number(k)],count:map[k],pct:total?Math.round((map[k]/total)*1000)/10:0}))
+        .sort((a:any,b:any)=>a.hour-b.hour)
+    })()
+    const qrDayTotalMax=Math.max(1,...qrActivityRows.map((d:any)=>d.total+d.unique+d.visits))
+    // 시안의 QR 목록 행: 유입경로/위치와 같은 "알약 + 비율 막대" 형식을 공유한다.
+    const qrStatRow=(item:any,list:any[],color:string,iconUrl?:string)=>{
+      const max=Math.max(1,Number(list[0]?.count)||1)
+      return <div key={item.label} style={periodBarRow} onMouseEnter={periodHoverIn} onMouseLeave={periodHoverOut}>
+        <span style={periodBarFill(Math.round((Number(item.count)/max)*100),color)}/>
+        {iconUrl
+          ? <span style={periodIconWrap}><span style={periodIconImg(iconUrl)}/></span>
+          : <span style={{width:0,height:16,flexShrink:0,display:"block"}}/>}
+        <span style={{position:"relative" as const,flex:1,minWidth:0,fontSize:13,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.label}</span>
+        <span style={{position:"relative" as const,fontSize:12.5,color:A.t3,flexShrink:0}}>{item.pct}%</span>
+        <span style={{position:"relative" as const,fontSize:13,fontWeight:600,color:A.t1,flexShrink:0,minWidth:30,textAlign:"right" as const,fontVariantNumeric:"tabular-nums" as const}}>{item.count}</span>
+      </div>
+    }
     const tabs=[
       {id:"questions",label:"질문별 인사이트",icon:<path d="M4 13V7M8 13V3M12 13V9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>},
       {id:"responses",label:"응답별 데이터",icon:<path d="M3 4h10M3 8h10M3 12h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>},
@@ -7318,251 +9005,400 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	      {id:"dropoff",label:"질문별 이탈률",icon:<path d="M4 3.5h5v9H4M9 8h5M12 5.8 14.2 8 12 10.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>},
 	      {id:"qr",label:"QR 데이터",dividerBefore:true,icon:<><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h4v4H3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/><path d="M10 10h1.5v1.5H13V13h-3z" fill="currentColor"/></>},
     ] as any[]
-    const activeAnalyticsTab=tabs.some(t=>t.id===analyticsTab)?analyticsTab:"responses"
-    const metric=(icon:any,value:string,label:string,color:string=accent)=><div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,display:"flex",alignItems:"center",gap:14,minHeight:88,boxShadow:A.shadow}}>
-      <div style={{width:46,height:46,borderRadius:A.r,background:color===accent?accentSoft:color+"18",display:"flex",alignItems:"center",justifyContent:"center",color}}><svg width="22" height="22" viewBox="0 0 16 16" fill="none">{icon}</svg></div>
-      <div style={{minWidth:0}}><div style={{fontSize:23,fontWeight:600,color:A.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:210}}>{value}</div><div style={{fontSize:13,color:A.t2,marginTop:3}}>{label}</div></div>
-    </div>
     const emptyState=(text:string)=><div style={{background:A.card,border:`1px dashed ${A.border2}`,borderRadius:A.r2,padding:28,textAlign:"center" as const,color:A.t3,fontSize:13}}>{text}</div>
-    const infoTitle=(label:string,tip:string)=><div style={{display:"flex",alignItems:"center",gap:7,marginBottom:12,position:"relative" as const}}>
-      <span style={{fontSize:16,fontWeight:600,color:A.t1}}>{label}</span>
-      <span
-        onMouseEnter={()=>setAnalyticsInfoTip(label)}
-        onMouseLeave={()=>setAnalyticsInfoTip("")}
-        onFocus={()=>setAnalyticsInfoTip(label)}
-        onBlur={()=>setAnalyticsInfoTip("")}
-        tabIndex={0}
-        aria-label={`${label} 데이터 설명`}
-        style={{width:18,height:18,borderRadius:"50%",border:`1px solid ${A.border2}`,color:A.t3,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600,cursor:"help",background:A.card2,position:"relative" as const,outline:"none"}}>
-        ?
-        {analyticsInfoTip===label&&<div style={{position:"absolute" as const,left:"50%",top:25,transform:"translateX(-50%)",width:280,padding:"11px 12px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,boxShadow:A.shadow,fontSize:12.5,fontWeight:500,lineHeight:1.55,textAlign:"left" as const,zIndex:50,pointerEvents:"none" as const,whiteSpace:"normal" as const}}>
-          <div style={{fontSize:12,fontWeight:600,color:A.t1,marginBottom:5}}>{label} 데이터 기준</div>
-          {tip}
-        </div>}
-      </span>
-    </div>
-    const movePeriodTip=(scope:string,e:any,data:{title:string;color:string;lines:string[]})=>{
-      const card=(e.currentTarget as HTMLElement).closest("[data-period-card]") as HTMLElement|null
-      const r=card?.getBoundingClientRect()
-      if(r)setPeriodHover({scope,x:e.clientX-r.left+14,y:e.clientY-r.top+14,...data})
-    }
-    const periodTip=(scope:string)=>periodHover?.scope===scope&&<div style={{position:"absolute" as const,left:periodHover.x,top:periodHover.y,background:A.card,border:`1px solid ${periodHover.color}`,borderRadius:A.r,padding:"12px 14px",boxShadow:A.shadow,minWidth:190,pointerEvents:"none" as const,zIndex:20}}>
-      <div style={{display:"flex",alignItems:"center",gap:8,fontSize:14,fontWeight:600,color:A.t1,marginBottom:7}}>
-        <span style={{width:10,height:10,borderRadius:"50%",background:periodHover.color,flexShrink:0}}/>{periodHover.title}
-      </div>
-      {periodHover.lines.map((line:string,idx:number)=><div key={idx} style={{fontSize:13,color:A.t2,lineHeight:1.55}}>{line}</div>)}
-    </div>
-	    const movePieTip=(i:number,e:any)=>{
-	      const wrap=(e.currentTarget.ownerSVGElement as SVGElement)?.parentElement
-	      const r=wrap?.getBoundingClientRect()
-	      if(r)setAnalyticsHoverPoint({x:e.clientX-r.left,y:e.clientY-r.top})
-	      setAnalyticsHoverSlice(i)
+	    // 로딩 중에는 완성된 화면과 같은 뼈대를 회색 블록으로 먼저 그려서, 데이터가 들어올 때 레이아웃이 튀지 않게 한다.
+	    const skelBar=(w:any,h=12,extra:React.CSSProperties={})=><div style={{width:w,height:h,borderRadius:h/2>=6?6:4,background:A===ALT?"#EEF0F4":A.card2,animation:"skeletonPulse 1.4s ease-in-out infinite",...extra}}/>
+	    const renderAnalyticsSkeleton=()=>{
+	      if(activeAnalyticsTab==="responses")return <div style={{height:"100%",display:"flex",flexDirection:"column" as const}}>
+	        <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:10,minHeight:72,padding:"22px 28px 16px"}}>
+	          {skelBar(128,20)}{skelBar(46,18)}<div style={{flex:1}}/>{skelBar(150,34,{borderRadius:9})}{skelBar(134,34,{borderRadius:8})}{skelBar(118,34,{borderRadius:8})}
+	        </div>
+	        <div style={{flex:1,minHeight:0,padding:"0 28px"}}>
+	          <div style={{display:"flex",alignItems:"center",gap:14,padding:"0 0 9px",boxShadow:`inset 0 -1px 0 ${A===ALT?"#EFF1F4":A.border}`}}>
+	            {[36,110,150,120,160,150].map((w,i)=><div key={i} style={{width:w}}>{skelBar("70%",10)}</div>)}
+	          </div>
+	          {[0,1,2,3,4,5,6,7].map(i=><div key={i} style={{display:"flex",alignItems:"center",gap:14,minHeight:52,boxShadow:`inset 0 -1px 0 ${A===ALT?"#F5F6F8":A.border}`}}>
+	            {[36,110,150,120,160,150].map((w,j)=><div key={j} style={{width:w}}>{skelBar(j===0?16:`${55+((i*7+j*13)%35)}%`,11,{animationDelay:`${(i*6+j)*0.04}s`})}</div>)}
+	          </div>)}
+	        </div>
+	      </div>
+	      if(activeAnalyticsTab==="questions")return <div style={{height:"100%",display:"flex"}}>
+	        <div style={{width:280,flexShrink:0,padding:"22px 18px",borderRight:`1px solid ${A.border}`,display:"flex",flexDirection:"column" as const,gap:12}}>
+	          {skelBar(96,14)}
+	          {[0,1,2,3,4,5].map(i=><div key={i} style={{display:"flex",flexDirection:"column" as const,gap:8}}>
+	            {skelBar(`${60+((i*23)%35)}%`,12,{animationDelay:`${i*0.06}s`})}
+	          </div>)}
+	        </div>
+	        <div style={{flex:1,minWidth:0,padding:"22px 28px",display:"flex",flexDirection:"column" as const,gap:16}}>
+	          {skelBar(220,20)}
+	          {[0,1,2,3,4].map(i=><div key={i} style={{display:"flex",alignItems:"center",gap:12}}>
+	            <div style={{width:150}}>{skelBar("85%",12)}</div>
+	            <div style={{flex:1}}>{skelBar(`${30+((i*29)%60)}%`,14,{animationDelay:`${i*0.07}s`})}</div>
+	          </div>)}
+	        </div>
+	      </div>
+	      // 기간별 인사이트는 자체 패딩을 쓰는 탭이라 스켈레톤도 같은 여백을 넣어준다.
+	      return <div style={{display:"flex",flexDirection:"column" as const,gap:18,padding:"22px 28px"}}>
+	        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12}}>
+	          {[0,1,2,3].map(i=><div key={i} style={{padding:"18px 16px",borderRadius:A.r2,background:A.card,border:`1px solid ${A.border}`,display:"flex",flexDirection:"column" as const,gap:10}}>
+	            {skelBar("55%",11,{animationDelay:`${i*0.06}s`})}{skelBar("40%",22,{animationDelay:`${i*0.06+0.04}s`})}
+	          </div>)}
+	        </div>
+	        <div style={{padding:20,borderRadius:A.r2,background:A.card,border:`1px solid ${A.border}`,display:"flex",flexDirection:"column" as const,gap:14}}>
+	          {skelBar(160,16)}
+	          {[0,1,2,3,4,5].map(i=><div key={i} style={{display:"flex",alignItems:"center",gap:12}}>
+	            <div style={{width:140}}>{skelBar("80%",12)}</div>
+	            <div style={{flex:1}}>{skelBar(`${25+((i*31)%65)}%`,14,{animationDelay:`${i*0.07}s`})}</div>
+	          </div>)}
+	        </div>
+	      </div>
 	    }
-	    const topIconButton=(key:string,label:string,onClick:()=>void,icon:any,color=A.t2)=><div style={{position:"relative" as const}}>
+	    // 시안 기준: 평소엔 회색, 호버하면 옅은 회색 배경. 삭제 메뉴가 열려 있을 때만 빨간색으로 강조한다.
+	    const topIconButton=(key:string,label:string,onClick:()=>void,icon:any,danger=false)=><div style={{position:"relative" as const}}>
 	      <button
 	        onClick={onClick}
-	        onMouseEnter={()=>setAnalyticsTopTip(key)}
-	        onMouseLeave={()=>setAnalyticsTopTip("")}
+	        onMouseEnter={e=>{setAnalyticsTopTip(key);if(!danger){const el=e.currentTarget as HTMLElement;el.style.background=A===ALT?"#F1F3F6":A.card2;el.style.color=A.t2}}}
+	        onMouseLeave={e=>{setAnalyticsTopTip("");if(!danger){const el=e.currentTarget as HTMLElement;el.style.background="transparent";el.style.color=A.t3}}}
 	        aria-label={label}
-	        style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-	        <svg width="15" height="15" viewBox="0 0 16 16" fill="none">{icon}</svg>
+	        style={{width:34,height:34,flexShrink:0,borderRadius:A.r,border:"none",background:danger?(A===ALT?"#FDECEC":`${A.red}1A`):"transparent",color:danger?A.red:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"background .12s, color .12s"}}>
+	        <svg width="17" height="17" viewBox="0 0 24 24" fill="none">{icon}</svg>
 	      </button>
 	      {analyticsTopTip===key&&<div style={{position:"absolute" as const,top:39,left:"50%",transform:"translateX(-50%)",padding:"5px 8px",borderRadius:6,background:A.t1,color:A.card,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const,zIndex:1000,boxShadow:A.shadow,pointerEvents:"none" as const}}>{label}</div>}
 	    </div>
-	    return <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,color:A.t1,fontFamily:FONT,overflow:"hidden",position:"relative" as const}}>
-      <div style={{height:52,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 16px",gap:10,flexShrink:0,boxShadow:A.shadow}}>
-        <button onClick={returnToBuilderFromAnalytics} style={{display:"flex",alignItems:"center",gap:6,background:"transparent",border:"none",cursor:"pointer",color:A.t2,fontSize:12.5,fontWeight:600,fontFamily:FONT}}>
-          <span style={{fontSize:13}}>←</span><span>편집으로</span>
+	    return <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,color:A.t1,fontFamily:FONT,overflow:"hidden",position:"relative" as const,WebkitFontSmoothing:"antialiased"}}>
+      {renderEditorTabsStrip()}
+      <div style={{height:58,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 20px",gap:12,flexShrink:0}}>
+        {/* 분석에서 뒤로 가려는 손은 대개 대시보드로 향한다. 첫 버튼을 대시보드로 두고,
+            편집은 그 옆 아이콘으로 옮겨 실수로 편집 창에 들어가는 일을 줄인다. */}
+        <style>{`.cf-tip-b{position:relative}.cf-tip-b::after{content:attr(data-tip);position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);padding:5px 8px;border-radius:6px;background:${adminDark?"#2A2F3A":"#15181D"};color:#fff;font-size:11.5px;font-weight:600;line-height:1;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .12s;z-index:1000}.cf-tip-b:hover::after{opacity:1}`}</style>
+        <button onClick={()=>{rememberActiveEditorTab();setView("dashboard")}}
+          style={{height:32,padding:"0 10px",display:"flex",alignItems:"center",gap:6,background:"transparent",border:"none",borderRadius:A.r,cursor:"pointer",color:A.t2,fontSize:12.5,fontWeight:500,fontFamily:FONT,flexShrink:0,transition:"background .12s, color .12s"}}
+          onMouseEnter={e=>{const el=e.currentTarget as HTMLElement;el.style.background=A===ALT?"#F1F3F6":A.card2;el.style.color=A.t1}}
+          onMouseLeave={e=>{const el=e.currentTarget as HTMLElement;el.style.background="transparent";el.style.color=A.t2}}>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M9.5 3.5 5 8l4.5 4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span>대시보드</span>
         </button>
-        <div style={{width:1,height:16,background:A.border}}/>
+        <button onClick={returnToBuilderFromAnalytics}
+          className="cf-tip-b" data-tip="편집으로" aria-label="편집으로"
+          style={{width:30,height:30,flexShrink:0,borderRadius:A.r,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"background .12s, color .12s"}}
+          onMouseEnter={e=>{const el=e.currentTarget as HTMLElement;el.style.background=A===ALT?"#F1F3F6":A.card2;el.style.color=A.t2}}
+          onMouseLeave={e=>{const el=e.currentTarget as HTMLElement;el.style.background="transparent";el.style.color=A.t3}}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+            <path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/>
+            <path d="M14.5 6.5 17.5 9.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
+          </svg>
+        </button>
+        <div style={{width:1,height:18,background:A.border}}/>
         <div style={{minWidth:0}}>
-          <div style={{fontSize:13,fontWeight:600,color:A.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:340}}>{loadedName||"응답 및 분석"}</div>
+          <div style={{fontSize:14,fontWeight:700,color:A.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:280}}>{loadedName||"응답 및 분석"}</div>
         </div>
+        <span style={{padding:"3px 8px",borderRadius:6,background:A.card2,fontSize:11.5,fontWeight:600,color:A.t3,flexShrink:0,whiteSpace:"nowrap" as const}}>응답 {rows.length}건</span>
         <div style={{flex:1}}/>
+	        {topIconButton("refresh","새로고침",loadAnalytics,<><path d="M20.5 12a8.5 8.5 0 1 1-2.49-6.01" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/><path d="M20.5 4v5h-5" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></>)}
 	        <div style={{position:"relative" as const}}>
-	          {topIconButton("trash-menu","응답 삭제 관리",()=>{setAnalyticsTopTip("");setShowAnalyticsDeleteMenu(v=>!v)},<><path d="M3 5h10M6 5V3.5h4V5M5 7v5M8 7v5M11 7v5M4 5l.55 8.2c.04.45.4.8.85.8h5.2c.45 0 .81-.35.85-.8L12 5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/>{trashRecords.length>0&&<circle cx="13" cy="3" r="2.2" fill={A.red}/>}</>,A.red)}
-	          {showAnalyticsDeleteMenu&&<div style={{position:"absolute" as const,top:38,right:0,width:148,padding:5,borderRadius:A.r,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow,zIndex:1002}}>
-	            <button onClick={()=>{setShowAnalyticsDeleteMenu(false);setShowDeleteAllAnalytics(true)}} style={{width:"100%",height:32,padding:"0 9px",border:"none",borderRadius:6,background:"transparent",color:A.red,fontFamily:FONT,fontSize:12.5,fontWeight:600,textAlign:"left" as const,cursor:"pointer"}}>응답 전체 삭제</button>
-	            <button onClick={()=>{setShowAnalyticsDeleteMenu(false);setShowAnalyticsTrash(true)}} style={{width:"100%",height:32,padding:"0 9px",border:"none",borderRadius:6,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,textAlign:"left" as const,cursor:"pointer"}}>휴지통{trashRecords.length>0?` ${trashRecords.length}`:""}</button>
+	          {topIconButton("trash-menu","응답 삭제",()=>{setAnalyticsTopTip("");setShowAnalyticsDeleteMenu(v=>!v)},<>
+	            <path d="M4 7h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+	            <path d="M9.5 4.5h5a1 1 0 0 1 1 1V7h-7V5.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+	            <path d="M6 7.5h12l-.85 11.1a1.5 1.5 0 0 1-1.5 1.4H8.35a1.5 1.5 0 0 1-1.5-1.4L6 7.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+	            <path d="M10.3 11v5.6M13.7 11v5.6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
+	            {trashRecords.length>0&&<circle cx="19.5" cy="4.5" r="3" fill={A.red}/>}
+	          </>,showAnalyticsDeleteMenu)}
+	          {showAnalyticsDeleteMenu&&<div style={{position:"absolute" as const,top:42,right:0,width:184,padding:6,borderRadius:A.r2,background:A.card,boxShadow:"0 1px 2px rgba(16,24,40,.08),0 16px 40px -10px rgba(16,24,40,.28)",zIndex:1002}}>
+	            <button onClick={()=>{setShowAnalyticsDeleteMenu(false);setShowDeleteAllAnalytics(true)}} style={{width:"100%",height:38,padding:"0 11px",border:"none",borderRadius:9,background:"transparent",color:A.red,fontFamily:FONT,fontSize:13.5,fontWeight:700,textAlign:"left" as const,cursor:"pointer"}}>응답 전체 삭제</button>
+	            <button onClick={()=>{setShowAnalyticsDeleteMenu(false);setShowAnalyticsTrash(true)}} style={{width:"100%",height:38,padding:"0 11px",border:"none",borderRadius:9,background:"transparent",color:A.t1,fontFamily:FONT,fontSize:13.5,fontWeight:600,textAlign:"left" as const,cursor:"pointer"}}>휴지통{trashRecords.length>0?` ${trashRecords.length}`:""}</button>
 	          </div>}
 	        </div>
-	        {topIconButton("refresh","새로고침",loadAnalytics,<path d="M13 3v4H9M3 13V9h4M12.2 8.8A4.5 4.5 0 0 1 4.5 12M3.8 7.2A4.5 4.5 0 0 1 11.5 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>)}
-	        {activeAnalyticsTab==="responses"&&<div style={{position:"relative" as const}}>
-	          <select value={analyticsCsvSort} onChange={e=>setAnalyticsCsvSort(e.target.value as "desc"|"asc")} title="시트 다운로드 날짜 정렬"
-	            style={{height:32,minWidth:116,padding:"0 30px 0 10px",appearance:"none" as any,WebkitAppearance:"none" as any,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,outline:"none",cursor:"pointer"}}>
-	            <option value="desc">날짜 내림차순</option>
-	            <option value="asc">날짜 오름차순</option>
-	          </select>
-	          <SelectChevron color={A.t2}/>
-	        </div>}
-	        {activeAnalyticsTab==="responses"&&<button onClick={()=>exportAnalyticsCsv(responseRows)} style={{height:32,padding:"0 13px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
-	          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>시트 다운로드
-	        </button>}
       </div>
-      <div style={{height:50,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 20px",gap:6,flexShrink:0}}>
+      <div style={{height:44,background:A.card,boxShadow:`inset 0 -1px 0 ${A.border}`,display:"flex",alignItems:"center",padding:"0 24px",gap:22,flexShrink:0}}>
         {tabs.map(t=>{const on=activeAnalyticsTab===t.id;return <React.Fragment key={t.id}>
-          {t.dividerBefore&&<div style={{width:1,height:22,background:A.border,margin:"0 8px"}}/>}
+          {t.dividerBefore&&<div style={{width:1,height:18,background:A.border,margin:"0 0 0 -4px"}}/>}
           <button onClick={()=>setAnalyticsTab(t.id)}
-          style={{height:32,padding:"0 12px",borderRadius:A.r,border:`1px solid ${on?A.blue+"33":"transparent"}`,background:on?A.blue2:"transparent",color:on?A.blue:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:7}}>
+          style={{height:44,padding:"0 2px",borderRadius:0,border:"none",background:"transparent",color:on?A.t1:A.t3,fontFamily:FONT,fontSize:13.5,fontWeight:on?700:500,cursor:"pointer",display:"flex",alignItems:"center",gap:7,boxShadow:on?`inset 0 -2px 0 ${A.blue}`:"none"}}>
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none">{t.icon}</svg>{t.label}
         </button>
         </React.Fragment>})}
       </div>
-      <div style={{flex:1,minHeight:0,overflow:activeAnalyticsTab==="responses"?"hidden":"auto",padding:"24px 28px 36px",boxSizing:"border-box" as const}}>
-        <div style={{maxWidth:1280,margin:"0 auto",height:activeAnalyticsTab==="responses"?"100%":"auto"}}>
-        {analyticsLoading?<div style={{fontSize:14,color:A.t2}}>불러오는 중...</div>:analyticsErr?<div style={{fontSize:14,color:A.red}}>{analyticsErr}</div>:<>
+      {(()=>{const flush:boolean=["questions","responses","period","dropoff","qr"].includes(activeAnalyticsTab);return (
+      <div style={{flex:1,minHeight:0,overflow:flush?"hidden":"auto",
+        padding:flush?0:"22px 28px 36px",boxSizing:"border-box" as const,background:A.card}}>
+        <div style={{maxWidth:flush?"none":1280,margin:flush?0:"0 auto",height:flush?"100%":"auto"}}>
+        {analyticsLoading?renderAnalyticsSkeleton():analyticsErr?<div style={{fontSize:14,color:A.red,padding:flush?"22px 28px":0}}>{analyticsErr}</div>:<>
           {activeAnalyticsTab==="responses"&&<div style={{height:"100%",minHeight:0,display:"flex",flexDirection:"column" as const}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap" as const,marginBottom:16}}>
-              <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <div style={{fontSize:22,fontWeight:600,color:A.t1}}>응답별 데이터</div>
-                <div style={{height:26,padding:"0 12px",borderRadius:999,background:A.card2,border:`1px solid ${A.border}`,color:A.t2,display:"flex",alignItems:"center",fontSize:12.5,fontWeight:600}}>{responseRows.length}개</div>
-                {duplicateFoldedCount>0&&<div style={{height:26,padding:"0 10px",borderRadius:999,background:A.blue2,border:`1px solid ${A.blue}33`,color:A.blue,display:"flex",alignItems:"center",fontSize:12,fontWeight:600}}>중복 {duplicateFoldedCount}개 접힘</div>}
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <button onClick={()=>exportAnalyticsCsv(selectedResponseRows,"selected-responses")} disabled={selectedResponseRows.length===0}
-                  style={{height:38,padding:"0 12px",borderRadius:A.r,border:`1px solid ${selectedResponseRows.length?A.blue+"55":A.border}`,background:selectedResponseRows.length?A.blue2:A.card2,color:selectedResponseRows.length?A.blue:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:selectedResponseRows.length?"pointer":"not-allowed",display:"inline-flex",alignItems:"center",gap:6}}>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v7M5 6l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  선택 다운로드 {selectedResponseRows.length>0&&`${selectedResponseRows.length}개`}
-                </button>
+            {/* 시안: 제목 + 개수 배지 + (선택 시 액션) + 상태 세그먼트 + 정렬 + 시트 다운로드 */}
+            <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:10,minHeight:72,padding:"22px 28px 16px",flexWrap:"wrap" as const}}>
+              <span style={{fontSize:18,fontWeight:700,color:A.t1,letterSpacing:"-.2px",flexShrink:0,whiteSpace:"nowrap" as const}}>응답별 데이터</span>
+              <span style={{flexShrink:0,padding:"3px 8px",borderRadius:6,background:A===ALT?"#F1F3F6":A.card2,fontSize:11.5,fontWeight:600,color:A.t3,whiteSpace:"nowrap" as const}}>{responseRows.length}개</span>
+              {duplicateFoldedCount>0&&<span style={{flexShrink:0,padding:"3px 8px",borderRadius:6,background:A.blue2,fontSize:11.5,fontWeight:600,color:A.blue,whiteSpace:"nowrap" as const}}>중복 {duplicateFoldedCount}건 접힘</span>}
+              <div style={{flex:1}}/>
+              {selectedResponseRows.length>0&&<div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                <span style={{fontSize:12,fontWeight:600,color:A.blue,whiteSpace:"nowrap" as const}}>{selectedResponseRows.length}개 선택</span>
+                <button onClick={()=>exportAnalyticsCsv(selectedResponseRows,"selected-responses")}
+                  style={{height:32,padding:"0 11px",border:"none",borderRadius:8,background:A.blue2,color:A.blue,fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const}}>선택 다운로드</button>
                 <button onClick={()=>deleteSelectedAnalyticsRows(selectedResponseRows)} disabled={!canDeleteSelectedResponses}
-                  style={{height:38,padding:"0 12px",borderRadius:A.r,border:`1px solid ${canDeleteSelectedResponses?A.red+"55":A.border}`,background:canDeleteSelectedResponses?`${A.red}14`:A.card2,color:canDeleteSelectedResponses?A.red:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:canDeleteSelectedResponses?"pointer":"not-allowed",display:"inline-flex",alignItems:"center",gap:6}}>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v6M8 6v6M11 6v6M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  {analyticsSelectedDeleteBusy?"삭제 중...":`선택 삭제 ${selectedResponseRows.length>0?`${selectedResponseRows.length}개`:""}`}
+                  style={{height:32,padding:"0 11px",border:"none",borderRadius:8,background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:canDeleteSelectedResponses?"pointer":"not-allowed",whiteSpace:"nowrap" as const}}
+                  onMouseEnter={e=>{if(canDeleteSelectedResponses){(e.currentTarget as HTMLElement).style.background=A===ALT?"#FDECEC":"rgba(232,92,92,0.12)";(e.currentTarget as HTMLElement).style.color=A.red}}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}>
+                  {analyticsSelectedDeleteBusy?"삭제 중...":"선택 삭제"}
                 </button>
-                <div style={{display:"flex",gap:4,padding:4,borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`}}>
-                {([{id:"submitted",label:`제출 완료 ${rows.length}`},{id:"draft",label:`작성 중 ${draftResponseRows.length}`} ] as const).map(item=>{const active=analyticsResponseScope===item.id;return <button key={item.id} onClick={()=>setAnalyticsResponseScope(item.id)}
-                  style={{height:30,padding:"0 12px",borderRadius:A.r,border:"none",background:active?A.card:"transparent",color:active?A.blue:A.t2,boxShadow:active?A.shadow:"none",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
-                  {item.label}
-                </button>})}
-                </div>
+              </div>}
+              <div style={{display:"flex",alignItems:"center",gap:2,padding:3,borderRadius:9,background:A===ALT?"#F1F3F6":A.card2,flexShrink:0}}>
+                {([{id:"submitted",label:`제출 완료 ${rows.length}`},{id:"draft",label:`작성 중 ${draftResponseRows.length}`}] as const).map(item=>{const active=analyticsResponseScope===item.id;return (
+                  <button key={item.id} onClick={()=>setAnalyticsResponseScope(item.id)}
+                    style={{height:28,padding:"0 11px",border:"none",borderRadius:7,fontSize:12.5,cursor:"pointer",fontFamily:FONT,flexShrink:0,whiteSpace:"nowrap" as const,
+                      fontWeight:active?700:500,background:active?A.card:"transparent",color:active?A.blue:A.t2,
+                      boxShadow:active?"0 1px 2px rgba(16,24,40,.10)":"none"}}>{item.label}</button>
+                )})}
               </div>
+              <PanelSelect value={analyticsCsvSort} onChange={v=>setAnalyticsCsvSort(v as "desc"|"asc")} A={A} height={34} fontSize={12.5} fontWeight={600} radius={8} padX={12} gap={6} width="auto"
+                options={[{value:"desc",label:"날짜 내림차순"},{value:"asc",label:"날짜 오름차순"}]}/>
+              <button onClick={()=>exportAnalyticsCsv(responseRows)}
+                style={{height:34,padding:"0 14px",display:"flex",alignItems:"center",gap:6,border:"none",borderRadius:8,background:A.blue,color:"#fff",
+                  fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap" as const,boxShadow:"0 1px 2px rgba(49,130,246,.35)"}}>
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                시트 다운로드
+              </button>
             </div>
-            {analyticsResponseScope==="draft"&&<div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,margin:"-5px 0 14px"}}>작성 중 데이터는 제출 완료 전 자동 저장된 임시 기록입니다. 파일 첨부 내용은 브라우저 보안상 제출 전에는 저장되지 않습니다.</div>}
-            {analyticsResponseScope==="submitted"&&duplicateFoldedCount>0&&<div style={{fontSize:12.5,color:A.t3,lineHeight:1.6,margin:"-5px 0 14px"}}>로그인 없이 제출된 응답 중 이름·전화번호·이메일이 모두 같은 응답은 대표 1개로 묶었어요. `중복` 버튼을 누르면 같은 사람이 더 제출한 응답을 펼쳐볼 수 있습니다.</div>}
-            {responseRows.length===0?emptyState(analyticsResponseScope==="draft"?"아직 작성 중인 응답이 없습니다.":"아직 제출 완료된 응답이 없습니다."):<div className="catchform-analytics-table-scroll" style={{flex:1,minHeight:0,background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,overflow:"auto",boxShadow:A.shadow}}>
-              <style>{`.catchform-analytics-table-scroll::-webkit-scrollbar{height:7px;width:7px}.catchform-analytics-table-scroll::-webkit-scrollbar-thumb{background:${A.border2};border-radius:999px}.catchform-analytics-table-scroll::-webkit-scrollbar-track{background:transparent}`}</style>
-              <table style={{borderCollapse:"collapse",minWidth:analyticsTableMinWidth,width:"100%",fontSize:13,tableLayout:"fixed" as const}}>
-                <thead><tr><th style={{position:"sticky" as const,top:0,zIndex:4,width:analyticsControlColumnWidth,minWidth:analyticsControlColumnWidth,padding:"13px 10px",textAlign:"center" as const,borderBottom:`1px solid ${A.border}`,color:A.t2,background:A.card2}}><label style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7,cursor:"pointer"}}><input type="checkbox" checked={allResponseRowsSelected} onChange={toggleAllResponseRows} style={{width:15,height:15,accentColor:A.blue,cursor:"pointer"}}/>전체</label></th><th style={{position:"sticky" as const,top:0,zIndex:4,width:analyticsDateColumnWidth,minWidth:analyticsDateColumnWidth,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t2,background:A.card2}}>날짜</th>{analyticsColumnMeta.map(({field:f,fileCount,resizable,width:colWidth}:any)=>{return <th key={f.id} style={{position:"sticky" as const,top:0,zIndex:4,padding:"13px 16px",textAlign:"left",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,width:colWidth,minWidth:colWidth,maxWidth:colWidth,background:A.card2}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
-                    <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{f.label}</span>
-                    {fileCount>0&&<button onClick={()=>downloadAnalyticsFilesZip(f,responseRows)} title={`첨부파일 ${fileCount}개 일괄 다운로드`} style={{height:28,padding:"0 9px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,flexShrink:0,fontFamily:FONT,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const}}>
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v7M5 6l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      모두 다운로드
-                    </button>}
-                    {resizable&&<span onMouseDown={e=>startAnalyticsColumnResize(e,f,colWidth)} title="드래그해서 너비 조절" style={{position:"absolute" as const,top:0,right:-3,width:8,height:"100%",cursor:"col-resize",display:"flex",alignItems:"stretch",justifyContent:"center",zIndex:6}}>
-                      <span style={{width:2,margin:"10px 0",borderRadius:999,background:A.border2}}/>
-                    </span>}
-                  </div>
-                </th>})}</tr></thead>
-                <tbody>{responseRowGroups.map((group:any)=>{
-                  const primary=group.rows[0]
-                  const duplicateRows=group.rows.slice(1)
-                  const isOpen=!!group.duplicateKey&&expandedDuplicateResponseGroups.includes(group.duplicateKey)
-                  const renderResponseRow=(row:any,opts:any={})=>{
-                    const dt=fmtAnalyticsDate(row.created_at)
-                    const rowKey=analyticsRowKey(row)
-                    const selected=selectedAnalyticsRowIds.includes(rowKey)
-                    const duplicateChild=!!opts.duplicateChild
-                    const duplicateCount=Number(opts.duplicateCount||0)
-                    const rowBg=selected?A.blue2:duplicateChild?A.card2:"transparent"
-                    return <tr key={opts.key||rowKey} style={{background:rowBg,verticalAlign:"top" as const}}>
-                      <td style={{width:analyticsControlColumnWidth,minWidth:analyticsControlColumnWidth,padding:"13px 10px",borderBottom:`1px solid ${A.border}`,textAlign:"center" as const}}>
-                        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,flexWrap:"wrap" as const}}>
-                          <input type="checkbox" checked={selected} onChange={()=>toggleResponseRow(rowKey)} aria-label="응답 선택" style={{width:15,height:15,accentColor:A.blue,cursor:"pointer",flexShrink:0}}/>
-                          {!row.__draft&&<button onClick={()=>openEditAnalyticsRow(row)} title="응답 수정" style={{width:28,height:28,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.blue,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 11.5V13h1.5L12 5.5 10.5 4 3 11.5zM9.8 4.7l1.5 1.5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
-                          {duplicateCount>0&&<button onClick={()=>toggleDuplicateResponseGroup(group.duplicateKey)} title="중복 응답 펼치기" style={{height:26,padding:"0 8px",borderRadius:999,border:`1px solid ${A.blue}44`,background:isOpen?A.blue:A.blue2,color:isOpen?"#fff":A.blue,fontFamily:FONT,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>
-                            중복 {duplicateCount+1}
-                            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{transform:isOpen?"rotate(180deg)":"rotate(0deg)",transition:"transform .15s ease"}}><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                          </button>}
-                          {duplicateChild&&<span style={{height:22,padding:"0 7px",borderRadius:999,background:A.card,border:`1px solid ${A.border}`,color:A.t3,fontSize:11,fontWeight:700}}>중복 {opts.duplicateIndex}/{opts.duplicateTotal}</span>}
+            {analyticsResponseScope==="draft"&&<div style={{flexShrink:0,fontSize:12.5,color:A.t3,lineHeight:1.6,padding:"0 28px 12px"}}>작성 중 데이터는 제출 완료 전 자동 저장된 임시 기록입니다. 파일 첨부 내용은 브라우저 보안상 제출 전에는 저장되지 않습니다.</div>}
+            {analyticsResponseScope==="submitted"&&duplicateFoldedCount>0&&<div style={{flexShrink:0,fontSize:12.5,color:A.t3,lineHeight:1.6,padding:"0 28px 12px"}}>로그인 없이 제출된 응답 중 이름·전화번호·이메일이 모두 같은 응답은 대표 1개로 묶었어요. `중복` 버튼을 누르면 같은 사람이 더 제출한 응답을 펼쳐볼 수 있습니다.</div>}
+            {(()=>{
+              // 시안 구조: 좌측 그리드 표 + 우측 400px 상세 패널.
+              // 열 너비는 grid-template-columns로 고정하고, 긴 답변은 상세 패널에서 전문을 본다.
+              const cols=`36px 128px ${analyticsColumnMeta.map(()=>"minmax(150px,1fr)").join(" ")}`
+              const minW=Math.max(900,164+analyticsColumnMeta.length*170)
+              const allOn=allResponseRowsSelected
+              const box=(on:boolean):React.CSSProperties=>({width:16,height:16,borderRadius:5,flexShrink:0,cursor:"pointer",
+                display:"flex",alignItems:"center",justifyContent:"center",
+                background:on?A.blue:"transparent",boxShadow:on?"none":`inset 0 0 0 1.5px ${A===ALT?"#D5D9DF":A.border2}`})
+              const check=<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M1.5 5.2 3.8 7.5 8.5 2.8" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              const openRow=responseRows.find((r:any)=>analyticsRowKey(r)===analyticsOpenRowKey)
+              return <div style={{flex:1,minHeight:0,display:"flex"}}>
+                <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column" as const,minHeight:0}}>
+                  {responseRows.length===0
+                    ? <div style={{display:"flex",justifyContent:"center",padding:"40px 28px"}}>
+                        <div style={{width:"100%",maxWidth:520,padding:28,border:`1px dashed ${A.border}`,borderRadius:12,textAlign:"center" as const,fontSize:13,color:A.t3}}>
+                          {analyticsResponseScope==="draft"?"아직 작성 중인 응답이 없습니다.":"아직 제출 완료된 응답이 없습니다."}
                         </div>
-                      </td>
-                      <td style={{width:analyticsDateColumnWidth,minWidth:analyticsDateColumnWidth,padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1}}>
-                        <div style={{whiteSpace:"nowrap" as const,fontWeight:400}}>{dt[0]}</div>
-                        <div style={{fontSize:12,color:A.t3,marginTop:4,whiteSpace:"nowrap" as const}}>{dt[1]}</div>
-                        {row.__draft&&<div style={{display:"inline-flex",alignItems:"center",height:20,padding:"0 7px",borderRadius:999,background:chartOrange+"16",color:chartOrange,fontSize:11,fontWeight:600,marginTop:7}}>작성 중 · 섹션 {row.__page}</div>}
-                      </td>
-                      {analyticsColumnMeta.map(({field:f,width:colWidth,resizable}:any)=>{
-                        const isLongText=f.type==="textarea"
-                        return <td key={f.id} style={{padding:"13px 16px",borderBottom:`1px solid ${A.border}`,borderLeft:`1px solid ${A.border}`,color:A.t1,verticalAlign:"top" as const,width:colWidth,minWidth:colWidth,maxWidth:colWidth}}><div style={{padding:"8px 10px",border:`1px solid ${A.border}`,borderRadius:A.r,background:duplicateChild?A.card:A.card2,color:A.t1,fontWeight:400,width:"100%",maxWidth:resizable?Math.max(260,colWidth-32):360,minWidth:0,maxHeight:isLongText?180:undefined,overflowY:isLongText?"auto" as const:"visible" as const,boxSizing:"border-box" as const,whiteSpace:"normal" as const,wordBreak:"break-word" as const,overflowWrap:"anywhere" as const}}>{renderAnalyticsAnswer(row,f)}</div></td>
-                      })}
-                    </tr>
-                  }
-                  return <React.Fragment key={group.key}>
-                    {renderResponseRow(primary,{duplicateCount:duplicateRows.length,key:`${group.key}:primary`})}
-                    {isOpen&&duplicateRows.map((row:any,idx:number)=>renderResponseRow(row,{duplicateChild:true,duplicateIndex:idx+2,duplicateTotal:group.rows.length,key:`${group.key}:duplicate:${analyticsRowKey(row)}`}))}
-                  </React.Fragment>
-                })}</tbody>
-              </table>
-            </div>}
-          </div>}
-          {activeAnalyticsTab==="questions"&&<div>
-            <div style={{fontSize:22,fontWeight:600,color:A.t1,marginBottom:16}}>질문별 인사이트</div>
-            <div style={{display:"grid",gridTemplateColumns:width<980?"1fr":"320px minmax(0,1fr)",gap:16,alignItems:"start"}}>
-              <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,boxShadow:A.shadow,overflow:"hidden"}}>
-                <div style={{padding:"14px 14px 10px",borderBottom:`1px solid ${A.border}`,background:A.card2}}>
-                  <div style={{fontSize:11,fontWeight:600,color:A.t3,letterSpacing:"0.6px",marginBottom:4}}>섹션 / 질문</div>
-                  <div style={{fontSize:13,fontWeight:600,color:A.t1}}>섹션을 열어 질문을 선택하세요</div>
+                      </div>
+                    : <div style={{flex:1,minHeight:0,overflow:"auto"}}>
+                        <div style={{minWidth:minW}}>
+                          {/* 열린 행만 CSS로 강조한다. 인라인 스타일보다 우선하도록 !important를 쓴다. */}
+                          {analyticsOpenRowKey&&<style>{`[data-cfrow=${JSON.stringify(analyticsOpenRowKey)}]{background:${A===ALT?"#F1F5FB":A.card2}!important}`}</style>}
+                          <div style={{position:"sticky" as const,top:0,zIndex:5,display:"grid",gridTemplateColumns:cols,gap:14,alignItems:"center",
+                            padding:"0 28px 9px",paddingTop:2,background:A.card,fontSize:11.5,fontWeight:600,color:A.t3,boxShadow:`inset 0 -1px 0 ${A===ALT?"#EFF1F4":A.border}`}}>
+                            <span onClick={()=>toggleAllResponseRows()} style={box(allOn)}>{allOn&&check}</span>
+                            <span>제출 시각</span>
+                            {analyticsColumnMeta.map(({field:f,fileCount}:any)=>(
+                              <span key={f.id} style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                                <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{f.label}</span>
+                                {fileCount>0&&<button onClick={()=>downloadAnalyticsFilesZip(f,responseRows)} title={`첨부파일 ${fileCount}개 다운로드`}
+                                  style={{width:24,height:24,flexShrink:0,border:"none",borderRadius:7,background:A===ALT?"#F1F3F6":A.card2,color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>
+                                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                </button>}
+                              </span>
+                            ))}
+                          </div>
+                          <AnalyticsResponseRows
+                            groups={responseRowGroups}
+                            columnMeta={analyticsColumnMeta}
+                            cellTexts={analyticsCellTextsMemo}
+                            selectedRowIds={selectedAnalyticsRowIds}
+                            expandedGroups={expandedDuplicateResponseGroups}
+                            cols={cols}
+                            A={A}
+                            rowKeyOf={analyticsRowKey}
+                            fmtDate={fmtAnalyticsDate}
+                            onOpenRow={toggleAnalyticsOpenRow}
+                            onToggleRow={toggleResponseRow}
+                            onToggleGroup={toggleDuplicateResponseGroup}/>
+                          <div style={{height:14}}/>
+                        </div>
+                      </div>}
                 </div>
-                <div style={{padding:10,display:"flex",flexDirection:"column" as const,gap:8,maxHeight:620,overflow:"auto"}}>
-                  {analyticsPages.map(p=>{const open=selectedAnalyticsPage===p;const pageFields=fieldsByPage[p]||[];const first=pageFields[0];const pageVisible=open?visibleSectionQuestionFields:pageFields;const questionListScroll=open&&pageVisible.length>7;return <div key={p} style={{border:`1px solid ${open?A.blue+"55":A.border}`,borderRadius:A.r,background:open?A.blue2:A.card2,overflow:"hidden"}}>
-                    <button onClick={()=>{setAnalyticsSection(p);setAnalyticsQuestionQuery("");if(first)setAnalyticsQuestionId(first.id);setAnalyticsHoverSlice(null)}} style={{width:"100%",minHeight:44,padding:"9px 10px",border:"none",background:"transparent",color:open?A.blue:A.t1,fontFamily:FONT,cursor:"pointer",display:"flex",alignItems:"center",gap:9,textAlign:"left" as const}}>
-                      <span style={{width:4,alignSelf:"stretch",borderRadius:999,background:open?A.blue:A.border,flexShrink:0}}/>
-                      <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{pageName(p)}</span>
-                      <span style={{height:22,minWidth:26,padding:"0 7px",borderRadius:999,background:open?A.blue:A.card,border:`1px solid ${open?A.blue:A.border}`,color:open?"#fff":A.t3,fontSize:11,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center"}}>{pageFields.length}</span>
-                      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style={{transform:open?"rotate(180deg)":"rotate(0deg)",transition:"transform .16s ease",color:open?A.blue:A.t3,flexShrink:0}}><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+
+                {openRow&&<aside style={{width:400,flexShrink:0,display:"flex",flexDirection:"column" as const,background:A.card,boxShadow:`inset 1px 0 0 ${A===ALT?"#EDEFF3":A.border}`}}>
+                  {/* 제목 바와 본문이 붙어 보여서 아래에 구분선을 넣는다. radius가 없는 영역이라 inset 라인이 곧게 떨어진다. */}
+                  <div style={{flexShrink:0,display:"flex",alignItems:"flex-start",gap:10,padding:"20px 20px 14px",boxShadow:`inset 0 -1px 0 ${A===ALT?"#EDEFF3":A.border}`}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:16,fontWeight:700,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>
+                        {analyticsAnswer(openRow,analyticsColumnMeta[0]?.field)||"응답 상세"}
+                      </div>
+                      <div style={{fontSize:12,color:A.t3,marginTop:4}}>{fmtAnalyticsDate(openRow.created_at).join(" ")} 제출</div>
+                    </div>
+                    <button onClick={()=>setAnalyticsOpenRowKey("")} title="닫기"
+                      style={{width:30,height:30,flexShrink:0,border:"none",borderRadius:8,background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>
+                      <svg width="11" height="11" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
                     </button>
-                    {open&&<div style={{padding:"0 10px 10px"}}>
-                      {pageFields.length>8&&<div style={{position:"relative" as const,margin:"2px 0 8px"}}>
-                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{position:"absolute",left:10,top:9,color:A.t3}}><circle cx="7" cy="7" r="4" stroke="currentColor" strokeWidth="1.6"/><path d="M10 10l3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                  </div>
+                  <div style={{flex:1,minHeight:0,overflowY:"auto" as const,padding:"16px 20px 20px",display:"flex",flexDirection:"column" as const,gap:18}}>
+                    {analyticsColumnMeta.map(({field:f}:any)=>{
+                      // 시안은 답변 개수가 아니라 질문 유형으로 칩/텍스트를 나눈다.
+                      // 복수 선택·첨부파일은 답이 하나여도 칩, 단일 선택·서술형은 그냥 텍스트.
+                      const isChipField=f.type==="checkbox"||f.type==="file"
+                      const files=analyticsFileItems(analyticsRawAnswer(openRow,f))
+                      const chips=analyticsChipValues(openRow,f)
+                      const chipStyle:React.CSSProperties={padding:"4px 9px",borderRadius:7,background:A===ALT?"#F1F3F6":A.card2,fontSize:12.5,color:A.t2,lineHeight:1.5}
+                      return <div key={f.id}>
+                        <div style={{fontSize:11.5,fontWeight:600,color:A.t3,marginBottom:6}}>{f.label}</div>
+                        {f.type==="file"
+                          ? <div style={{display:"flex",flexWrap:"wrap" as const,gap:6}}>
+                              {files.length
+                                ? files.map((file:any,i:number)=>(
+                                    <button key={i} onClick={()=>setFilePreview(file)}
+                                      style={{...chipStyle,border:"none",fontFamily:FONT,cursor:"pointer"}}>{file.name}</button>
+                                  ))
+                                : <span style={{...chipStyle,color:A.t3}}>첨부 없음</span>}
+                            </div>
+                          : isChipField&&chips.length
+                          ? <div style={{display:"flex",flexWrap:"wrap" as const,gap:6}}>
+                              {chips.map((c:string,i:number)=><span key={i} style={chipStyle}>{c}</span>)}
+                            </div>
+                          : <div style={{fontSize:13,color:A.t1,lineHeight:1.65,whiteSpace:"pre-line" as const,wordBreak:"break-word" as const}}>{analyticsAnswer(openRow,f)||"—"}</div>}
+                      </div>
+                    })}
+                    {attributionFields.length>0&&<div style={{paddingTop:4}}>
+                      <button onClick={()=>setAnalyticsUtmOpen(v=>!v)}
+                        style={{width:"100%",height:44,display:"flex",alignItems:"center",gap:8,padding:"0 14px",border:"none",borderRadius:10,
+                          background:A===ALT?"#F1F3F6":A.card2,color:A.t1,fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                        <span style={{flex:1,textAlign:"left" as const}}>유입 정보</span>
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A.t3,transform:analyticsUtmOpen?"none":"rotate(-90deg)",transition:"transform .15s"}}>
+                          <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+                      {analyticsUtmOpen&&<div style={{display:"flex",flexDirection:"column" as const,gap:1,padding:"6px 0 0"}}>
+                        {attributionFields.map((f:any)=>{
+                          const val=analyticsAnswer(openRow,f)
+                          return <div key={f.id} style={{display:"flex",alignItems:"center",gap:10,minHeight:32,padding:"0 10px",borderRadius:8}}
+                            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=panelFieldBg(A)}}
+                            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
+                            <span style={{fontSize:12,color:A.t3,flexShrink:0,width:104,fontFamily:"ui-monospace,SFMono-Regular,Menlo,monospace"}}>{f.answerKey||f.id}</span>
+                            <span title={val||undefined} style={{minWidth:0,flex:1,fontSize:12.5,color:val?A.t1:A.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,
+                              fontFamily:val?"ui-monospace,SFMono-Regular,Menlo,monospace":FONT}}>{val||"없음"}</span>
+                          </div>
+                        })}
+                      </div>}
+                    </div>}
+                  </div>
+                  <div style={{flexShrink:0,display:"flex",gap:8,padding:"12px 20px",background:A===ALT?"#FAFBFC":A.card2}}>
+                    <button onClick={()=>openEditAnalyticsRow(openRow)} disabled={!!openRow.__draft}
+                      style={{flex:1,height:36,border:"none",borderRadius:8,background:A===ALT?"#F1F3F6":A.bg,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:openRow.__draft?"not-allowed":"pointer"}}>
+                      응답 수정
+                    </button>
+                    <button onClick={()=>{deleteSelectedAnalyticsRows([openRow]);setAnalyticsOpenRowKey("")}}
+                      style={{height:36,padding:"0 12px",border:"none",borderRadius:8,background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}
+                      onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A===ALT?"#FDECEC":"rgba(232,92,92,0.12)";(e.currentTarget as HTMLElement).style.color=A.red}}
+                      onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}>
+                      삭제
+                    </button>
+                  </div>
+                </aside>}
+              </div>
+            })()}
+          </div>}
+          {activeAnalyticsTab==="questions"&&<div style={{height:"100%",minHeight:0}}>
+            <div style={{display:"flex",height:"100%",minHeight:0,alignItems:"stretch"}}>
+              {/* 좌측 질문 목록 — 화면 왼쪽 끝에 붙어 아래까지 채우는 열 */}
+              <div style={{width:width<980?200:252,flexShrink:0,background:adminDark?"rgba(255,255,255,0.02)":"#FAFBFC",
+                padding:"16px 12px",overflowY:"auto" as const,boxSizing:"border-box" as const}}>
+                <div style={{padding:"0 8px 10px",fontSize:11,fontWeight:700,letterSpacing:".4px",color:A.t3}}>질문</div>
+                <div style={{display:"flex",flexDirection:"column" as const,gap:4}}>
+                  {analyticsPages.map(p=>{const open=analyticsOpenSections[p]??(selectedAnalyticsPage===p);const pageFields=fieldsByPage[p]||[];const first=pageFields[0];const pageVisible=analyticsQuestionNeedle
+                      ? pageFields.filter((f:any)=>`${f.label||""} ${fieldTypeName(f.type)}`.toLowerCase().includes(analyticsQuestionNeedle))
+                      : pageFields;return <div key={p}>
+                    <button onClick={()=>{setAnalyticsOpenSections(prev=>({...prev,[p]:!open}));setAnalyticsSection(p);setAnalyticsQuestionQuery("")}}
+                      style={{width:"100%",display:"flex",alignItems:"center",gap:8,height:34,padding:"0 8px",borderRadius:8,border:"none",background:"transparent",cursor:"pointer",fontFamily:FONT,fontSize:12.5,fontWeight:700,color:A.t2,textAlign:"left" as const}}>
+                      <span style={{flex:1,minWidth:0,whiteSpace:"nowrap" as const,overflow:"hidden",textOverflow:"ellipsis"}}>{pageName(p)}</span>
+                      <span style={{flexShrink:0,fontSize:11.5,fontWeight:500,color:A.t3}}>{pageFields.length}</span>
+                      <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A===ALT?"#B6BCC6":A.t4,transform:open?"none":"rotate(-90deg)",transition:"transform .15s"}}>
+                        <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                    {open&&<div style={{display:"flex",flexDirection:"column" as const,gap:1,padding:"2px 0 6px"}}>
+                      {pageFields.length>8&&<div style={{position:"relative" as const,margin:"4px 0 6px"}}>
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{position:"absolute",left:11,top:11,color:A.t3}}><circle cx="7" cy="7" r="4" stroke="currentColor" strokeWidth="1.6"/><path d="m10.4 10.4 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
                         <input value={analyticsQuestionQuery} onChange={e=>setAnalyticsQuestionQuery(e.target.value)} placeholder="질문 검색"
-                          style={{width:"100%",height:31,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t1,fontFamily:FONT,fontSize:12,fontWeight:600,padding:"0 10px 0 30px",outline:"none",boxSizing:"border-box" as const}}/>
+                          style={{width:"100%",height:34,borderRadius:9,border:"none",background:panelFieldBg(A),color:A.t1,fontFamily:FONT,fontSize:12.5,padding:"0 10px 0 31px",outline:"none",boxSizing:"border-box" as const}}/>
                       </div>}
                       {pageFields.length===0
-                        ? <div style={{height:54,borderRadius:A.r,border:`1px dashed ${A.border2}`,display:"flex",alignItems:"center",justifyContent:"center",color:A.t3,fontSize:12.5}}>질문이 없습니다.</div>
+                        ? <div style={{padding:"10px 8px",fontSize:12.5,color:A.t3}}>질문이 없어요</div>
                         : pageVisible.length===0
-                        ? <div style={{height:54,borderRadius:A.r,border:`1px dashed ${A.border2}`,display:"flex",alignItems:"center",justifyContent:"center",color:A.t3,fontSize:12.5}}>검색 결과가 없습니다.</div>
-                        : <div style={{display:"flex",flexDirection:"column" as const,gap:6,maxHeight:questionListScroll?386:undefined,overflowY:questionListScroll?"auto" as const:"visible" as const,paddingRight:questionListScroll?4:0,paddingBottom:questionListScroll?4:0}}>
-                          {pageVisible.map((f:any)=>{const on=activeField?.id===f.id;const originalIdx=pageFields.findIndex((sf:any)=>sf.id===f.id);return <button key={f.id} onClick={()=>{setAnalyticsQuestionId(f.id);setAnalyticsHoverSlice(null)}} style={{minHeight:42,padding:"7px 8px",borderRadius:A.r,border:`1px solid ${on?A.blue+"66":A.border}`,background:on?A.card:A.card2,color:on?A.blue:A.t1,fontFamily:FONT,cursor:"pointer",textAlign:"left" as const,display:"flex",alignItems:"center",gap:9,transition:"all .14s ease",boxShadow:on?`0 0 0 3px ${A.blue}14`:"none"}}>
-                            <span style={{width:24,height:24,borderRadius:8,background:on?A.blue:A.card,border:`1px solid ${on?A.blue:A.border}`,color:on?"#fff":A.t3,fontSize:11.5,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{originalIdx+1}</span>
-                            <span style={{minWidth:0,flex:1}}>
-                              <span style={{display:"block",fontSize:12.5,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{f.label}</span>
-                              <span style={{display:"block",fontSize:11,color:on?A.blue:A.t3,marginTop:4,fontWeight:600}}>{fieldTypeName(f.type)}{f.required?" · 필수":""}</span>
-                            </span>
-                          </button>})}
-                        </div>}
+                        ? <div style={{padding:"10px 8px",fontSize:12.5,color:A.t3}}>검색 결과가 없어요</div>
+                        : pageVisible.map((f:any)=>{const on=activeField?.id===f.id;const originalIdx=pageFields.findIndex((sf:any)=>sf.id===f.id);return (
+                          <button key={f.id} onClick={()=>{setAnalyticsQuestionId(f.id);setAnalyticsSection(p)}}
+                            style={{width:"100%",display:"flex",alignItems:"center",gap:8,height:34,padding:"0 8px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:FONT,textAlign:"left" as const,
+                              fontSize:12.5,fontWeight:on?700:500,color:on?A.t1:A.t2,
+                              background:on?(A===ALT?"#EDEFF3":A.card2):"transparent",transition:"background .12s"}}
+                            onMouseEnter={e=>{if(!on)(e.currentTarget as HTMLElement).style.background=A===ALT?"#F7F9FC":A.card2}}
+                            onMouseLeave={e=>{if(!on)(e.currentTarget as HTMLElement).style.background="transparent"}}>
+                            <span style={{width:20,height:20,borderRadius:6,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,
+                              background:on?A.blue:(A===ALT?"#EDEFF3":A.card2),color:on?"#fff":A.t3}}>{originalIdx+1}</span>
+                            <span style={{flex:1,minWidth:0,whiteSpace:"nowrap" as const,overflow:"hidden",textOverflow:"ellipsis"}}>{f.label}</span>
+                            <span style={{flexShrink:0,fontSize:11,color:A.t3}}>{fieldTypeName(f.type)}</span>
+                          </button>
+                        )})}
                     </div>}
                   </div>})}
                 </div>
               </div>
-            {!activeField?emptyState("분석할 질문이 없습니다."):<div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:24,minHeight:620,boxShadow:A.shadow}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:22}}>
-                <div style={{fontSize:18,fontWeight:600,color:A.t1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{activeField.label}</div>
+            {!activeField
+              ? <div style={{flex:1,minWidth:0,padding:"22px 28px 36px",overflowY:"auto" as const}}>{emptyState("분석할 질문이 없습니다.")}</div>
+              : <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column" as const,minHeight:0,boxSizing:"border-box" as const}}>
+              <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:10,minHeight:72,padding:"22px 28px 16px"}}>
+                <span style={{fontSize:18,fontWeight:700,color:A.t1,letterSpacing:"-.2px",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{activeField.label||"(라벨 없음)"}</span>
+                <span style={{flexShrink:0,padding:"3px 8px",borderRadius:6,background:A===ALT?"#F1F3F6":A.card2,fontSize:11.5,fontWeight:600,color:A.t3}}>{fieldTypeName(activeField.type)}</span>
+                <div style={{flex:1}}/>
+                <span style={{flexShrink:0,fontSize:12.5,color:A.t3,whiteSpace:"nowrap" as const}}>응답 <b style={{color:A.t1,fontWeight:700}}>{directAnswerRows.length||totalCount}</b>건</span>
                 {activeFileCount>0&&<button onClick={()=>downloadAnalyticsFilesZip(activeField,rows)} style={{height:34,padding:"0 12px",borderRadius:A.r,border:`1px solid ${A.blue}33`,background:A.blue2,color:A.blue,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v7M5 6l3 3 3-3M3 13h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   첨부파일 {activeFileCount}개 다운로드
                 </button>}
               </div>
               {isListQuestion
-                ? <div>{directAnswerRows.length===0?emptyState("표시할 응답이 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:8}}>{directAnswerRows.map((item:any,idx:number)=><div key={item.row.id||idx} style={{display:"grid",gridTemplateColumns:"140px 1fr",gap:14,alignItems:"start",padding:"12px 14px",border:`1px solid ${A.border}`,borderRadius:A.r,background:A.card2}}>
-                    <div style={{fontSize:12,color:A.t3,lineHeight:1.5}}><div>{item.date[0]}</div><div>{item.date[1]}</div></div>
-                    <div style={{fontSize:13.5,color:A.t1,lineHeight:1.65,whiteSpace:"pre-wrap" as const,wordBreak:"break-word" as const}}>{analyticsFileItems(item.raw).length?analyticsFileItems(item.raw).map((f:any,i:number)=>f.url?<button key={i} onClick={()=>setFilePreview(f)} style={{display:"block",border:"none",background:"transparent",padding:0,color:A.blue,textDecoration:"none",fontWeight:600,fontFamily:FONT,fontSize:13.5,cursor:"pointer",textAlign:"left" as const}}>{f.name}</button>:<span key={i} style={{display:"block"}}>{f.name}</span>):analyticsAnswer(item.row,activeField)}</div>
-                  </div>)}</div>}</div>
-                : <div style={{display:"grid",gridTemplateColumns:"minmax(280px,420px) 1fr",gap:34,alignItems:"center"}}>
-                    <div style={{position:"relative" as const,width:"100%",maxWidth:420,aspectRatio:"1 / 1",margin:"0 auto"}}>
-                      {pieSlices.length===0?<div style={{position:"absolute" as const,inset:0,borderRadius:"50%",background:A.card2,border:`1px solid ${A.border}`}}/>:<svg viewBox="0 0 320 320" style={{width:"100%",height:"100%",overflow:"visible"}}>
-                        {pieSlices.map((s:any,i:number)=>s.end-s.start>=359.99
-                          ? <circle key={s.label} cx="160" cy="160" r="128" fill={s.color} onMouseMove={e=>movePieTip(i,e)} onMouseEnter={e=>movePieTip(i,e)} onMouseLeave={()=>{setAnalyticsHoverSlice(null);setAnalyticsHoverPoint(null)}} style={{cursor:"pointer",transform:analyticsHoverSlice===i?"scale(1.04)":"scale(1)",transformOrigin:"160px 160px",transition:"transform .16s ease"}}/>
-                          : <path key={s.label} d={piePath(160,160,128,s.start,s.end)} fill={s.color} stroke={A.card} strokeWidth="2" onMouseMove={e=>movePieTip(i,e)} onMouseEnter={e=>movePieTip(i,e)} onMouseLeave={()=>{setAnalyticsHoverSlice(null);setAnalyticsHoverPoint(null)}} style={{cursor:"pointer",transform:analyticsHoverSlice===i?"scale(1.045)":"scale(1)",transformOrigin:"160px 160px",transition:"transform .16s ease"}}/>
-                        )}
-                      </svg>}
-                      {analyticsHoverSlice!==null&&pieSlices[analyticsHoverSlice]&&<div style={{position:"absolute" as const,left:(analyticsHoverPoint?.x??210)+14,top:(analyticsHoverPoint?.y??170)+14,background:A.card,border:`1px solid ${pieSlices[analyticsHoverSlice].color}`,borderRadius:A.r,padding:"12px 14px",boxShadow:A.shadow,minWidth:190,pointerEvents:"none" as const,zIndex:5}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:14,fontWeight:600,color:A.t1,marginBottom:6}}><span style={{width:10,height:10,borderRadius:"50%",background:pieSlices[analyticsHoverSlice].color,flexShrink:0}}/>{pieSlices[analyticsHoverSlice].label}</div>
-                        <div style={{fontSize:13,color:A.t2}}>카운트 : <b style={{color:A.t1}}>{pieSlices[analyticsHoverSlice].count}</b> ({pieSlices[analyticsHoverSlice].pct}%)</div>
-                      </div>}
+                ? (directAnswerRows.length===0?<div style={{padding:"0 28px 28px"}}>{emptyState("표시할 응답이 없습니다.")}</div>:<>
+                    {/* 시안의 표 형태 — 헤더는 고정, 목록만 스크롤 */}
+                    <div style={{flexShrink:0,display:"grid",gridTemplateColumns:"150px minmax(0,1fr)",gap:16,padding:"0 28px 9px",
+                      fontSize:11.5,fontWeight:600,color:A.t3,boxShadow:`inset 0 -1px 0 ${A===ALT?"#EFF1F4":A.border}`}}>
+                      <span>제출 시각</span><span>응답</span>
                     </div>
-                    <div>{countEntries.length===0?emptyState("표시할 응답이 없습니다."):countEntries.map((item:any,i)=>{const k=item[0],v=item[1];const pct=totalCount?Math.round((v/totalCount)*1000)/10:0;return <div key={k} onMouseEnter={()=>setAnalyticsHoverSlice(i)} onMouseLeave={()=>{setAnalyticsHoverSlice(null);setAnalyticsHoverPoint(null)}} style={{display:"grid",gridTemplateColumns:"18px 1fr auto",gap:10,alignItems:"center",padding:"9px 0",borderBottom:`1px solid ${A.border}`,cursor:"default"}}><span style={{width:14,height:14,borderRadius:4,background:colors[i%colors.length]}}/><span style={{fontSize:13.5,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{k}</span><span style={{fontSize:13,fontWeight:600,color:A.t1}}>{v} · {pct}%</span></div>})}</div>
-                    {choiceDirectRows.length>0&&<div style={{gridColumn:"1 / -1",marginTop:4,borderTop:`1px solid ${A.border}`,paddingTop:18}}>
+                    <div style={{flex:1,minHeight:0,overflowY:"auto" as const,paddingBottom:16}}>
+                    {directAnswerRows.map((item:any,idx:number)=>(
+                      <div key={item.row.id||idx} style={{display:"grid",gridTemplateColumns:"150px minmax(0,1fr)",gap:16,alignItems:"center",
+                        minHeight:48,padding:"4px 28px",transition:"background .12s",boxShadow:`inset 0 -1px 0 ${A===ALT?"#F5F6F8":A.border}`}}
+                        onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A===ALT?"#F7F9FC":"rgba(255,255,255,0.04)"}}
+                        onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
+                        <span style={{fontSize:12.5,color:A.t3,fontVariantNumeric:"tabular-nums" as const}}>{item.date[0]} {item.date[1]}</span>
+                        <span style={{fontSize:13,color:A.t1,lineHeight:1.65,whiteSpace:"pre-wrap" as const,wordBreak:"break-word" as const}}>
+                          {analyticsFileItems(item.raw).length
+                            ? analyticsFileItems(item.raw).map((f:any,i:number)=>f.url
+                                ? <button key={i} onClick={()=>setFilePreview(f)}
+                                    style={{display:"block",border:"none",background:"transparent",padding:0,color:A.blue,fontWeight:600,fontFamily:FONT,fontSize:13.5,cursor:"pointer",textAlign:"left" as const}}>{f.name}</button>
+                                : <span key={i} style={{display:"block"}}>{f.name}</span>)
+                            : analyticsAnswer(item.row,activeField)}
+                        </span>
+                      </div>
+                    ))}
+                    </div>
+                  </>)
+                : <div style={{flex:1,minHeight:0,overflowY:"auto" as const,padding:"0 28px 28px"}}>
+                    {/* 도넛 + 마우스 추적 툴팁은 onMouseMove마다 상태를 바꿔 화면 전체를 다시 그리느라 버벅였다.
+                        선택지 비교에는 가로 막대가 더 읽기 쉬워 막대 목록으로 바꾸고 상태 갱신을 없앴다. */}
+                    {countEntries.length===0?emptyState("표시할 응답이 없습니다."):<div style={{display:"flex",flexDirection:"column" as const}}>
+                      {countEntries.map((item:any,i:number)=>{
+                        const label=item[0],count=item[1]
+                        const pct=totalCount?Math.round((count/totalCount)*1000)/10:0
+                        return <div key={label} style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) 58px 44px",gap:14,alignItems:"center",
+                          minHeight:48,padding:"6px 0",boxShadow:`inset 0 -1px 0 ${A===ALT?"#F5F6F8":A.border}`}}>
+                          <div style={{minWidth:0}}>
+                            <div style={{fontSize:13,color:A.t1,marginBottom:7,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{label}</div>
+                            <div style={{height:6,borderRadius:3,background:A===ALT?"#EFF1F4":A.card2,overflow:"hidden"}}>
+                              <div style={{width:`${Math.max(pct,pct>0?2:0)}%`,height:"100%",borderRadius:3,background:colors[i%colors.length]}}/>
+                            </div>
+                          </div>
+                          <span style={{fontSize:12.5,color:A.t2,textAlign:"right" as const,fontVariantNumeric:"tabular-nums" as const}}>{count}건</span>
+                          <span style={{fontSize:12.5,fontWeight:700,color:A.t1,textAlign:"right" as const,fontVariantNumeric:"tabular-nums" as const}}>{pct}%</span>
+                        </div>
+                      })}
+                    </div>}
+                    {choiceDirectRows.length>0&&<div style={{marginTop:22,borderTop:`1px solid ${A.border}`,paddingTop:18}}>
                       <div style={{fontSize:13,fontWeight:600,color:A.t1,marginBottom:10}}>직접 입력 응답</div>
                       <div style={{display:"flex",flexDirection:"column" as const,gap:8}}>{choiceDirectRows.map((item:any,idx:number)=><div key={item.row.id||idx} style={{display:"grid",gridTemplateColumns:"140px 1fr",gap:14,alignItems:"start",padding:"10px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`}}>
                         <div style={{fontSize:12,color:A.t3,lineHeight:1.5}}><div>{item.date[0]}</div><div>{item.date[1]}</div></div>
@@ -7573,213 +9409,532 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </div>}
             </div>
           </div>}
-          {activeAnalyticsTab==="period"&&<div>
-            <div style={{fontSize:22,fontWeight:600,color:A.t1,marginBottom:16}}>기간별 인사이트</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14,marginBottom:16}}>
-	              {metric(<path d="M5 3l7 5-7 5V3z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/>,String(sessionCount),"참여",chartBlue)}
-	              {metric(<path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>,`${completionRate}%`,"완료율",chartGreen)}
-	              {metric(<><circle cx="8" cy="8" r="5" stroke="currentColor" strokeWidth="1.6"/><path d="M8 5v3l2 1.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></>,avgTime,"평균 세션시간",chartYellow)}
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"minmax(340px,1fr) minmax(320px,1fr)",gap:16,marginBottom:16}}>
-              <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-                {infoTitle("유입경로","form_response_events의 started/page 이벤트 metadata에 저장된 source, utm_source, referrer_host를 기준으로 채널을 묶습니다. 출처 미확인은 referrer와 UTM 정보가 모두 비어 있어 원천을 확인할 수 없는 방문입니다.")}
-                {periodTip("source")}
-                {sourceEntries.length===0?emptyState("유입경로 데이터가 아직 없습니다."):<div style={{display:"grid",gridTemplateColumns:"280px 1fr",gap:18,alignItems:"center"}}>
-	                  <svg viewBox="0 0 260 260" style={{width:"100%",maxWidth:280,overflow:"visible"}}>
-	                    <circle cx="130" cy="130" r="86" fill="none" stroke={A.card2} strokeWidth="42"/>
-	                    {donutSlices.map((s:any,i:number)=>s.end-s.start>=359.99
-	                      ? <circle key={s.label} cx="130" cy="130" r="86" fill="none" stroke={s.color} strokeWidth="42" onMouseMove={e=>movePeriodTip("source",e,{title:s.label,color:s.color,lines:[`참여 : ${s.participation} (${s.pct}%)`,`완료 : ${s.complete}`,`전환율 : ${s.conversion}%`,`공유 : ${s.share} · 링크 클릭 : ${s.link}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{cursor:"pointer",transform:periodHover?.scope==="source"&&periodHover.title===s.label?"scale(1.035)":"scale(1)",transformOrigin:"130px 130px",transition:"transform .16s ease"}}/>
-	                      : <path key={s.label} d={donutPath(130,130,86,s.start+donutGap(s),s.end-donutGap(s))} fill="none" stroke={s.color} strokeWidth="42" strokeLinecap="round" onMouseMove={e=>movePeriodTip("source",e,{title:s.label,color:s.color,lines:[`참여 : ${s.participation} (${s.pct}%)`,`완료 : ${s.complete}`,`전환율 : ${s.conversion}%`,`공유 : ${s.share} · 링크 클릭 : ${s.link}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{cursor:"pointer",transform:periodHover?.scope==="source"&&periodHover.title===s.label?"scale(1.035)":"scale(1)",transformOrigin:"130px 130px",transition:"transform .16s ease"}}/>
-	                    )}
-	                  </svg>
-                  <div>
-                    {sourceEntries.map((s:any,i:number)=><div key={s.label} style={{display:"grid",gridTemplateColumns:"14px 1fr auto",gap:9,alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${A.border}`}}>
-                      <span style={{width:12,height:12,borderRadius:4,background:colors[i%colors.length]}}/>
-                      <span style={{fontSize:13,color:A.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{s.label}</span>
-                      <span style={{fontSize:12.5,color:A.t2,fontWeight:600}}>참여 {s.participation} · 완료 {s.complete} · 전환 {s.conversion}%</span>
-                    </div>)}
-                    {sourceEntries.some((s:any)=>s.label===UNKNOWN_SOURCE_LABEL)&&<div style={{marginTop:10,padding:"10px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12,lineHeight:1.55,color:A.t2}}>
-                      출처 미확인은 URL 직접 입력뿐 아니라 카카오톡·문자·메일 앱, 새 탭/즐겨찾기, 브라우저 개인정보 보호 설정처럼 referrer가 전달되지 않는 방문입니다. 링크에 <b style={{color:A.t1}}>utm_source</b>를 붙이면 채널별로 분리해서 볼 수 있어요.
-                    </div>}
-                  </div>
-                </div>}
-              </div>
-              <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-	                {infoTitle("위치","제출자가 입력한 현 거주지, 주소, 지역 답변은 사용하지 않습니다. 폼 진입 시 form_response_events metadata에 저장된 접속 위치만 사용합니다. QR 진입은 사용자가 브라우저 위치 권한을 허용하면 좌표를 기준으로 시·구·동을 확인하고, 허용하지 않으면 IP 기반 추정 위치를 사용합니다.")}
-	                {periodTip("location")}
-	                {locationTotal===0?emptyState("위치 데이터가 아직 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:11}}>
-	                  <div style={{height:28,padding:"0 10px",borderRadius:999,background:A.blue2,border:`1px solid ${A.blue}33`,color:A.blue,fontSize:11.5,fontWeight:600,display:"inline-flex",alignItems:"center",alignSelf:"flex-start"}}>
-	                    기준: {locationSource}
-	                  </div>
-	                  {locationEntries.slice(0,12).map((item:any,i:number)=>{
-	                    const label=String(item[0]||"미확인")
-	                    const count=Number(item[1])||0
-	                    const max=Math.max(1,Number(locationEntries[0]?.[1])||1)
-	                    const pct=locationTotal?Math.round((count/locationTotal)*1000)/10:0
-	                    const color=colors[i%colors.length]
-	                    return <div key={label} onMouseMove={e=>movePeriodTip("location",e,{title:label,color,lines:[`카운트 : ${count}`,`전체 위치 데이터 대비 : ${pct}%`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"minmax(120px,190px) 1fr 58px",gap:12,alignItems:"center",cursor:"default"}}>
-	                      <div style={{fontSize:13,color:A.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{label}</div>
-	                      <div style={{height:12,borderRadius:999,background:A.card2,overflow:"hidden"}}>
-	                        <div style={{height:"100%",width:`${(count/max)*100}%`,borderRadius:999,background:color,transform:periodHover?.scope==="location"&&periodHover.title===label?"scaleY(1.22)":"scaleY(1)",transformOrigin:"center",transition:"transform .16s ease"}}/>
-	                      </div>
-	                      <div style={{fontSize:12.5,color:A.t2,textAlign:"right" as const,fontWeight:600}}>{count}</div>
-	                    </div>
-	                  })}
-	                  <div style={{marginTop:4,padding:"10px 12px",borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`,fontSize:12.5,lineHeight:1.55,color:A.t2}}>
-	                    위치 분석은 제출 답변이 아니라 실제 접속 metadata만 사용합니다. QR 진입 시 위치 권한을 허용하면 좌표 기반 지역을 표시하고, 권한을 거부하거나 브라우저에서 좌표를 확인하지 못하면 통신망/IP 위치가 표시되어 실제 위치와 다르거나 `미확인`으로 남을 수 있습니다.
-	                  </div>
-	                </div>}
-              </div>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"minmax(340px,1fr) minmax(340px,1fr)",gap:16,marginBottom:16}}>
-              <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-                {infoTitle("공유","폼의 공유 버튼 클릭을 share 이벤트로 저장합니다. 파란 막대는 전체 공유 클릭 수, 회색 막대는 같은 사용자가 여러 번 누른 것을 1명으로 묶은 중복 제외 사용자 수입니다.")}
-                {periodTip("share")}
-                {shareEntries.length===0?emptyState("공유 이벤트가 아직 없습니다. 링크/공유 버튼 클릭 데이터가 쌓이면 표시됩니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:12}}>
-	                  {shareEntries.slice(0,8).map((s:any)=>{const max=Math.max(1,shareEntries[0]?.total||1);return <div key={s.channel} onMouseMove={e=>movePeriodTip("share",e,{title:s.channel,color:chartBlue,lines:[`전체 공유 클릭 : ${s.total}`,`중복 제외 사용자 : ${s.unique}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"90px 1fr 88px",gap:12,alignItems:"center",cursor:"default"}}>
-                    <div style={{fontSize:13,color:A.t1,fontWeight:600}}>{s.channel}</div>
-                    <div style={{display:"flex",flexDirection:"column" as const,gap:5}}>
-	                      <div style={{height:10,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${(s.total/max)*100}%`,background:chartBlue,transform:periodHover?.scope==="share"&&periodHover.title===s.channel?"scaleY(1.35)":"scaleY(1)",transformOrigin:"center",transition:"transform .16s ease"}}/></div>
-	                      <div style={{height:10,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${(s.unique/max)*100}%`,background:chartSlate}}/></div>
+          {activeAnalyticsTab==="period"&&<div style={{height:"100%",overflowY:"auto" as const,background:A.card}}>
+            <style>{`
+              .cf-stat-tip{position:relative}
+              .cf-stat-tip::after{content:attr(data-tip);position:absolute;left:0;right:auto;top:calc(100% + 7px);z-index:30;
+                width:max-content;max-width:min(260px,58vw);
+                padding:9px 11px;border-radius:9px;background:${A.t1};color:${A.card};font-size:11.5px;font-weight:500;line-height:1.55;
+                white-space:normal;text-align:left;opacity:0;visibility:hidden;transition:opacity .12s;pointer-events:none;box-shadow:0 8px 24px -8px rgba(16,24,40,.4)}
+              /* 오른쪽 칸의 설명은 왼쪽으로 펼쳐야 화면 밖으로 잘리지 않는다. */
+              .cf-stat-tip.cf-tip-end::after{left:auto;right:0}
+              .cf-stat-tip:hover::after,.cf-stat-tip:focus-visible::after{opacity:1;visibility:visible}
+            `}</style>
+            {/* 시안: 제목 + 기간 배지 → 지표 5칸 → 참여 추이 그래프 → 유입경로/위치 → 활동/공유 */}
+            <div style={{display:"flex",alignItems:"center",gap:10,minHeight:72,padding:"22px 28px 16px"}}>
+              <span style={{fontSize:18,fontWeight:700,color:A.t1,letterSpacing:"-.2px",flexShrink:0,whiteSpace:"nowrap" as const}}>기간별 인사이트</span>
+              <div style={{flex:1}}/>
+              {/* 기간 선택 — 미리 정해둔 구간이나 직접 고른 날짜로 이 탭 전체를 다시 집계한다. */}
+              <div style={{position:"relative" as const,flexShrink:0}}>
+                <button onClick={()=>setPeriodRangeOpen(v=>!v)}
+                  style={{height:34,display:"flex",alignItems:"center",gap:7,padding:"0 13px",borderRadius:9,border:"none",
+                    background:periodRangeOpen?(A===ALT?"#EAF2FE":A.blue2):(A===ALT?"#F6F7F9":A.card2),
+                    color:periodRangeOpen?A.blue:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap" as const}}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{color:periodRangeOpen?A.blue:A.t3}}><rect x="3.5" y="5" width="17" height="15.5" rx="3" stroke="currentColor" strokeWidth="1.7"/><path d="M3.5 10h17M8 3.5v3M16 3.5v3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
+                  {periodRangeLabel}
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{opacity:.55,transform:periodRangeOpen?"rotate(180deg)":"none",transition:"transform .15s"}}>
+                    <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                {periodRangeOpen&&<>
+                  <div onClick={()=>setPeriodRangeOpen(false)} style={{position:"fixed" as const,inset:0,zIndex:59}}/>
+                  <div style={{position:"absolute" as const,top:40,right:0,zIndex:60,width:272,padding:8,borderRadius:12,
+                    background:A.card,border:A===ALT?"none":`1px solid ${A.border}`,boxShadow:"0 1px 2px rgba(16,24,40,.08), 0 16px 40px -10px rgba(16,24,40,.28)"}}>
+                    {([{id:"all",label:"전체 기간"},{id:"7",label:"최근 7일"},{id:"30",label:"최근 30일"},{id:"90",label:"최근 90일"}] as const).map(preset=>{
+                      const on=periodRangeMode===preset.id
+                      return <button key={preset.id} onClick={()=>{setPeriodRangeMode(preset.id);setPeriodRangeOpen(false)}}
+                        style={{width:"100%",minHeight:38,display:"flex",alignItems:"center",gap:8,padding:"9px 10px",borderRadius:9,border:"none",
+                          background:on?panelFieldBg(A):"transparent",color:on?A.t1:A.t2,fontFamily:FONT,fontSize:13,fontWeight:on?700:500,cursor:"pointer",textAlign:"left" as const}}
+                        onMouseEnter={e=>{if(!on)(e.currentTarget as HTMLElement).style.background=panelFieldBg(A)}}
+                        onMouseLeave={e=>{if(!on)(e.currentTarget as HTMLElement).style.background="transparent"}}>
+                        <span style={{flex:1,minWidth:0}}>{preset.label}</span>
+                        {on&&<svg width="12" height="12" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A.blue}}><path d="M1.5 5.2 3.8 7.5 8.5 2.8" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </button>
+                    })}
+                    <div style={{height:1,background:A===ALT?"#EFF1F4":A.border,margin:"6px 4px"}}/>
+                    <div style={{padding:"2px 4px 4px",fontSize:11.5,fontWeight:600,color:A.t3}}>직접 선택</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6,padding:"0 4px 4px"}}>
+                      <input type="date" value={periodRangeStart} max={periodRangeEnd||undefined}
+                        onChange={e=>{setPeriodRangeStart(e.target.value);setPeriodRangeMode("custom")}}
+                        style={{flex:1,minWidth:0,height:32,padding:"0 8px",borderRadius:8,border:"none",background:panelFieldBg(A),color:A.t1,fontFamily:FONT,fontSize:12.5}}/>
+                      <span style={{flexShrink:0,color:A.t3,fontSize:12}}>—</span>
+                      <input type="date" value={periodRangeEnd} min={periodRangeStart||undefined}
+                        onChange={e=>{setPeriodRangeEnd(e.target.value);setPeriodRangeMode("custom")}}
+                        style={{flex:1,minWidth:0,height:32,padding:"0 8px",borderRadius:8,border:"none",background:panelFieldBg(A),color:A.t1,fontFamily:FONT,fontSize:12.5}}/>
                     </div>
-                    <div style={{fontSize:11.5,color:A.t2,textAlign:"right" as const,fontWeight:600,lineHeight:1.35}}>공유 {s.total}<br/>중복 제외 {s.unique}</div>
-                  </div>})}
-                </div>}
-              </div>
-              <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-                {infoTitle("활동","form_response_events의 날짜별 이벤트를 기준으로 참여, 완료, 공유, 링크 클릭 추이를 표시합니다. 최근 날짜 중심으로 사용자의 이동과 반응이 어느 날에 몰렸는지 볼 수 있습니다.")}
-                {periodTip("activity")}
-                {activityEntries.length===0?emptyState("활동 데이터가 아직 없습니다."):<div style={{height:260,display:"flex",alignItems:"flex-end",gap:12,borderLeft:`1px solid ${A.border}`,borderBottom:`1px solid ${A.border}`,padding:"12px 8px 26px",position:"relative" as const}}>
-                  {activityEntries.map((d:any)=><div key={d.date} style={{flex:1,height:"100%",display:"flex",alignItems:"flex-end",gap:3,position:"relative" as const}}>
-	                    {[["participation",chartBlue,"참여"],["complete",chartGreen,"완료"],["share",chartPurple,"공유"],["link",chartSlate,"링크 클릭"]].map((pair:any)=><div key={pair[0]} onMouseMove={e=>movePeriodTip("activity",e,{title:`${d.date} ${pair[2]}`,color:pair[1],lines:[`${pair[2]} : ${d[pair[0]]}`,`날짜 : ${d.date}`]})} onMouseLeave={()=>setPeriodHover(null)} style={{flex:1,height:`${Math.max(2,(d[pair[0]]/maxActivity)*100)}%`,borderRadius:"6px 6px 0 0",background:pair[1],cursor:"pointer",transform:periodHover?.scope==="activity"&&periodHover.title===`${d.date} ${pair[2]}`?"scaleY(1.06)":"scaleY(1)",transformOrigin:"bottom",transition:"transform .16s ease"}}/>)}
-                    <div style={{position:"absolute" as const,left:"50%",bottom:-22,transform:"translateX(-50%)",fontSize:10.5,color:A.t3,whiteSpace:"nowrap" as const}}>{String(d.date).slice(5)}</div>
-                  </div>)}
-                </div>}
+                    {periodRangeMode==="custom"&&<button onClick={()=>{setPeriodRangeMode("all");setPeriodRangeStart("");setPeriodRangeEnd("")}}
+                      style={{width:"100%",height:32,marginTop:2,border:"none",borderRadius:8,background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
+                      선택 해제
+                    </button>}
+                  </div>
+                </>}
               </div>
             </div>
-	            {periodRows.length===0?emptyState("기간별로 표시할 응답이 없습니다."):<div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-	              {infoTitle("일자별 응답 수","applications 또는 company_applications 응답 row의 created_at을 기준으로 실제 제출 완료 응답 수를 날짜별로 집계합니다. 막대 길이는 전체 응답 대비 해당 날짜의 비중입니다.")}
-	              {periodTip("period")}
-	              <div style={{height:250,display:"flex",alignItems:"flex-end",gap:10,borderLeft:`1px solid ${A.border}`,borderBottom:`1px solid ${A.border}`,padding:"18px 10px 28px",position:"relative" as const}}>
-	                {periodChartRows.map((item:any,i:number)=>{const d=item[0],c=Number(item[1])||0;const h=Math.max(5,(c/maxPeriodCount)*100);const color=colors[i%colors.length];return <div key={d} style={{flex:1,height:"100%",display:"flex",alignItems:"flex-end",justifyContent:"center",position:"relative" as const}}>
-	                  <div onMouseMove={e=>movePeriodTip("period",e,{title:String(d),color,lines:[`응답 수 : ${c}`,`전체 대비 : ${rows.length?Math.round((c/rows.length)*1000)/10:0}%`]})} onMouseLeave={()=>setPeriodHover(null)}
-	                    style={{width:"70%",maxWidth:42,height:`${h}%`,borderRadius:"8px 8px 0 0",background:color,cursor:"pointer",transform:periodHover?.scope==="period"&&periodHover.title===String(d)?"scaleY(1.05)":"scaleY(1)",transformOrigin:"bottom",transition:"transform .16s ease, opacity .16s",opacity:periodHover?.scope==="period"&&periodHover.title!==String(d)?0.55:1}}/>
-	                  <div style={{position:"absolute" as const,bottom:-22,left:"50%",transform:"translateX(-50%)",fontSize:10.5,color:A.t3,whiteSpace:"nowrap" as const}}>{String(d).slice(5)}</div>
-	                </div>})}
-	              </div>
-	            </div>}
-          </div>}
-          {activeAnalyticsTab==="dropoff"&&<div>
-            <div style={{fontSize:22,fontWeight:600,color:A.t1,marginBottom:16}}>질문별 이탈률</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14,marginBottom:16}}>
-	              {metric(<path d="M4 3.5h5v9H4M9 8h5M12 5.8 14.2 8 12 10.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>,String(dropTotal),"추정 이탈",chartPink)}
-	              {metric(<path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>,`${completionRate}%`,"완료율",chartGreen)}
-	              {metric(<><path d="M3.5 4.5h7.2a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H8L5 14v-2.5H3.5a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2z" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round"/><path d="M8.8 7.2h4.5M11.4 5.1 13.5 7.2l-2.1 2.1" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></>,String(dropRows[0]?.question||"-"),"최다 이탈 질문",chartBlue)}
+
+            <div style={{display:"grid",gridTemplateColumns:`repeat(${periodStatList.length},minmax(0,1fr))`,gap:16,margin:"0 28px",padding:"20px 0 24px",boxShadow:`inset 0 1px 0 ${A===ALT?"#EDEFF3":A.border}`}}>
+              {periodStatList.map((stat,statIdx)=><div key={stat.label} style={{minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:12.5,fontWeight:500,color:A.t3,whiteSpace:"nowrap" as const,minWidth:0}}>
+                  <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{stat.label}</span>
+                  {stat.tip&&<span className={`cf-stat-tip${statIdx>=Math.ceil(periodStatList.length/2)?" cf-tip-end":""}`} data-tip={stat.tip} tabIndex={0} aria-label={stat.tip}
+                    style={{flexShrink:0,width:14,height:14,borderRadius:"50%",display:"inline-flex",alignItems:"center",justifyContent:"center",
+                      background:A===ALT?"#E7EAEF":A.card2,color:A.t3,fontSize:9.5,fontWeight:700,cursor:"help",outline:"none"}}>?</span>}
+                </div>
+                <div style={{fontSize:28,fontWeight:700,letterSpacing:"-.8px",color:A.t1,marginTop:4,fontVariantNumeric:"tabular-nums" as const,whiteSpace:"nowrap" as const}}>{stat.value}</div>
+              </div>)}
             </div>
-            {dropRows.length===0?emptyState("아직 이탈 이벤트가 없습니다."):<div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,overflow:"hidden",boxShadow:A.shadow}}>
-              <div style={{display:"grid",gridTemplateColumns:"150px minmax(260px,1fr) 160px 90px",gap:0,background:A.card2,borderBottom:`1px solid ${A.border}`,fontSize:12,color:A.t2,fontWeight:600}}>
-                <div style={{padding:"12px 14px"}}>섹션</div><div style={{padding:"12px 14px",borderLeft:`1px solid ${A.border}`}}>질문</div><div style={{padding:"12px 14px",borderLeft:`1px solid ${A.border}`}}>전체 대비</div><div style={{padding:"12px 14px",borderLeft:`1px solid ${A.border}`,textAlign:"right" as const}}>이탈 수</div>
+
+            {periodTrend.length>1&&<div style={{padding:"0 28px 8px"}}>
+              {/* 기준선을 먼저 긋고 그 아래에 최댓값·범례를 둔다. 숫자가 선 위에 떠 있으면 무엇의 기준인지 읽기 어렵다. */}
+              <div style={{height:1,background:A===ALT?"#EFF1F4":A.border}}/>
+              <div style={{display:"flex",alignItems:"center",gap:14,padding:"7px 0 2px"}}>
+                <span style={{fontSize:12.5,color:A.t3,fontVariantNumeric:"tabular-nums" as const}}>{periodTrendMax}</span>
+                <div style={{flex:1}}/>
+                {[{label:"참여",color:periodPurple},{label:"완료",color:A.blue}].map(item=>(
+                  <span key={item.label} style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:A.t3,flexShrink:0}}>
+                    <span style={{width:7,height:7,borderRadius:4,flexShrink:0,background:item.color}}/>{item.label}
+                  </span>
+                ))}
               </div>
-              {dropRows.map((item:any)=>{const pct=sessionCount?Math.round((item.count/sessionCount)*1000)/10:0;return <div key={item.key} style={{display:"grid",gridTemplateColumns:"150px minmax(260px,1fr) 160px 90px",alignItems:"center",borderBottom:`1px solid ${A.border}`,fontSize:13}}>
-                <div style={{padding:"13px 14px",color:A.t2,fontWeight:600}}>{item.section}</div>
-                <div style={{padding:"13px 14px",borderLeft:`1px solid ${A.border}`,color:A.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.question}</div>
-	                <div style={{padding:"13px 14px",borderLeft:`1px solid ${A.border}`}}><div style={{height:9,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:chartPink}}/></div><div style={{fontSize:11.5,color:A.t3,marginTop:5}}>{pct}%</div></div>
-                <div style={{padding:"13px 14px",borderLeft:`1px solid ${A.border}`,textAlign:"right" as const,color:A.t1,fontWeight:600}}>{item.count}</div>
-              </div>})}
+              {/* 마우스가 움직일 때마다 상태를 바꾸면 이 큰 컴포넌트가 통째로 다시 그려져 심하게 버벅인다.
+                  점과 툴팁을 미리 만들어 두고 ref로 위치·숫자만 직접 고쳐서 리렌더를 아예 없앤다. */}
+              <div
+                onMouseMove={e=>{
+                  const host=e.currentTarget as HTMLElement
+                  const r=host.getBoundingClientRect()
+                  const n=periodTrend.length
+                  if(n<2||!r.width)return
+                  const idx=Math.max(0,Math.min(n-1,Math.round(((e.clientX-r.left)/r.width)*(n-1))))
+                  if(trendHoverIdxRef.current===idx)return
+                  trendHoverIdxRef.current=idx
+                  const item=periodTrend[idx]
+                  const value=Number(item?.participation)||0
+                  const ratio=n>1?idx/(n-1):0
+                  const yPx=Math.round((174-(value/periodTrendAxisMax)*(174-6))*(200/174))
+                  const doneValue=Number(item?.complete)||0
+                  const doneYPx=Math.round((174-(doneValue/periodTrendAxisMax)*(174-6))*(200/174))
+                  const dot=trendDotRef.current
+                  if(dot){
+                    dot.style.display="block"
+                    dot.style.left=`calc(${ratio*100}% - 5px)`
+                    dot.style.top=`${yPx-5}px`
+                  }
+                  const doneDot=trendDotDoneRef.current
+                  if(doneDot){
+                    doneDot.style.display="block"
+                    doneDot.style.left=`calc(${ratio*100}% - 5px)`
+                    doneDot.style.top=`${doneYPx-5}px`
+                  }
+                  const tip=trendTipRef.current
+                  if(tip){
+                    const leftSide=ratio<=0.5
+                    tip.style.display="block"
+                    tip.style.top=`${Math.max(4,yPx-14)}px`
+                    tip.style.left=leftSide?`calc(${ratio*100}% + 18px)`:"auto"
+                    tip.style.right=leftSide?"auto":`calc(${(1-ratio)*100}% + 18px)`
+                  }
+                  if(trendTipDateRef.current)trendTipDateRef.current.textContent=String(item?.date||"")
+                  if(trendTipValueRef.current)trendTipValueRef.current.textContent=String(value)
+                  if(trendTipDoneRef.current)trendTipDoneRef.current.textContent=String(doneValue)
+                }}
+                onMouseLeave={()=>{
+                  trendHoverIdxRef.current=null
+                  if(trendDotRef.current)trendDotRef.current.style.display="none"
+                  if(trendDotDoneRef.current)trendDotDoneRef.current.style.display="none"
+                  if(trendTipRef.current)trendTipRef.current.style.display="none"
+                }}
+                style={{position:"relative" as const,cursor:"crosshair"}}>
+                <svg viewBox="0 0 720 174" preserveAspectRatio="none" style={{display:"block",width:"100%",height:200,overflow:"visible"}}>
+                  <defs>
+                    <linearGradient id="cfPeriodJoin" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={periodPurple} stopOpacity="0.26"/>
+                      <stop offset="100%" stopColor={periodPurple} stopOpacity="0"/>
+                    </linearGradient>
+                    <linearGradient id="cfPeriodDone" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={A.blue} stopOpacity="0.30"/>
+                      <stop offset="100%" stopColor={A.blue} stopOpacity="0"/>
+                    </linearGradient>
+                  </defs>
+                  {/* 0 기준선. 최댓값 선은 그래프 위에 따로 그린다. */}
+                  <line x1="0" y1="174" x2="720" y2="174" stroke={A===ALT?"#EFF1F4":A.border} strokeWidth="1" vectorEffect="non-scaling-stroke"/>
+                  <path d={trendPath(periodTrend.map((d:any)=>Number(d.participation)||0),720,174,periodTrendAxisMax,true)} fill="url(#cfPeriodJoin)"/>
+                  {/* 완료는 참여와 같은 축에 겹쳐 그려야 둘의 간격이 그대로 전환 폭으로 읽힌다. */}
+                  <path d={trendPath(periodTrend.map((d:any)=>Number(d.complete)||0),720,174,periodTrendAxisMax,true)} fill="url(#cfPeriodDone)"/>
+                  <path d={trendPath(periodTrend.map((d:any)=>Number(d.participation)||0),720,174,periodTrendAxisMax,false)} fill="none" stroke={periodPurple} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>
+                  <path d={trendPath(periodTrend.map((d:any)=>Number(d.complete)||0),720,174,periodTrendAxisMax,false)} fill="none" stroke={A.blue} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>
+                </svg>
+                <span ref={trendDotRef} style={{position:"absolute" as const,display:"none",left:0,top:0,width:10,height:10,borderRadius:6,background:periodPurple,boxShadow:`0 0 0 2.5px ${A.card}`,pointerEvents:"none" as const}}/>
+                <span ref={trendDotDoneRef} style={{position:"absolute" as const,display:"none",left:0,top:0,width:10,height:10,borderRadius:6,background:A.blue,boxShadow:`0 0 0 2.5px ${A.card}`,pointerEvents:"none" as const}}/>
+                <div ref={trendTipRef} style={{position:"absolute" as const,display:"none",zIndex:14,top:0,left:0,
+                  width:220,borderRadius:12,background:A.card,boxShadow:"0 1px 2px rgba(16,24,40,.10),0 14px 36px -10px rgba(16,24,40,.30)",pointerEvents:"none" as const}}>
+                  <div ref={trendTipDateRef} style={{padding:"12px 14px 10px",fontSize:13,color:A.t3}}/>
+                  <div style={{height:1,background:A===ALT?"#EFF1F4":A.border}}/>
+                  <div style={{padding:"10px 14px 12px",display:"flex",flexDirection:"column" as const,gap:8}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <span style={{width:8,height:8,borderRadius:5,flexShrink:0,background:periodPurple}}/>
+                      <span style={{fontSize:13.5,color:A.t1}}>참여</span>
+                      <span style={{flex:1,minWidth:24}}/>
+                      <span ref={trendTipValueRef} style={{fontSize:13.5,fontWeight:700,color:A.t1,fontVariantNumeric:"tabular-nums" as const}}/>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <span style={{width:8,height:8,borderRadius:5,flexShrink:0,background:A.blue}}/>
+                      <span style={{fontSize:13.5,color:A.t1}}>완료</span>
+                      <span style={{flex:1,minWidth:24}}/>
+                      <span ref={trendTipDoneRef} style={{fontSize:13.5,fontWeight:700,color:A.t1,fontVariantNumeric:"tabular-nums" as const}}/>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddingTop:10,fontSize:12.5,color:A.t3,fontVariantNumeric:"tabular-nums" as const}}>
+                <span>{periodTrend[0].date}</span>
+                <span>{periodTrend[periodTrend.length-1].date}</span>
+              </div>
             </div>}
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,margin:"26px 28px 0",paddingTop:28,boxShadow:`inset 0 1px 0 ${A===ALT?"#EDEFF3":A.border}`}}>
+              <div style={{paddingRight:28,minWidth:0}}>
+                <div style={{height:34,display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                  <span style={{fontSize:15,fontWeight:700,color:A.t1,flexShrink:0}}>유입경로</span>
+                  <div style={{flex:1}}/>
+                  <div style={{display:"flex",alignItems:"center",gap:2,padding:3,borderRadius:9,background:A===ALT?"#F1F3F6":A.card2,flexShrink:0}}>
+                    {([{id:"domain",label:"도메인"},{id:"source",label:"source"},{id:"medium",label:"medium"},{id:"campaign",label:"campaign"}] as const).map(axis=>{
+                      const on=periodSourceAxis===axis.id
+                      return <button key={axis.id} onClick={()=>setPeriodSourceAxis(axis.id)}
+                        style={{height:26,padding:"0 10px",flexShrink:0,whiteSpace:"nowrap" as const,border:"none",borderRadius:7,fontSize:12,fontFamily:FONT,cursor:"pointer",
+                          fontWeight:on?700:500,background:on?A.card:"transparent",color:on?A.blue:A.t2,boxShadow:on?"0 1px 2px rgba(16,24,40,.10)":"none"}}>{axis.label}</button>
+                    })}
+                  </div>
+                </div>
+                {periodSourceList.length===0?emptyState("유입경로 데이터가 아직 없습니다."):<div {...fadeScrollProps} style={{height:322,overflowY:"auto" as const,paddingRight:4,display:"flex",flexDirection:"column" as const,gap:4}}>
+                  {periodSourceList.map((item:any)=>{
+                    const label=String(item.label)
+                    const enter=Number(item.participation)||0
+                    const done=Number(item.complete)||0
+                    const rate=enter?Math.round((done/enter)*1000)/10:0
+                    const open=periodSourceDetail===label
+                    const detailSessions=open?periodSourceSessions(label):[]
+                    const detailDone=detailSessions.filter((x:any)=>x.completed).length
+                    const detailRows=open?periodSourceRows(label):[]
+                    const ageRows=periodBreakdown(detailRows.filter((row:any)=>analyticsAgeBucket(row)),(row:any)=>analyticsAgeBucket(row),8)
+                      .sort((a:any,b:any)=>{
+                        const ai=AGE_BUCKET_ORDER.indexOf(a.label), bi=AGE_BUCKET_ORDER.indexOf(b.label)
+                        return (ai<0?99:ai)-(bi<0?99:bi)
+                      })
+                    const groups=open?[
+                      {title:`연령대${ageRows.length?"":" (응답에 연령 정보가 없습니다)"}`,rows:ageRows},
+                      {title:"위치",rows:periodBreakdown(detailSessions,(x:any)=>x.location)},
+                      {title:"기기",rows:periodBreakdown(detailSessions,(x:any)=>x.os)},
+                    ]:[]
+                    return <React.Fragment key={label}>
+                      <div role="button" tabIndex={0} aria-expanded={open}
+                        onClick={()=>setPeriodSourceDetail(open?"":label)}
+                        onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();setPeriodSourceDetail(open?"":label)}}}
+                        style={{...periodBarRow,cursor:"pointer",background:open?(A===ALT?"#EAF2FE":A.blue2):periodBarRow.background,outline:"none"}}
+                        onMouseEnter={e=>{if(!open)periodHoverIn(e)}} onMouseLeave={e=>{if(!open)periodHoverOut(e)}}>
+                        <span style={periodBarFill(Math.round((enter/periodSourceMax)*100),A.blue)}/>
+                        <span style={periodIconWrap}><span style={periodIconImg(sourceIconUrl(label))}/></span>
+                        <span style={{position:"relative" as const,flex:1,minWidth:0,fontSize:13,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{label}</span>
+                        <span style={{position:"relative" as const,fontSize:12.5,color:A.t3,flexShrink:0,fontVariantNumeric:"tabular-nums" as const}}>{rate?`${rate}%`:"—"}</span>
+                        <span style={{position:"relative" as const,fontSize:13,fontWeight:600,color:A.t1,flexShrink:0,minWidth:36,textAlign:"right" as const,fontVariantNumeric:"tabular-nums" as const}}>{enter}</span>
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{position:"relative" as const,flexShrink:0,color:A.t3,transform:open?"rotate(180deg)":"none",transition:"transform .15s"}}>
+                          <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                      {open&&<div style={{flexShrink:0,padding:"12px 12px 14px",borderRadius:10,background:A===ALT?"#FBFCFD":A.card2,display:"flex",flexDirection:"column" as const,gap:12}}>
+                        <div style={{display:"flex",alignItems:"center",gap:14,fontSize:12,color:A.t3}}>
+                          <span>참여 <strong style={{color:A.t1,fontWeight:700}}>{detailSessions.length}</strong></span>
+                          <span>완료 <strong style={{color:A.t1,fontWeight:700}}>{detailDone}</strong></span>
+                          <span>전환율 <strong style={{color:A.t1,fontWeight:700}}>{detailSessions.length?Math.round((detailDone/detailSessions.length)*1000)/10:0}%</strong></span>
+                        </div>
+                        {detailSessions.length===0
+                          ? <div style={{fontSize:12,color:A.t3}}>이 채널의 접속 기록이 아직 없습니다.</div>
+                          : groups.filter(group=>group.rows.length||group.title.startsWith("연령대")).map(group=>(
+                            <div key={group.title} style={{display:"flex",flexDirection:"column" as const,gap:6}}>
+                              <div style={{fontSize:11.5,fontWeight:600,color:A.t3}}>{group.title}</div>
+                              {group.rows.map(row=>(
+                                <div key={row.label} style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) 46px 32px",gap:8,alignItems:"center"}}>
+                                  <span title={row.label} style={{minWidth:0,fontSize:12.5,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{row.label}</span>
+                                  <span style={{height:5,borderRadius:3,background:A===ALT?"#E7EAEF":A.bg,overflow:"hidden"}}>
+                                    <span style={{display:"block",height:"100%",borderRadius:3,background:A.blue,width:`${Math.max(4,row.pct)}%`}}/>
+                                  </span>
+                                  <span style={{fontSize:12,color:A.t3,textAlign:"right" as const,fontVariantNumeric:"tabular-nums" as const}}>{row.count}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        <div style={{fontSize:11,color:A.t4,lineHeight:1.55}}>연령대는 제출된 답변(연령대 · 생년월일)에서, 위치와 기기는 접속 정보에서 가져옵니다. 그래서 위치·기기에는 답을 남기지 않고 나간 사람도 포함됩니다.</div>
+                      </div>}
+                    </React.Fragment>
+                  })}
+                </div>}
+                <div style={{marginTop:16,padding:"12px 14px",borderRadius:10,background:A===ALT?"#F6F7F9":A.card2,fontSize:12,color:A.t3,lineHeight:1.6}}>
+                  출처 미확인은 URL 직접 입력, 카카오톡·문자·메일 앱, 즐겨찾기처럼 referrer가 전달되지 않는 방문입니다. 링크에 utm_source를 붙이면 채널별로 분리해서 볼 수 있어요.
+                </div>
+              </div>
+              <div style={{paddingLeft:28,minWidth:0,boxShadow:`inset 1px 0 0 ${A===ALT?"#EDEFF3":A.border}`}}>
+                <div style={{height:34,display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                  <span style={{fontSize:15,fontWeight:700,color:A.t1}}>위치</span>
+                  <div style={{flex:1}}/>
+                  <span style={{fontSize:13,color:A.t3}}>{locationSource}</span>
+                </div>
+                {locationEntries.length===0?emptyState("위치 데이터가 아직 없습니다."):<div {...fadeScrollProps} style={{height:322,overflowY:"auto" as const,paddingRight:4,display:"flex",flexDirection:"column" as const,gap:4}}>
+                  {locationEntries.map((entry:any)=>{
+                    const label=String(entry[0]||"미확인")
+                    const count=Number(entry[1])||0
+                    const max=Math.max(1,Number(locationEntries[0]?.[1])||1)
+                    return <div key={label} style={periodBarRow} onMouseEnter={periodHoverIn} onMouseLeave={periodHoverOut}>
+                      <span style={periodBarFill(Math.round((count/max)*100),A.blue)}/>
+                      <span style={periodIconWrap}><span style={periodIconImg(placeIconUrl(label))}/></span>
+                      <span style={{position:"relative" as const,flex:1,minWidth:0,fontSize:13,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{label}</span>
+                      <span style={{position:"relative" as const,fontSize:13,fontWeight:600,color:A.t1,flexShrink:0,minWidth:36,textAlign:"right" as const,fontVariantNumeric:"tabular-nums" as const}}>{count}</span>
+                    </div>
+                  })}
+                </div>}
+                <div style={{marginTop:16,padding:"12px 14px",borderRadius:10,background:A===ALT?"#F6F7F9":A.card2,fontSize:12,color:A.t3,lineHeight:1.6}}>
+                  위치는 제출 답변이 아니라 접속 metadata를 사용합니다. 권한을 거부하면 통신망/IP 위치가 표시되어 실제 위치와 다르거나 ‘미확인’으로 남을 수 있습니다.
+                </div>
+              </div>
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,margin:"26px 28px 0",padding:"28px 0 36px",boxShadow:`inset 0 1px 0 ${A===ALT?"#EDEFF3":A.border}`}}>
+              <div style={{paddingRight:28,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:14}}>
+                  <span style={{fontSize:15,fontWeight:700,color:A.t1}}>활동</span>
+                  <div style={{flex:1}}/>
+                  {periodTrend.length>0&&<span style={{fontSize:13,color:A.t3}}>{periodTrend[0].date} ~ {periodTrend[periodTrend.length-1].date}</span>}
+                </div>
+                {periodTrend.length===0?emptyState("활동 데이터가 아직 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:4}}>
+                  {([
+                    ["participation",periodPurple,"참여","폼을 연 세션 수입니다."],
+                    ["complete",A.blue,"완료","제출을 끝낸 사람 수입니다. 한 사람이 여러 번 제출해도 1명으로 세고, 그 사람의 첫 제출 날짜에 표시합니다."],
+                    ["share",periodGreen,"공유","폼 안의 공유 버튼(카카오톡·페이스북 등) 클릭 수입니다."],
+                    ["link",periodSlate,"링크 클릭","폼 본문에 넣은 바깥 링크를 누른 횟수입니다. 광고 클릭이 아니라 폼 안에서 일어난 클릭이며, 공유 버튼 클릭은 위 공유에서 세므로 여기서는 뺍니다."],
+                  ] as any[]).map(pair=>{
+                    const vals=periodTrend.map((d:any)=>Number(d[pair[0]])||0)
+                    const max=Math.max(1,...vals)
+                    return <div key={pair[0]} style={{display:"grid",gridTemplateColumns:"96px minmax(0,1fr) 48px",gap:14,alignItems:"center",height:44,padding:"0 12px",borderRadius:10}}
+                      onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A===ALT?"#F6F7F9":A.card2}}
+                      onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
+                      <span style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:A.t2,minWidth:0}}>
+                        <span style={{width:8,height:8,borderRadius:5,flexShrink:0,background:pair[1]}}/>
+                        <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{pair[2]}</span>
+                        <span className="cf-stat-tip" data-tip={pair[3]} tabIndex={0} aria-label={pair[3]}
+                          style={{flexShrink:0,width:14,height:14,borderRadius:"50%",display:"inline-flex",alignItems:"center",justifyContent:"center",
+                            background:A===ALT?"#E7EAEF":A.card2,color:A.t3,fontSize:9.5,fontWeight:700,cursor:"help",outline:"none"}}>?</span>
+                      </span>
+                      <svg viewBox="0 0 120 26" preserveAspectRatio="none" style={{display:"block",width:"100%",height:26,overflow:"visible"}}>
+                        <path d={trendPath(vals,120,22,max,false)} fill="none" stroke={pair[1]} strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>
+                      </svg>
+                      <span style={{fontSize:13.5,fontWeight:700,color:A.t1,textAlign:"right" as const,fontVariantNumeric:"tabular-nums" as const}}>{vals.reduce((acc:number,v:number)=>acc+v,0)}</span>
+                    </div>
+                  })}
+                </div>}
+              </div>
+              <div style={{paddingLeft:28,minWidth:0,boxShadow:`inset 1px 0 0 ${A===ALT?"#EDEFF3":A.border}`}}>
+                <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:14}}>
+                  <span style={{fontSize:15,fontWeight:700,color:A.t1}}>공유</span>
+                  <div style={{flex:1}}/>
+                  <span style={{fontSize:13,color:A.t3}}>중복 제외</span>
+                </div>
+                {shareEntries.length===0?emptyState("공유 이벤트가 아직 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:4}}>
+                  {shareEntries.map((item:any)=>{
+                    const max=Math.max(1,Number(shareEntries[0]?.total)||1)
+                    return <div key={item.channel} style={periodBarRow} onMouseEnter={periodHoverIn} onMouseLeave={periodHoverOut}>
+                      <span style={periodBarFill(Math.round((item.total/max)*100),periodPurple)}/>
+                      <span style={periodIconWrap}><span style={periodIconImg(shareIconUrl(String(item.channel)))}/></span>
+                      <span style={{position:"relative" as const,flex:1,minWidth:0,fontSize:13,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.channel}</span>
+                      <span style={{position:"relative" as const,fontSize:12.5,color:A.t3,flexShrink:0}}>중복 제외 {item.unique}</span>
+                      <span style={{position:"relative" as const,fontSize:13,fontWeight:600,color:A.t1,flexShrink:0,minWidth:36,textAlign:"right" as const,fontVariantNumeric:"tabular-nums" as const}}>{item.total}</span>
+                    </div>
+                  })}
+                </div>}
+              </div>
+            </div>
           </div>}
-          {activeAnalyticsTab==="qr"&&<div>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap" as const,marginBottom:10}}>
-              <div style={{fontSize:22,fontWeight:600,color:A.t1}}>QR 데이터</div>
-              {hasDetailQr&&<div style={{display:"flex",gap:4,padding:4,borderRadius:A.r,background:A.card2,border:`1px solid ${A.border}`}}>
-                {([{id:"form",label:"폼 QR"},{id:"detail",label:"상세페이지 QR"}] as const).map(item=>{const active=activeQrScope===item.id;return <button key={item.id} onClick={()=>setQrAnalyticsScope(item.id)}
-                  style={{height:30,padding:"0 12px",borderRadius:A.r,border:"none",background:active?A.card:"transparent",color:active?A.blue:A.t2,boxShadow:active?A.shadow:"none",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
-                  {item.label}
-                </button>})}
+          {activeAnalyticsTab==="dropoff"&&<div style={{height:"100%",overflowY:"auto" as const,background:A.card}}>
+            {/* 시안: 제목 + 최다 이탈 → 지표 3칸 → 섹션/질문/전체 대비/이탈 수 표 */}
+            <div style={{display:"flex",alignItems:"center",gap:10,minHeight:72,padding:"22px 28px 16px"}}>
+              <span style={{fontSize:18,fontWeight:700,color:A.t1,letterSpacing:"-.2px",flexShrink:0,whiteSpace:"nowrap" as const}}>질문별 이탈률</span>
+              <div style={{flex:1}}/>
+              {dropRows.length>0&&<span style={{fontSize:12.5,color:A.t3,flexShrink:0,whiteSpace:"nowrap" as const,overflow:"hidden",textOverflow:"ellipsis",maxWidth:340}}>
+                최다 이탈 <strong style={{color:A.t1}}>{dropRows[0].question}</strong>
+              </span>}
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:16,margin:"20px 28px 0",padding:"20px 0 24px",boxShadow:`inset 0 -1px 0 ${A===ALT?"#EDEFF3":A.border}`}}>
+              {[
+                {label:"추정 이탈",value:String(dropTotal)},
+                {label:"전환율",value:`${conversionRate}%`},
+                {label:"최다 이탈 질문",value:dropRows[0]?.question||"—"},
+              ].map(stat=><div key={stat.label} style={{minWidth:0}}>
+                <div style={{fontSize:12.5,fontWeight:500,color:A.t3,whiteSpace:"nowrap" as const}}>{stat.label}</div>
+                <div title={stat.value} style={{fontSize:28,fontWeight:700,letterSpacing:"-.8px",color:A.t1,marginTop:4,fontVariantNumeric:"tabular-nums" as const,whiteSpace:"nowrap" as const,overflow:"hidden",textOverflow:"ellipsis"}}>{stat.value}</div>
+              </div>)}
+            </div>
+
+            {dropRows.length===0
+              ? <div style={{padding:"22px 28px"}}>{emptyState("아직 이탈 이벤트가 없습니다.")}</div>
+              : <>
+                <div style={{display:"grid",gridTemplateColumns:"88px minmax(200px,1.3fr) minmax(160px,1fr) 72px",gap:16,alignItems:"center",padding:"16px 28px 9px",fontSize:11.5,fontWeight:600,color:A.t3,boxShadow:`inset 0 -1px 0 ${A===ALT?"#EFF1F4":A.border}`}}>
+                  <span>섹션</span><span>질문</span><span>전체 대비</span><span style={{textAlign:"right" as const}}>이탈 수</span>
+                </div>
+                <div style={{paddingBottom:20}}>
+                  {dropRows.map((item:any)=>{
+                    const base=sessionCount||dropTotal||1
+                    const pct=Math.round((item.count/base)*1000)/10
+                    const max=Math.max(1,Number(dropRows[0]?.count)||1)
+                    return <div key={item.key} style={{display:"grid",gridTemplateColumns:"88px minmax(200px,1.3fr) minmax(160px,1fr) 72px",gap:16,alignItems:"center",minHeight:48,padding:"4px 28px",boxShadow:`inset 0 -1px 0 ${A===ALT?"#F5F6F8":A.border}`}}
+                      onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A===ALT?"#F7F9FC":"rgba(255,255,255,0.04)"}}
+                      onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
+                      <span style={{fontSize:12,color:A.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.section}</span>
+                      <span title={item.question} style={{fontSize:13,fontWeight:600,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.question}</span>
+                      <span style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+                        <span style={{flex:1,minWidth:0,height:5,borderRadius:3,background:A===ALT?"#EFF1F4":A.card2,overflow:"hidden",display:"block"}}>
+                          <span style={{display:"block",height:"100%",borderRadius:3,background:A.blue,width:`${Math.max(2,Math.round((item.count/max)*100))}%`}}/>
+                        </span>
+                        <span style={{fontSize:11.5,color:A.t3,flexShrink:0,minWidth:38,textAlign:"right" as const,fontVariantNumeric:"tabular-nums" as const}}>{pct}%</span>
+                      </span>
+                      <span style={{fontSize:13,fontWeight:700,color:A.t1,textAlign:"right" as const,fontVariantNumeric:"tabular-nums" as const}}>{item.count}</span>
+                    </div>
+                  })}
+                </div>
+              </>}
+          </div>}
+          {activeAnalyticsTab==="qr"&&<div style={{height:"100%",overflowY:"auto" as const,background:A.card}}>
+            {/* 시안: 제목 → 지표 3칸 → 스캔 활동/운영체제 → 국가/도시 → 시간대 */}
+            <div style={{display:"flex",alignItems:"center",gap:10,minHeight:72,padding:"22px 28px 16px"}}>
+              <span style={{fontSize:18,fontWeight:700,color:A.t1,letterSpacing:"-.2px",flexShrink:0,whiteSpace:"nowrap" as const}}>QR 데이터</span>
+              <div style={{flex:1}}/>
+              {hasDetailQr&&<div style={{display:"flex",alignItems:"center",gap:2,padding:3,borderRadius:9,background:A===ALT?"#F1F3F6":A.card2,flexShrink:0}}>
+                {([{id:"form",label:"폼 QR"},{id:"detail",label:"상세페이지 QR"}] as const).map(item=>{
+                  const on=activeQrScope===item.id
+                  return <button key={item.id} onClick={()=>setQrAnalyticsScope(item.id)}
+                    style={{height:26,padding:"0 10px",flexShrink:0,whiteSpace:"nowrap" as const,border:"none",borderRadius:7,fontSize:12,fontFamily:FONT,cursor:"pointer",
+                      fontWeight:on?700:500,background:on?A.card:"transparent",color:on?A.blue:A.t2,boxShadow:on?"0 1px 2px rgba(16,24,40,.10)":"none"}}>{item.label}</button>
+                })}
+              </div>}
+              <span style={{fontSize:12.5,color:A.t3,flexShrink:0,whiteSpace:"nowrap" as const}}>{activeQrScope==="detail"?"상세페이지 이동용 QR 스캔 기록":"폼 진입용 QR 스캔 기록"}</span>
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:16,margin:"0 28px",padding:"20px 0 24px",boxShadow:`inset 0 1px 0 ${A===ALT?"#EDEFF3":A.border}`}}>
+              {[
+                {label:"총 스캔",value:String(qrScanTotal)},
+                {label:"고유 스캔",value:String(qrUniqueScans)},
+                {label:qrVisitLabel,value:String(qrVisits)},
+              ].map(stat=><div key={stat.label} style={{minWidth:0}}>
+                <div style={{fontSize:12.5,fontWeight:500,color:A.t3,whiteSpace:"nowrap" as const}}>{stat.label}</div>
+                <div style={{fontSize:28,fontWeight:700,letterSpacing:"-.8px",color:A.t1,marginTop:4,fontVariantNumeric:"tabular-nums" as const}}>{stat.value}</div>
+              </div>)}
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,margin:"0 28px",paddingTop:26,boxShadow:`inset 0 1px 0 ${A===ALT?"#EDEFF3":A.border}`}}>
+              <div style={{paddingRight:28,minWidth:0}}>
+                <div style={{height:34,display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                  <span style={{fontSize:15,fontWeight:700,color:A.t1}}>스캔 활동</span>
+                  <div style={{flex:1}}/>
+                  {qrActivityRows.length>0&&<span style={{fontSize:13,color:A.t3}}>{qrActivityRows[0].date} ~ {qrActivityRows[qrActivityRows.length-1].date}</span>}
+                </div>
+                {qrActivityRows.length===0?emptyState("QR 스캔 기록이 아직 없습니다."):<>
+                  <div style={{display:"flex",flexDirection:"column" as const,gap:4}}>
+                    {qrActivityRows.map((d:any)=>{
+                      const segs=([["total",A.blue],["unique",periodPurple],["visits",periodGreen]] as any[]).filter(pair=>Number(d[pair[0]])>0)
+                      return <div key={d.date} style={{display:"grid",gridTemplateColumns:"56px minmax(0,1fr) 132px",gap:14,alignItems:"center",height:42,padding:"0 12px",borderRadius:10}}
+                        onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A===ALT?"#F6F7F9":A.card2}}
+                        onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
+                        <span style={{fontSize:12,color:A.t3,fontVariantNumeric:"tabular-nums" as const}}>{String(d.date).slice(5)}</span>
+                        <span style={{display:"flex",alignItems:"center",gap:2,height:6}}>
+                          {segs.map((pair:any)=><span key={pair[0]} style={{display:"block",height:"100%",borderRadius:2,background:pair[1],width:`${Math.round((Number(d[pair[0]])/qrDayTotalMax)*100)}%`}}/>)}
+                        </span>
+                        <span style={{fontSize:11.5,color:A.t3,textAlign:"right" as const,fontVariantNumeric:"tabular-nums" as const}}>스캔 {d.total} · 고유 {d.unique} · {activeQrScope==="detail"?"이동":"방문"} {d.visits}</span>
+                      </div>
+                    })}
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:16,marginTop:12,padding:"0 12px"}}>
+                    {[{label:"총 스캔",color:A.blue},{label:"고유 스캔",color:periodPurple},{label:qrVisitLabel,color:periodGreen}].map(item=>(
+                      <span key={item.label} style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:A.t3,flexShrink:0}}>
+                        <span style={{width:7,height:7,borderRadius:4,flexShrink:0,background:item.color}}/>{item.label}
+                      </span>
+                    ))}
+                  </div>
+                </>}
+              </div>
+              <div style={{paddingLeft:28,minWidth:0,boxShadow:`inset 1px 0 0 ${A===ALT?"#EDEFF3":A.border}`}}>
+                <div style={{height:34,display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                  <span style={{fontSize:15,fontWeight:700,color:A.t1}}>운영체제</span>
+                  <div style={{flex:1}}/>
+                  <span style={{fontSize:13,color:A.t3}}>스캔</span>
+                </div>
+                {qrOsEntries.length===0?emptyState("운영체제 데이터가 아직 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:4}}>
+                  {qrOsEntries.map((item:any)=>qrStatRow(item,qrOsEntries,A.blue))}
+                </div>}
+              </div>
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,margin:"26px 28px 0",paddingTop:26,boxShadow:`inset 0 1px 0 ${A===ALT?"#EDEFF3":A.border}`}}>
+              <div style={{paddingRight:28,minWidth:0}}>
+                <div style={{height:34,display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                  <span style={{fontSize:15,fontWeight:700,color:A.t1}}>국가</span>
+                  <div style={{flex:1}}/>
+                  <span style={{fontSize:13,color:A.t3}}>스캔</span>
+                </div>
+                {qrCountryEntries.length===0?emptyState("국가 데이터가 아직 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:4}}>
+                  {qrCountryEntries.map((item:any)=>qrStatRow(item,qrCountryEntries,A.blue,placeIconUrl(String(item.label))))}
+                </div>}
+              </div>
+              <div style={{paddingLeft:28,minWidth:0,boxShadow:`inset 1px 0 0 ${A===ALT?"#EDEFF3":A.border}`}}>
+                <div style={{height:34,display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                  <span style={{fontSize:15,fontWeight:700,color:A.t1}}>도시 · 지역</span>
+                  <div style={{flex:1}}/>
+                  <span style={{fontSize:13,color:A.t3}}>스캔</span>
+                </div>
+                {qrCityEntries.length===0?emptyState("도시 데이터가 아직 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:4}}>
+                  {qrCityEntries.map((item:any)=>qrStatRow(item,qrCityEntries,A.blue,placeIconUrl(String(item.label))))}
+                </div>}
+              </div>
+            </div>
+
+            <div style={{margin:"26px 28px 0",padding:"26px 0 36px",boxShadow:`inset 0 1px 0 ${A===ALT?"#EDEFF3":A.border}`}}>
+              <div style={{height:34,display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                <span style={{fontSize:15,fontWeight:700,color:A.t1}}>요일 · 시간대</span>
+                <div style={{flex:1}}/>
+                <span style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:A.t3,flexShrink:0}}>
+                  적음
+                  {[0.12,0.34,0.56,0.78,1].map(step=><span key={step} style={{width:12,height:12,borderRadius:4,flexShrink:0,background:A.blue,opacity:step}}/>)}
+                  많음
+                </span>
+              </div>
+              {qrHourEntries.length===0?emptyState("시간대 데이터가 아직 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:4}}>
+                {/* 3시간 간격으로만 눈금을 적어야 24칸이 뭉개지지 않는다. */}
+                <div style={{display:"grid",gridTemplateColumns:"34px repeat(24,minmax(0,1fr))",gap:3,alignItems:"center"}}>
+                  <span/>
+                  {qrHourLabels.map((_:string,hour:number)=><span key={hour} style={{fontSize:10,color:A.t3,textAlign:"center" as const,fontVariantNumeric:"tabular-nums" as const,overflow:"hidden"}}>{hour%3===0?hour:""}</span>)}
+                </div>
+                {qrDayLabels.map((day:string,dayIdx:number)=>{
+                  const dayTotal=qrHourLabels.reduce((acc:number,_:string,hour:number)=>acc+(qrHeat[`${dayIdx}-${hour}`]||0),0)
+                  return <div key={day} style={{display:"grid",gridTemplateColumns:"34px repeat(24,minmax(0,1fr))",gap:3,alignItems:"center"}}>
+                    <span style={{fontSize:11.5,fontWeight:600,color:dayTotal?A.t2:A.t3,textAlign:"center" as const}}>{day}</span>
+                    {qrHourLabels.map((_:string,hour:number)=>{
+                      const count=qrHeat[`${dayIdx}-${hour}`]||0
+                      const opacity=count?0.16+Math.min(0.84,(count/qrHeatMax)*0.84):0
+                      return <span key={hour} title={`${day}요일 ${String(hour).padStart(2,"0")}시 · 스캔 ${count}`}
+                        style={{height:20,borderRadius:5,background:count?A.blue:(A===ALT?"#F1F3F6":A.card2),opacity:count?opacity:1,cursor:count?"default":"default"}}/>
+                    })}
+                  </div>
+                })}
+                <div style={{display:"flex",alignItems:"center",gap:16,marginTop:8,fontSize:11.5,color:A.t3}}>
+                  <span>가장 많은 시간대 {(()=>{
+                    const top=Object.keys(qrHeat).sort((a,b)=>qrHeat[b]-qrHeat[a])[0]
+                    if(!top)return "—"
+                    const [d,h]=top.split("-").map(Number)
+                    return `${qrDayLabels[d]}요일 ${String(h).padStart(2,"0")}시 (${qrHeat[top]}회)`
+                  })()}</span>
+                </div>
               </div>}
             </div>
-            <div style={{fontSize:12.5,color:A.t3,marginBottom:16}}>
-              {activeQrScope==="detail"?"상세페이지용 QR을 스캔하고 외부 페이지로 이동한 데이터를 보여줍니다.":"폼 진입용 QR을 스캔하고 폼 페이지로 들어온 데이터를 보여줍니다."}
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14,marginBottom:16}}>
-              {metric(<><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h4v4H3z" stroke="currentColor" strokeWidth="1.4"/><path d="M10 10h3v3h-3z" fill="currentColor"/></>,String(qrScanTotal),"총 스캔",chartBlue)}
-              {metric(<path d="M8 2.5a3 3 0 1 1 0 6 3 3 0 0 1 0-6zM3 14c.8-2.5 2.6-3.8 5-3.8s4.2 1.3 5 3.8" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round"/>,String(qrUniqueScans),"고유 스캔",chartOrange)}
-              {metric(<><path d="M2.5 8s2-4 5.5-4 5.5 4 5.5 4-2 4-5.5 4-5.5-4-5.5-4z" stroke="currentColor" strokeWidth="1.5"/><circle cx="8" cy="8" r="1.8" fill="currentColor"/></>,String(qrVisits),qrVisitLabel,chartGreen)}
-            </div>
-            {qrBaseEvents.length===0?emptyState("아직 QR 스캔 데이터가 없습니다. QR 메뉴에서 다운로드한 QR을 스캔하면 이곳에 기록됩니다."):<>
-              <div style={{display:"grid",gridTemplateColumns:"minmax(340px,1.2fr) minmax(300px,0.8fr)",gap:16,marginBottom:16}}>
-                <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-                  {infoTitle("스캔 활동",activeQrScope==="detail"?"상세페이지 QR 추적 링크를 날짜별로 집계합니다. 총 스캔은 전체 스캔 횟수, 고유 스캔은 같은 사용자/기기를 중복 제외한 수, 상세페이지 이동은 QR 리다이렉트 횟수입니다.":"폼 QR 추적 링크를 날짜별로 집계합니다. 총 스캔은 전체 스캔 횟수, 고유 스캔은 같은 사용자/기기를 중복 제외한 수, 폼 방문은 QR을 통해 폼 페이지까지 들어온 세션 수입니다.")}
-                  {periodTip("qr-activity")}
-                  <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:12,fontSize:12.5,color:A.t2,fontWeight:600}}>
-                    <span style={{display:"flex",alignItems:"center",gap:6}}><i style={{width:10,height:10,borderRadius:3,background:chartBlue}}/>총 스캔</span>
-                    <span style={{display:"flex",alignItems:"center",gap:6}}><i style={{width:10,height:10,borderRadius:3,background:chartOrange}}/>고유 스캔</span>
-                    <span style={{display:"flex",alignItems:"center",gap:6}}><i style={{width:10,height:10,borderRadius:3,background:chartGreen}}/>{qrVisitLabel}</span>
-                  </div>
-                  <div style={{height:270,display:"flex",alignItems:"flex-end",gap:16,borderLeft:`1px solid ${A.border}`,borderBottom:`1px solid ${A.border}`,padding:"12px 12px 28px"}}>
-                    {qrActivityRows.map((d:any)=><div key={d.date} style={{flex:1,height:"100%",display:"flex",alignItems:"flex-end",gap:5,position:"relative" as const}}>
-                      {([["total",chartBlue,"총 스캔"],["unique",chartOrange,"고유 스캔"],["visits",chartGreen,qrVisitLabel]] as any[]).map(pair=><div key={pair[0]} onMouseMove={e=>movePeriodTip("qr-activity",e,{title:`${d.date} ${pair[2]}`,color:pair[1],lines:[`${pair[2]} : ${d[pair[0]]}`,`날짜 : ${d.date}`]})} onMouseLeave={()=>setPeriodHover(null)}
-                        style={{flex:1,height:`${Math.max(2,(d[pair[0]]/qrActivityMax)*100)}%`,borderRadius:"7px 7px 0 0",background:pair[1],cursor:"pointer",transform:periodHover?.scope==="qr-activity"&&periodHover.title===`${d.date} ${pair[2]}`?"scaleY(1.06)":"scaleY(1)",transformOrigin:"bottom",transition:"transform .16s ease"}}/>)}
-                      <div style={{position:"absolute" as const,left:"50%",bottom:-22,transform:"translateX(-50%)",fontSize:10.5,color:A.t3,whiteSpace:"nowrap" as const}}>{String(d.date).slice(5)}</div>
-                    </div>)}
-                  </div>
-                </div>
-                <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-                  {infoTitle("운영체제별 스캔","QR 스캔 시 브라우저가 보내는 user agent와 폼 페이지 metadata의 device_os를 기준으로 Android, iOS, Windows, macOS 등 운영체제를 분류합니다.")}
-                  {periodTip("qr-os")}
-                  {qrOsEntries.length===0?emptyState("운영체제 데이터가 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:11}}>
-                    {qrOsEntries.slice(0,8).map((item:any,i:number)=>{const max=Math.max(1,qrOsEntries[0]?.count||1);const color=colors[i%colors.length];return <div key={item.label} onMouseMove={e=>movePeriodTip("qr-os",e,{title:item.label,color,lines:[`스캔 : ${item.count}`,`비율 : ${item.pct}%`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"88px 1fr 54px",gap:10,alignItems:"center",cursor:"default"}}>
-                      <div style={{fontSize:13,color:A.t1,fontWeight:600}}>{item.label}</div>
-                      <div style={{height:10,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${(item.count/max)*100}%`,background:color}}/></div>
-                      <div style={{fontSize:12.5,color:A.t2,textAlign:"right" as const,fontWeight:600}}>{item.count}</div>
-                    </div>})}
-                  </div>}
-                </div>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"minmax(340px,1fr) minmax(340px,1fr)",gap:16,marginBottom:16}}>
-                <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-                  {infoTitle("국가별 분석","QR 스캔 시 수집되는 국가 header와 폼 페이지 metadata의 country 값을 기준으로 어느 국가에서 스캔이 발생했는지 보여줍니다.")}
-                  {periodTip("qr-country")}
-                  {qrCountryEntries.length===0?emptyState("국가 데이터가 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:10}}>
-                    {qrCountryEntries.slice(0,10).map((item:any,i:number)=>{const max=Math.max(1,qrCountryEntries[0]?.count||1);const color=colors[i%colors.length];return <div key={item.label} onMouseMove={e=>movePeriodTip("qr-country",e,{title:item.label,color,lines:[`스캔 : ${item.count}`,`비율 : ${item.pct}%`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"120px 1fr 62px",gap:10,alignItems:"center",cursor:"default"}}>
-                      <div style={{fontSize:13,color:A.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.label}</div>
-                      <div style={{height:10,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${(item.count/max)*100}%`,background:color}}/></div>
-                      <div style={{fontSize:12.5,color:A.t2,textAlign:"right" as const,fontWeight:600}}>{item.count} · {item.pct}%</div>
-                    </div>})}
-                  </div>}
-                </div>
-                <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-                  {infoTitle("도시/지역별 분석","QR 스캔 시 브라우저 위치 권한이 허용되면 좌표를 기준으로 확인한 시·구·동 metadata를 우선 사용합니다. 권한이 없으면 IP 기반 country, region, city 추정값을 사용합니다.")}
-                  {periodTip("qr-city")}
-                  {qrCityEntries.length===0?emptyState("도시/지역 데이터가 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:10}}>
-                    {qrCityEntries.slice(0,10).map((item:any,i:number)=>{const max=Math.max(1,qrCityEntries[0]?.count||1);const color=colors[(i+2)%colors.length];return <div key={item.label} onMouseMove={e=>movePeriodTip("qr-city",e,{title:item.label,color,lines:[`스캔 : ${item.count}`,`비율 : ${item.pct}%`]})} onMouseLeave={()=>setPeriodHover(null)} style={{display:"grid",gridTemplateColumns:"120px 1fr 62px",gap:10,alignItems:"center",cursor:"default"}}>
-                      <div style={{fontSize:13,color:A.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{item.label}</div>
-                      <div style={{height:10,borderRadius:999,background:A.card2,overflow:"hidden"}}><div style={{height:"100%",width:`${(item.count/max)*100}%`,background:color}}/></div>
-                      <div style={{fontSize:12.5,color:A.t2,textAlign:"right" as const,fontWeight:600}}>{item.count} · {item.pct}%</div>
-                    </div>})}
-                  </div>}
-                </div>
-              </div>
-              <div data-period-card style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:18,boxShadow:A.shadow,position:"relative" as const}}>
-                {infoTitle("스캔 시간대 분석","QR 스캔 이벤트의 created_at을 요일과 시간대로 나눠 보여줍니다. 진한 칸일수록 해당 요일/시간에 스캔이 많이 발생했다는 뜻입니다.")}
-                {periodTip("qr-heat")}
-                <div style={{overflowX:"auto",paddingBottom:4}}>
-                  <div style={{display:"grid",gridTemplateColumns:"44px repeat(7, minmax(54px,1fr))",gap:5,minWidth:520}}>
-                    <div/>
-                    {qrDayLabels.map(day=><div key={day} style={{fontSize:11.5,color:A.t2,fontWeight:600,textAlign:"center" as const}}>{day}</div>)}
-                    {qrHourLabels.map((hour,h)=><React.Fragment key={hour}>
-                      <div style={{fontSize:10.5,color:A.t3,textAlign:"right" as const,paddingRight:5,lineHeight:"20px"}}>{hour}</div>
-                      {qrDayLabels.map((_,d)=>{const count=qrHeat[`${d}-${h}`]||0;const alpha=count?0.2+Math.min(0.72,count/qrHeatMax*0.72):0;return <div key={`${d}-${h}`} onMouseMove={e=>movePeriodTip("qr-heat",e,{title:`${qrDayLabels[d]}요일 ${hour}`,color:chartBlue,lines:[`스캔 : ${count}`]})} onMouseLeave={()=>setPeriodHover(null)}
-                        style={{height:20,borderRadius:5,background:count?chartBlue:A.card2,opacity:count?alpha:1,border:`1px solid ${count?chartBlue+"22":A.border}`,cursor:"pointer"}}/>})}
-                    </React.Fragment>)}
-                  </div>
-                </div>
-              </div>
-            </>}
           </div>}
         </>}
         </div>
 	      </div>
+      )})()}
 	      {showAnalyticsTrash&&(
 	        <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:10001,padding:22,boxSizing:"border-box" as const}} onClick={()=>!analyticsTrashBusy&&setShowAnalyticsTrash(false)}>
 	          <div style={{width:620,maxWidth:"94vw",maxHeight:"82vh",background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,boxShadow:A.shadow,overflow:"hidden",display:"flex",flexDirection:"column" as const}} onClick={e=>e.stopPropagation()}>
@@ -7788,7 +9943,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	                <svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6 5V3.5h4V5M5 7v5M8 7v5M11 7v5M4 5l.55 8.2c.04.45.4.8.85.8h5.2c.45 0 .81-.35.85-.8L12 5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/></svg>
 	              </div>
 	              <div style={{flex:1,minWidth:0}}>
-	                <div style={{fontSize:16,fontWeight:600,color:A.t1}}>응답 휴지통</div>
+	                <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px"}}>응답 휴지통</div>
 	                <div style={{fontSize:12,color:A.t3,marginTop:3}}>실수로 삭제한 응답을 다시 복구할 수 있어요.</div>
 	              </div>
 	              <button onClick={()=>setShowAnalyticsTrash(false)} disabled={analyticsTrashBusy} style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>
@@ -7823,7 +9978,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	            <div style={{width:44,height:44,borderRadius:A.r,background:A.red+"14",color:A.red,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:14}}>
 	              <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M6 4V2.8h4V4M5 6v6M8 6v6M11 6v6M4 4l.6 10h6.8L12 4" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/></svg>
 	            </div>
-	            <div style={{fontSize:18,fontWeight:600,color:A.t1,marginBottom:8}}>응답 데이터를 모두 삭제할까요?</div>
+	            <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:8}}>응답 데이터를 모두 삭제할까요?</div>
 	            <div style={{fontSize:13,color:A.t2,lineHeight:1.65,marginBottom:18}}>
 	              현재 폼의 제출 응답과 분석 기록을 휴지통으로 이동합니다. 휴지통에서 다시 복구할 수 있어요.
 	            </div>
@@ -7842,7 +9997,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	                <svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M3 11.5V13h1.5L12 5.5 10.5 4 3 11.5zM9.8 4.7l1.5 1.5" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/></svg>
 	              </div>
 	              <div style={{minWidth:0,flex:1}}>
-	                <div style={{fontSize:16,fontWeight:600,color:A.t1}}>응답 데이터 수정</div>
+	                <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px"}}>응답 데이터 수정</div>
 	                <div style={{fontSize:12,color:A.t3,marginTop:3}}>{fmtAnalyticsDate(editResponse.row.created_at).filter(Boolean).join(" ")}</div>
 	              </div>
 	              <button onClick={()=>!editResponseSaving&&setEditResponse(null)} disabled={editResponseSaving} style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t2,cursor:editResponseSaving?"not-allowed":"pointer",fontSize:18,lineHeight:1}}>×</button>
@@ -7907,9 +10062,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     </div>
     } catch(e){
       const msg=(e as any)?.message||"알 수 없는 오류"
-      return <div style={{width,height,display:"flex",alignItems:"center",justifyContent:"center",background:A.bg,color:A.t1,fontFamily:FONT,padding:32}}>
+      return <div style={{width,height,display:"flex",alignItems:"center",justifyContent:"center",background:A.bg,color:A.t1,fontFamily:FONT,padding:32,WebkitFontSmoothing:"antialiased"}}>
         <div style={{maxWidth:520,background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:24,boxShadow:A.shadow}}>
-          <div style={{fontSize:18,fontWeight:600,marginBottom:8}}>응답 및 분석 화면 오류</div>
+          <div style={{fontSize:18,fontWeight:700,letterSpacing:"-.2px",marginBottom:8}}>응답 및 분석 화면 오류</div>
           <div style={{fontSize:13,color:A.red,lineHeight:1.6,marginBottom:16}}>{msg}</div>
           <Btn onClick={returnToBuilderFromAnalytics} sm A={A}>편집으로 돌아가기</Btn>
         </div>
@@ -7918,31 +10073,28 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
 
   // ── Builder layout ────────────────────────────────────────────────────
-  const SW=320, PW=rightPanelW
+  const SW=216, PW=rightPanelW
 
   if((view as string)==="analytics")return renderAnalyticsPage()
 
   return (
-    <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,color:A.t1,fontFamily:FONT,overflow:"hidden",position:"relative" as const}}>
+    <div style={{width,height,display:"flex",flexDirection:"column" as const,background:A.bg,color:A.t1,fontFamily:FONT,overflow:"hidden",position:"relative" as const,WebkitFontSmoothing:"antialiased"}}>
       {renderEditorTabsStrip()}
 
       {/* TOPBAR */}
-      <div style={{height:52,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 16px",gap:10,flexShrink:0,boxShadow:A.shadow}}>
-        <button onClick={()=>setView("dashboard")} style={{display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",padding:0}}>
-          <FlickMark size={28}/>
-        </button>
-        <button onClick={()=>setView("dashboard")} style={{display:"flex",alignItems:"center",gap:6,background:"transparent",border:"none",cursor:"pointer",color:A.t2,fontSize:12.5,fontWeight:600,fontFamily:FONT}}>
-          <span style={{fontSize:13,lineHeight:1}}>←</span>
+      <div style={{height:58,background:A.card,borderBottom:`1px solid ${A.border}`,display:"flex",alignItems:"center",padding:"0 20px",gap:12,flexShrink:0}}>
+        <button onClick={()=>{rememberActiveEditorTab();setView("dashboard")}} style={{height:32,padding:"0 10px",display:"flex",alignItems:"center",gap:6,background:"transparent",border:"none",borderRadius:A.r,cursor:"pointer",color:A.t2,fontSize:12.5,fontWeight:500,fontFamily:FONT}}>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M9.5 3.5 5 8l4.5 4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
           <span>대시보드</span>
         </button>
         {currentBrand&&<>
-          <div style={{width:1,height:16,background:A.border}}/>
-          <div style={{display:"flex",alignItems:"center"}}>
+          <div style={{width:1,height:18,background:A.border}}/>
+          <div style={{display:"flex",alignItems:"center",flexShrink:0}}>
             <BrandLogo brand={currentBrand} height={currentBrand==="SNIPERFACTORY"?20:15} dark={adminDark}/>
           </div>
         </>}
-        {loadedName&&editorTabs.length===0&&<span style={{fontSize:12.5,fontWeight:600,color:A.t1}}>{loadedName}</span>}
-        {loadedId&&<span style={{fontSize:11.5,color:autoSaving?A.t3:autoSaved?A.green:A.t4,display:"flex",alignItems:"center",gap:4,transition:"color .3s"}}>
+        {loadedName&&<span style={{fontSize:14,fontWeight:700,color:A.t1,maxWidth:280,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{loadedName}</span>}
+        {loadedId&&<span style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px",borderRadius:6,background:autoSaving?A.card2:"#E7F6EE",color:autoSaving?A.t3:"#0F8A47",fontSize:11.5,fontWeight:600,transition:"color .3s, background .3s",whiteSpace:"nowrap" as const,flexShrink:0}}>
           {autoSaving
             ? <><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{animation:"spin 1s linear infinite"}}><path d="M8 2a6 6 0 1 0 6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>저장 중</>
             : autoSaved
@@ -7951,76 +10103,75 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </span>}
         <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
         <div style={{flex:1}}/>
-        <div style={{position:"relative" as const}}>
-          <button
-            onMouseEnter={()=>setShowBuilderSettingsTip(true)}
-            onMouseLeave={()=>setShowBuilderSettingsTip(false)}
-            onClick={openBuilderSettings}
-            style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
-            aria-label="폼 설정">
-            <GearIcon size={16}/>
-          </button>
-          {showBuilderSettingsTip&&<div style={{position:"absolute" as const,top:"calc(100% + 7px)",left:"50%",transform:"translateX(-50%)",background:A.t1,color:A.card,padding:"5px 8px",borderRadius:6,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const,zIndex:1000,boxShadow:A.shadow}}>폼 설정</div>}
-        </div>
-        <div style={{position:"relative" as const}}>
-          <button
-            onMouseEnter={()=>setShowAnalyticsTip(true)}
-            onMouseLeave={()=>setShowAnalyticsTip(false)}
-            onClick={()=>{
-              if(!loadedId){showToast("폼을 먼저 저장해주세요",false);return}
-              setAnalyticsTab("responses")
-              setView("analytics")
-            }}
-            style={{width:32,height:32,borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card,color:A.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
-            aria-label="응답 및 분석">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M3 13V8M8 13V3M13 13V6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
-            </svg>
-          </button>
-          {showAnalyticsTip&&<div style={{position:"absolute" as const,top:"calc(100% + 7px)",left:"50%",transform:"translateX(-50%)",background:A.t1,color:A.card,padding:"5px 8px",borderRadius:6,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap" as const,zIndex:1000,boxShadow:A.shadow}}>응답 및 분석</div>}
-        </div>
-        <Btn onClick={onSaveClick} sm A={A}>저장</Btn>
-        <Btn onClick={publishAndOpenForm} variant="blue" sm A={A}>
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><path d="M10 2h4v4M14 2l-7 7M6 4H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        {/* 대시보드 목록의 아이콘 툴팁과 같은 형태. 상단 바라 아래로 펼친다. */}
+        <style>{`.cf-tip-b{position:relative}.cf-tip-b::after{content:attr(data-tip);position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);padding:5px 8px;border-radius:6px;background:${adminDark?"#2A2F3A":"#15181D"};color:#fff;font-size:11.5px;font-weight:600;line-height:1;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .12s;z-index:1000}.cf-tip-b:hover::after{opacity:1}`}</style>
+        <button
+          onClick={openBuilderSettings}
+          className="cf-tip-b" data-tip="폼 설정" aria-label="폼 설정"
+          style={{width:34,height:34,flexShrink:0,borderRadius:A.r,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"background .12s, color .12s"}}
+          onMouseEnter={e=>{const el=e.currentTarget as HTMLElement;el.style.background=A===ALT?"#F1F3F6":A.card2;el.style.color=A.t2}}
+          onMouseLeave={e=>{const el=e.currentTarget as HTMLElement;el.style.background="transparent";el.style.color=A.t3}}>
+          <GearIcon size={16}/>
+        </button>
+        <button
+          onClick={()=>{
+            if(!loadedId){showToast("폼을 먼저 저장해주세요",false);return}
+            setAnalyticsTab("responses")
+            setView("analytics")
+          }}
+          className="cf-tip-b" data-tip="응답 및 분석" aria-label="응답 및 분석"
+          style={{width:34,height:34,flexShrink:0,borderRadius:A.r,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"background .12s, color .12s"}}
+          onMouseEnter={e=>{const el=e.currentTarget as HTMLElement;el.style.background=A===ALT?"#F1F3F6":A.card2;el.style.color=A.t2}}
+          onMouseLeave={e=>{const el=e.currentTarget as HTMLElement;el.style.background="transparent";el.style.color=A.t3}}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M4 20V11M10 20V4M16 20v-6M22 20H2" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/>
+          </svg>
+        </button>
+        <button onClick={onSaveClick} style={{height:34,padding:"0 13px",border:"none",borderRadius:A.r,background:A.card2,color:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",flexShrink:0}}>저장</button>
+        <button onClick={publishAndOpenForm} style={{height:34,padding:"0 14px",border:"none",borderRadius:A.r,background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,boxShadow:"0 1px 2px rgba(49,130,246,.35)",cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><path d="M6.5 3H3.6A.6.6 0 0 0 3 3.6v8.8a.6.6 0 0 0 .6.6h8.8a.6.6 0 0 0 .6-.6V9.5M9.5 2.5H13.5V6.5M13 3l-5.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           폼 열기
-        </Btn>
+        </button>
       </div>
 
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
 
         {/* SIDEBAR */}
         <nav ref={sbRef} onMouseMove={e=>{const r=sbRef.current?.getBoundingClientRect();if(r)myPos.current=e.clientY-r.top}} onMouseEnter={()=>setOverSb(true)} onMouseLeave={()=>setOverSb(false)}
-          style={{width:SW,background:A.card,borderRight:`1px solid ${A.border}`,overflowY:"auto" as const,flexShrink:0,display:"flex",flexDirection:"column" as const,scrollbarWidth:"none" as any}}>
+          style={{width:SW,background:adminDark?A.bg:"#FAFBFC",overflowY:"auto" as const,flexShrink:0,display:"flex",flexDirection:"column" as const,scrollbarWidth:"none" as any,padding:"16px 12px",boxSizing:"border-box" as const}}>
 
           {/* Nav */}
           {NAV.map(grp=>(
-            <div key={grp.group} style={{padding:"8px 12px 4px",flexShrink:0}}>
-              <div style={{fontSize:10,fontWeight:600,color:A.t3,letterSpacing:"0.8px",textTransform:"uppercase" as const,padding:"0 4px",marginBottom:4}}>{grp.group}</div>
+            <div key={grp.group} style={{padding:"0 0 18px",flexShrink:0}}>
+              <div style={{fontSize:11,fontWeight:700,color:A.t3,letterSpacing:".4px",padding:"0 8px 8px"}}>{grp.group}</div>
               {grp.items.map(item=>{const a=sec===item.id;return(
                 <div key={item.id} onClick={()=>setSec(item.id)}
-                  style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:A.r,cursor:"pointer",fontSize:13,fontWeight:a?600:500,color:a?A.blue:A.t2,background:a?A.blue2:"transparent",marginBottom:1,transition:"all .1s"}}>
+                  style={{height:36,display:"flex",alignItems:"center",gap:8,padding:"0 10px",borderRadius:A.r,cursor:"pointer",fontSize:13,fontWeight:a?700:500,color:a?A.t1:A.t2,background:a?(adminDark?A.card2:"#EDEFF3"):"transparent",marginBottom:2,transition:"all .12s"}}>
                   <span style={{flex:1}}>{item.label}</span>
-                  {"badge" in item&&<span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:999,background:(item as any).badge==="ON"?A.blue2:A.card2,color:(item as any).badge==="ON"?A.blue:A.t3,border:`1px solid ${(item as any).badge==="ON"?A.blue+"33":A.border}`}}>{(item as any).badge}</span>}
+                  {"badge" in item&&<span style={{fontSize:10.5,fontWeight:700,letterSpacing:".3px",padding:"2px 7px",borderRadius:6,background:(item as any).badge==="ON"?A.blue2:(adminDark?A.card2:"#EFF1F4"),color:(item as any).badge==="ON"?A.blue:A.t3}}>{(item as any).badge}</span>}
                 </div>
               )})}
             </div>
           ))}
 
           <div style={{flex:1}}/>
-          <div style={{padding:"12px",borderTop:`1px solid ${A.border}`,flexShrink:0}}>
-            <Btn onClick={()=>setShowBrandModal(true)} variant="ghost" sm A={A}>+ 새 폼 만들기</Btn>
+          <div style={{paddingTop:14,flexShrink:0}}>
+            <button onClick={()=>setShowBrandModal(true)} style={{width:"100%",height:34,display:"flex",alignItems:"center",justifyContent:"center",gap:6,border:`1px solid ${adminDark?A.border:"#E3E7EC"}`,borderRadius:A.r,background:A.card,color:adminDark?A.t2:"#3D4552",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+              새 폼 만들기
+            </button>
           </div>
         </nav>
 
         {/* PREVIEW — 중앙 */}
-        <div style={{flex:1,display:"flex",flexDirection:"column" as const,overflow:"hidden",minWidth:0}}>
-          <div style={{flex:1,overflow:"hidden",display:"flex"}}>
+        <div style={{flex:1,display:"flex",flexDirection:"column" as const,overflow:"hidden",minWidth:0,background:adminDark?A.bg:"#F1F3F6"}}>
+          <div style={{flex:1,overflowY:"auto" as const,display:"flex",alignItems:"flex-start" as const,padding:"28px 32px",boxSizing:"border-box" as const}}>
             {renderPreview()}
           </div>
         </div>
 
         {/* SETTINGS PANEL — 우측 */}
-        <div style={{width:PW,background:A.card,borderLeft:`1px solid ${A.border}`,overflowY:"auto" as const,flexShrink:0,scrollbarWidth:"none" as any,position:"relative" as const}}>
+        <div style={{width:PW,background:A.card,boxShadow:`inset 1px 0 0 ${A.border}`,overflowY:"auto" as const,flexShrink:0,scrollbarWidth:"none" as any,position:"relative" as const}}>
           {/* 드래그 리사이즈 핸들 */}
           <div
             style={{position:"absolute" as const,left:0,top:0,bottom:0,width:5,cursor:"col-resize",zIndex:20,background:"transparent"}}
@@ -8032,7 +10183,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               const onMove=(ev:MouseEvent)=>{
                 if(!isResizingRef.current)return
                 const delta=startX-ev.clientX
-                setRightPanelW(Math.min(600,Math.max(200,startW+delta)))
+                setRightPanelW(Math.min(600,Math.max(280,startW+delta)))
               }
               const onUp=()=>{
                 isResizingRef.current=false
@@ -8049,8 +10200,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.blue+"44"}}
             onMouseLeave={e=>{if(!isResizingRef.current)(e.currentTarget as HTMLElement).style.background="transparent"}}
           />
-          <div style={{padding:"14px 18px 12px",borderBottom:`1px solid ${A.border}`,position:"sticky" as const,top:0,background:A.card,zIndex:10}}>
-            <div style={{fontSize:15,fontWeight:600,color:A.t1,letterSpacing:"-0.3px"}}>{NAV.flatMap(g=>g.items).find(i=>i.id===sec)?.label||sec}</div>
+          <div style={{padding:"18px 20px 14px",position:"sticky" as const,top:0,background:A.card,zIndex:10}}>
+            <div style={{fontSize:15,fontWeight:700,color:A.t1,letterSpacing:"-.2px"}}>{NAV.flatMap(g=>g.items).find(i=>i.id===sec)?.label||sec}</div>
+            {PANEL_SUBS[sec]&&<div style={{fontSize:12,color:A.t3,lineHeight:1.5,marginTop:4}}>{PANEL_SUBS[sec]}</div>}
           </div>
           {renderPanel()}
         </div>
@@ -8062,7 +10214,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9998}} onClick={()=>setShowBrandModal(false)}>
           <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:16,padding:"26px 26px 22px",width:360,boxShadow:A.shadow,position:"relative" as const}} onClick={e=>e.stopPropagation()}>
             <button onClick={()=>setShowBrandModal(false)} style={{position:"absolute",top:12,right:12,width:26,height:26,borderRadius:"50%",border:`1px solid ${A.border}`,background:A.card2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,color:A.t3,lineHeight:1}}>×</button>
-            <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:6}}>어떤 브랜드 폼을 만들까요?</div>
+            <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:6}}>어떤 브랜드 폼을 만들까요?</div>
             <div style={{fontSize:12.5,color:A.t3,marginBottom:18}}>현재 작업 중인 내용은 초기화됩니다</div>
             <div style={{display:"flex",flexDirection:"column" as const,gap:10}}>
               <button onClick={()=>startNewForm("SNIPERFACTORY")}
@@ -8093,7 +10245,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>{setShowTemplateModal(false);setPendingBrand(null)}}>
           <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:16,padding:"28px 24px",width:420,boxShadow:A.shadow,position:"relative" as const}} onClick={e=>e.stopPropagation()}>
             <button onClick={()=>{setShowTemplateModal(false);setPendingBrand(null)}} style={{position:"absolute",top:14,right:14,width:28,height:28,borderRadius:"50%",border:`1px solid ${A.border}`,background:A.card2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:A.t3,lineHeight:1}}>×</button>
-            <div style={{fontSize:18,fontWeight:600,color:A.t1,marginBottom:6,letterSpacing:"-0.3px"}}>어떤 형식의 폼을 만들까요?</div>
+            <div style={{fontSize:18,fontWeight:700,color:A.t1,marginBottom:6,letterSpacing:"-0.2px"}}>어떤 형식의 폼을 만들까요?</div>
             <div style={{fontSize:13,color:A.t3,marginBottom:20}}>
               {brandDisplayName(pendingBrand||"")} 브랜드 폼
             </div>
@@ -8142,25 +10294,25 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         const hasRecruitmentPeriod=!!(recruitment.start||recruitment.end)
         return <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setDashboardSettings(null)}>
           <div style={{width:500,maxWidth:"92vw",maxHeight:"88vh",overflowY:"auto" as const,padding:24,borderRadius:16,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:17,fontWeight:600,color:A.t1,marginBottom:5}}>폼 설정</div>
+            <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:5}}>폼 설정</div>
             <div style={{fontSize:12.5,color:A.t3,marginBottom:20}}>폼 제목, 브랜드, 폼 유형과 운영 기준을 정합니다.</div>
-            <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 제목</div>
+            <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>폼 제목</div>
             <input value={dashboardSettings.formName} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formName:e.target.value}))} placeholder="폼 제목" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16,boxSizing:"border-box" as const}}/>
-            <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>브랜드</div>
-            <select value={dashboardSettings.brand} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,brand:e.target.value as BrandId}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
-              <option value="SNIPERFACTORY">스나이퍼팩토리</option><option value="INSIDEOUT">인사이드아웃</option><option value="SFACSPACE">스팩스페이스</option>
-            </select>
-            <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 유형</div>
-            <select value={dashboardSettings.formTypeTag} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,formTypeTag:e.target.value as DashboardFormType}))} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:16}}>
-              {DASHBOARD_FORM_TYPES.map(type=><option key={type.value} value={type.value}>{type.label}</option>)}
-            </select>
-            <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>편집 비밀번호</div>
+            <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>브랜드</div>
+            <div style={{marginBottom:16}}><PanelSelect value={dashboardSettings.brand} onChange={v=>setDashboardSettings(prev=>prev&&({...prev,brand:v as BrandId}))} A={A} height={38} options={[{value:"SNIPERFACTORY",label:"스나이퍼팩토리"},{value:"INSIDEOUT",label:"인사이드아웃"},{value:"SFACSPACE",label:"스팩스페이스"}]}/></div>
+            <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>폼 유형</div>
+            <div style={{marginBottom:16}}><PanelSelect value={dashboardSettings.formTypeTag} onChange={v=>setDashboardSettings(prev=>prev&&({...prev,formTypeTag:v as DashboardFormType}))} A={A} height={38} options={DASHBOARD_FORM_TYPES.map(t=>({value:t.value,label:t.label}))}/></div>
+            <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>전환 점검</div>
+            <PanelCheckRow label="이 폼은 전환 점검에서 제외" on={dashboardSettings.conversionCheckOff}
+              toggle={()=>setDashboardSettings(prev=>prev&&({...prev,conversionCheckOff:!prev.conversionCheckOff}))} A={A}/>
+            <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,margin:"6px 0 16px"}}>결과물 제출, 사후 설문처럼 전환율이 의미 없는 폼은 꺼두세요. 끄면 대시보드의 전환 점검 알림에 나타나지 않습니다.</div>
+            <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>편집 비밀번호</div>
             {!!settingsConfig?.dashboard?.editPasswordHash&&!canMasterReset(authRole)&&<input type="password" value={dashboardSettings.currentEditPasswordDraft} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,currentEditPasswordDraft:e.target.value}))} placeholder="변경 또는 해제 시 현재 비밀번호" style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,marginBottom:8,boxSizing:"border-box" as const}}/>}
             <input type="password" value={dashboardSettings.editPasswordDraft} disabled={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,editPasswordDraft:e.target.value}))} placeholder={settingsConfig?.dashboard?.editPasswordHash?"새 비밀번호 입력 시 변경":"비밀번호 입력 시 편집 보호"} style={{width:"100%",height:38,padding:"0 10px",borderRadius:A.r,border:`1px solid ${A.border}`,background:A.card2,color:A.t1,fontFamily:FONT,fontSize:13,boxSizing:"border-box" as const,opacity:dashboardSettings.clearEditPassword?.55:1}}/>
             <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,margin:"6px 0 9px"}}>{canMasterReset(authRole)&&settingsConfig?.dashboard?.editPasswordHash?"master 권한 계정은 현재 비밀번호 없이 편집 비밀번호를 변경하거나 해제할 수 있어요.":"설정하면 대시보드에서 편집을 열 때 비밀번호를 확인합니다. 원문 대신 해시값만 저장됩니다."}</div>
             {!!settingsConfig?.dashboard?.editPasswordHash&&<label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:16}}><input type="checkbox" checked={dashboardSettings.clearEditPassword} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,clearEditPassword:e.target.checked,editPasswordDraft:e.target.checked?"":prev.editPasswordDraft}))}/>편집 비밀번호 해제</label>}
             {hasRecruitmentPeriod&&<div style={{padding:"11px 12px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`,fontSize:12.5,color:A.blue,lineHeight:1.6}}>프로그램 DB의 {recruitmentPeriodLabel(recruitmentMode)}을 기본 운영 기간으로 불러왔어요.<br/>필요하면 아래에서 기간을 추가하거나 수정할 수 있습니다.<br/>{recruitmentPeriodText(recruitment,"기간 데이터 없음")}</div>}
-            <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:6}}>폼 운영 기간</div>
+            <div style={{fontSize:12,fontWeight:600,color:A.t3,marginBottom:9}}>폼 운영 기간</div>
             <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:8}}>
               <input type="checkbox" checked={dashboardSettings.alwaysOpen} onChange={e=>setDashboardSettings(prev=>prev&&({...prev,alwaysOpen:e.target.checked,manualStatus:""}))}/>
               상시 운영
@@ -8175,28 +10327,63 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </div>
             <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
               <button onClick={()=>setDashboardSettings(null)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
-              <button onClick={saveDashboardSettings} disabled={dashboardSettingsSaving} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>{dashboardSettingsSaving?"저장 중...":"저장"}</button>
+              <button onClick={saveDashboardSettings} disabled={dashboardSettingsSaving} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>{dashboardSettingsSaving?"저장 중...":"저장"}</button>
             </div>
           </div>
         </div>
       })()}
 
       {/* UPDATE MODAL */}
+      {sheetRenamePrompt&&(
+        <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1001}} onClick={()=>setSheetRenamePrompt(null)}>
+          <div style={{width:400,padding:24,borderRadius:16,background:A.card,border:`1px solid ${A.border}`,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:17,fontWeight:700,color:A.t1,marginBottom:6,letterSpacing:"-.2px"}}>시트 이름이 바뀌었어요</div>
+            <div style={{fontSize:13,color:A.t2,lineHeight:1.65,marginBottom:14}}>
+              이미 만들어둔 시트가 있어요. 이름만 바꿀지, 새 시트를 만들지 골라주세요.
+            </div>
+            <div style={{padding:"12px 14px",borderRadius:10,background:panelFieldBg(A),marginBottom:18,fontSize:12.5,lineHeight:1.7}}>
+              <div style={{color:A.t3}}>지금 시트</div>
+              <div style={{color:A.t1,fontWeight:600,marginBottom:6}}>{sheetRenamePrompt.from}</div>
+              <div style={{color:A.t3}}>입력한 이름</div>
+              <div style={{color:A.t1,fontWeight:600}}>{sheetRenamePrompt.to}</div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
+              <button onClick={()=>{setSheetRenamePrompt(null);testGoogleSheetsIntegration("rename")}}
+                style={{height:42,borderRadius:10,border:`1px solid ${A===ALT?"#E3E7EC":A.border}`,background:A.card,color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:"pointer"}}>
+                이름만 변경
+              </button>
+              <button onClick={()=>{setSheetRenamePrompt(null);testGoogleSheetsIntegration("new")}}
+                style={{height:42,borderRadius:10,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                새 시트 생성
+              </button>
+            </div>
+            <div style={{marginTop:10,fontSize:11.5,color:A.t3,lineHeight:1.6}}>
+              새로 만들면 이전 시트는 그대로 남아요. 필요 없으면 직접 지워주세요.
+            </div>
+          </div>
+        </div>
+      )}
       {showUpdateModal&&(
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setShowUpdateModal(false)}>
           <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:cfg.header.programUnlinked?500:320,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:8}}>수정 사항 저장</div>
+            <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:8}}>수정 사항 저장</div>
             <div style={{fontSize:13.5,color:A.t2,marginBottom:6}}><span style={{fontWeight:600,color:A.t1}}>"{loadedName}"</span>에 변경 사항을 덮어쓰시겠어요?</div>
             <div style={{fontSize:12,color:A.t3,marginBottom:22,lineHeight:1.5}}>기존 설정이 수정된 내용으로 교체됩니다.</div>
-            {cfg.header.programUnlinked&&<div style={{padding:"12px 12px 11px",marginBottom:16,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`}}>
-              <div style={{fontSize:12,fontWeight:600,color:A.blue,marginBottom:5}}>폼 운영 기간</div>
-              <div style={{fontSize:11.5,color:A.t2,lineHeight:1.5,marginBottom:8}}>교육과정 연동을 하지 않는 폼은 운영 기간을 설정해야 합니다.</div>
-              <OperationPeriodsEditor compact periods={operationPeriodsFromDashboard(cfg.dashboard)} onChange={setOperationPeriods} A={A}/>
+            {cfg.header.programUnlinked&&<div style={{marginBottom:16}}>
+              <div style={{fontSize:12,fontWeight:600,color:A.t3,marginBottom:9}}>폼 운영 기간</div>
+              <div style={{fontSize:11.5,color:A.t2,lineHeight:1.5,marginBottom:9}}>교육과정 연동을 하지 않는 폼은 운영 기간을 설정해야 합니다.</div>
+              <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:8}}>
+                <input type="checkbox" checked={!!cfg.dashboard?.alwaysOpen}
+                  onChange={e=>setCfg(p=>({...p,dashboard:{...(p.dashboard||{}),alwaysOpen:e.target.checked,...(e.target.checked?{manualStatus:""}:{})}}))}/>
+                상시 운영
+              </label>
+              <div style={{fontSize:11.5,color:A.t3,lineHeight:1.5,marginBottom:9}}>체크하면 기간과 관계없이 진행중으로 표시됩니다. 체크를 꺼도 설정해둔 기간은 유지됩니다.</div>
+              <OperationPeriodsEditor periods={operationPeriodsFromDashboard(cfg.dashboard)} disabled={!!cfg.dashboard?.alwaysOpen} onChange={setOperationPeriods} A={A}/>
             </div>}
             <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-              <Btn onClick={()=>{setShowUpdateModal(false);setShowSave(true)}} sm A={A}>새 이름으로 저장</Btn>
-              <Btn onClick={()=>setShowUpdateModal(false)} sm A={A}>취소</Btn>
-              <Btn onClick={updateCfg} variant="blue" sm A={A}>수정 저장</Btn>
+              <button onClick={()=>{setShowUpdateModal(false);setShowSave(true)}} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>새 이름으로 저장</button>
+              <button onClick={()=>setShowUpdateModal(false)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
+              <button onClick={()=>updateCfg()} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>수정 저장</button>
             </div>
           </div>
         </div>
@@ -8206,26 +10393,32 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       {showSave&&(
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setShowSave(false)}>
           <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:cfg.header.programUnlinked?500:310,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:16,fontWeight:600,color:A.t1,marginBottom:18}}>설정 저장</div>
+            <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:18}}>설정 저장</div>
             <div style={{marginBottom:12}}>
-              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:5}}>설정 이름</div>
+              <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>설정 이름</div>
               <input value={saveName} onChange={e=>setSaveName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveCfg()} placeholder="예) UXUI 9기 오픈폼"
                 style={{width:"100%",background:A.card2,border:`1.5px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:13.5,padding:"9px 11px",outline:"none",boxSizing:"border-box" as const}}/>
             </div>
             <div style={{marginBottom:14}}>
-              <div style={{fontSize:12,fontWeight:600,color:A.t2,marginBottom:5}}>슬러그 <span style={{fontWeight:400,color:A.t3}}>(비워두면 자동)</span></div>
+              <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>슬러그 <span style={{fontWeight:400,color:A.t3}}>(비워두면 자동)</span></div>
               <input value={saveSlug} onChange={e=>setSaveSlug(e.target.value)} placeholder="uxui-9th-open"
                 style={{width:"100%",background:A.card2,border:`1.5px solid ${A.border}`,borderRadius:A.r,color:A.t1,fontFamily:FONT,fontSize:13,padding:"8px 11px",outline:"none",boxSizing:"border-box" as const}}/>
             </div>
-            {cfg.header.programUnlinked&&<div style={{padding:"12px 12px 11px",marginBottom:14,borderRadius:A.r,background:A.blue2,border:`1px solid ${A.blue}33`}}>
-              <div style={{fontSize:12,fontWeight:600,color:A.blue,marginBottom:5}}>폼 운영 기간</div>
-              <div style={{fontSize:11.5,color:A.t2,lineHeight:1.5,marginBottom:8}}>교육과정 연동을 하지 않는 폼은 운영 기간을 설정해야 합니다.</div>
-              <OperationPeriodsEditor compact periods={operationPeriodsFromDashboard(cfg.dashboard)} onChange={setOperationPeriods} A={A}/>
+            {cfg.header.programUnlinked&&<div style={{marginBottom:14}}>
+              <div style={{fontSize:12,fontWeight:600,color:A.t3,marginBottom:9}}>폼 운영 기간</div>
+              <div style={{fontSize:11.5,color:A.t2,lineHeight:1.5,marginBottom:9}}>교육과정 연동을 하지 않는 폼은 운영 기간을 설정해야 합니다.</div>
+              <label style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,color:A.t2,cursor:"pointer",marginBottom:8}}>
+                <input type="checkbox" checked={!!cfg.dashboard?.alwaysOpen}
+                  onChange={e=>setCfg(p=>({...p,dashboard:{...(p.dashboard||{}),alwaysOpen:e.target.checked,...(e.target.checked?{manualStatus:""}:{})}}))}/>
+                상시 운영
+              </label>
+              <div style={{fontSize:11.5,color:A.t3,lineHeight:1.5,marginBottom:9}}>체크하면 기간과 관계없이 진행중으로 표시됩니다. 체크를 꺼도 설정해둔 기간은 유지됩니다.</div>
+              <OperationPeriodsEditor periods={operationPeriodsFromDashboard(cfg.dashboard)} disabled={!!cfg.dashboard?.alwaysOpen} onChange={setOperationPeriods} A={A}/>
             </div>}
             {saveErr&&<div style={{fontSize:12,color:A.red,marginBottom:10,padding:"8px 10px",borderRadius:A.r,background:"rgba(232,92,92,0.06)",border:"1px solid rgba(232,92,92,0.18)"}}>{saveErr}</div>}
             <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-              <Btn onClick={()=>setShowSave(false)} sm A={A}>취소</Btn>
-              <Btn onClick={saveCfg} variant="blue" disabled={saving} sm A={A}>{saving?"저장 중...":"저장"}</Btn>
+              <button onClick={()=>setShowSave(false)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
+              <button onClick={saveCfg} disabled={saving} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:saving?"default":"pointer",opacity:saving?0.7:1}}>{saving?"저장 중...":"저장"}</button>
             </div>
           </div>
         </div>
@@ -8268,7 +10461,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 <button onClick={()=>setImageCropModal(null)}
                   style={{height:40,padding:"0 14px",border:"none",background:"transparent",color:A.t2,fontFamily:FONT,fontSize:15,fontWeight:600,cursor:"pointer"}}>취소</button>
                 <button onClick={applyImageCropModal}
-                  style={{height:42,padding:"0 18px",border:"none",borderRadius:10,background:A.blue,color:"#fff",fontFamily:FONT,fontSize:15,fontWeight:600,cursor:"pointer"}}>저장</button>
+                  style={{height:42,padding:"0 18px",border:"none",borderRadius:10,background:A.blue,color:"#fff",fontFamily:FONT,fontSize:15,fontWeight:700,cursor:"pointer"}}>저장</button>
               </div>
             </div>
             <div style={{padding:"34px 28px 40px",display:"flex",flexDirection:"column" as const,alignItems:"center",gap:12}}>
@@ -8309,10 +10502,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 
       {/* TOAST */}
       {toast&&(
-        <div style={{position:"absolute" as const,bottom:24,left:"50%",background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:"10px 16px",fontSize:13,fontWeight:600,color:toast.ok?A.t1:A.red,zIndex:99999,display:"flex",alignItems:"center",gap:8,boxShadow:A.shadow,whiteSpace:"nowrap" as const,animation:`${toastLeaving?"toastOut":"toastIn"} .3s cubic-bezier(.4,0,.2,1) forwards`}}>
-          <span>{toast.ok?"✓":"✗"}</span><span>{toast.msg}</span>
+        <div style={{position:"absolute" as const,top:122,right:20,background:"#15181D",border:"none",borderRadius:10,padding:"12px 14px",fontSize:12.5,fontWeight:500,color:"#fff",zIndex:99999,display:"flex",alignItems:"center",gap:9,boxShadow:"0 8px 28px -6px rgba(16,24,40,.4)",whiteSpace:"nowrap" as const,animation:`${toastLeaving?"toastOut":"toastIn"} .3s cubic-bezier(.4,0,.2,1) forwards`}}>
+          <span style={{width:16,height:16,borderRadius:8,background:toast.ok?A.green:A.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:10,fontWeight:700,color:"#fff"}}>{toast.ok?"✓":"!"}</span><span>{toast.msg}</span>
           {toast.undo&&<button onClick={toast.undo}
-            style={{marginLeft:8,padding:"2px 10px",borderRadius:4,border:"none",background:"transparent",cursor:"pointer",color:A.blue,fontFamily:FONT,fontSize:12,fontWeight:600}}>실행 취소</button>}
+            style={{marginLeft:8,padding:"2px 10px",borderRadius:5,border:"none",background:"rgba(255,255,255,.1)",cursor:"pointer",color:"#fff",fontFamily:FONT,fontSize:12,fontWeight:600}}>실행 취소</button>}
+          {toast.action&&<button onClick={()=>{toast.action?.onClick();setToast(null)}}
+            style={{marginLeft:10,flexShrink:0,height:26,padding:"0 11px",borderRadius:6,border:"none",background:"rgba(255,255,255,.16)",cursor:"pointer",color:"#fff",fontFamily:FONT,fontSize:12,fontWeight:600}}>{toast.action.label}</button>}
         </div>
       )}
 
