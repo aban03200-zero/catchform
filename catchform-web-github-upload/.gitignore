@@ -7,3 +7,6 @@ out
 *.log
 .DS_Store
 tsconfig.tsbuildinfo
+
+# 이 저장소는 bun.lock 을 쓴다. npm 을 잠깐 돌렸을 때 생기는 잠금 파일은 추적하지 않는다.
+package-lock.json

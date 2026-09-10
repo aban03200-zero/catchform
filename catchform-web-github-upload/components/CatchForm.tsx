@@ -88,7 +88,7 @@ type Cfg = {
     modal: { title: string; body: string; btnLabel: string; btnUrl: string; btnReplace: boolean; shareButtons?: Partial<ModalShareButtons> }
     styles: { theme: "dark"|"light"; fieldH: number; qGap: number; maxW: number; labelGap?: number; seniorMode?: boolean }
     auth: { enabled: boolean; loginUrl: string; errText: string }
-    integrations?: { googleSheets?: { enabled: boolean; mode: "existing"|"new"; accountEmail: string; sheetUrl: string; sheetName: string; webhookUrl: string; lastSyncStatus?: "idle"|"sent"|"error"; lastSyncAt?: string; lastSyncMessage?: string } }
+    integrations?: { googleSheets?: { enabled: boolean; mode: "existing"|"new"; accountEmail: string; sheetUrl: string; sheetName: string; tabName?: string; createdSheetName?: string; webhookUrl: string; lastSyncStatus?: "idle"|"sent"|"error"; lastSyncAt?: string; lastSyncMessage?: string } }
     dashboard?: { isPublished?: boolean; publishedAt?: string; operationStart?: string; operationEnd?: string; operationPeriods?: OperationPeriod[]; alwaysOpen?: boolean }
     brand: string
     formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"
@@ -1741,6 +1741,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             // Apps Script가 mode를 보지 않고 sheetUrl이 있으면 그 시트를 열어버려서,
             // 기존 시트로 쓰다가 새로 생성으로 바꾸면 옛 시트에 행이 계속 쌓였다.
             sheetUrl: (gs.mode || "existing") === "existing" ? (gs.sheetUrl || "") : "",
+            tabName: String(gs.tabName || "").trim(),
             sheetName: gs.sheetName || cfg.header?.title || "CatchForm Responses",
             formId: formConfigId || formId || "",
             formSlug: formSlug || "",

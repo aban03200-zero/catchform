@@ -5,6 +5,22 @@ function doPost(e) {
     else if (e && e.postData && e.postData.contents) raw = e.postData.contents;
 
     var payload = JSON.parse(raw || "{}");
+
+    // 탭 목록만 돌려주는 조회용 요청. 캐치폼에서 탭 선택 드롭다운을 채울 때 씁니다.
+    if (payload.action === "listTabs") {
+      var target = SpreadsheetApp.openByUrl(payload.sheetUrl);
+      var tabsWarning = ensureCrmReaderAccess_(target);
+      return json_({
+        ok: true,
+        crmAccessWarning: tabsWarning || "",
+        spreadsheetName: target.getName(),
+        spreadsheetUrl: target.getUrl(),
+        tabs: target.getSheets().map(function (sh) { return sh.getName(); }),
+        // 탭별 gid. 캐치폼이 `#gid=`로 해당 탭을 바로 열 때 씁니다.
+        tabGids: target.getSheets().map(function (sh) { return sh.getSheetId(); }),
+      });
+    }
+
     var spreadsheet = getSpreadsheet_(payload);
     var sheet = getTargetSheet_(spreadsheet, payload);
     var appendedRow = appendPayload_(sheet, payload);
@@ -14,7 +30,9 @@ function doPost(e) {
       ok: true,
       spreadsheetUrl: spreadsheet.getUrl(),
       sheetName: sheet.getName(),
+      sheetGid: sheet.getSheetId(),
       appendedRow: appendedRow,
+      crmAccessWarning: CRM_ACCESS_WARNING || "",
     });
   } catch (err) {
     return json_({
@@ -48,14 +66,18 @@ function doGet(e) {
   return json_({
     ok: true,
     message: "CatchForm Google Sheets Web App is running.",
+    // 배포한 코드가 실제로 반영됐는지 확인할 때 씁니다.
+    version: SCRIPT_VERSION,
+    features: ["listTabs", "tabName", "sheetAction", "tabGid", "crmReader"],
     time: new Date().toISOString(),
   });
 }
 
 function getSpreadsheet_(payload) {
+  CRM_ACCESS_WARNING = "";
   if ((payload.mode || "existing") === "existing" && payload.sheetUrl) {
     var existing = SpreadsheetApp.openByUrl(payload.sheetUrl);
-    ensureSpreadsheetAccess_(existing, payload);
+    CRM_ACCESS_WARNING = ensureSpreadsheetAccess_(existing, payload);
     return existing;
   }
 
@@ -77,7 +99,7 @@ function getSpreadsheet_(payload) {
           var newName = String(payload.sheetName || "").trim();
           if (newName && saved.getName() !== newName) saved.rename(newName);
         }
-        ensureSpreadsheetAccess_(saved, payload);
+        CRM_ACCESS_WARNING = ensureSpreadsheetAccess_(saved, payload);
         return saved;
       } catch (err) {
         props.deleteProperty(key);
@@ -88,27 +110,63 @@ function getSpreadsheet_(payload) {
   // mode가 "new"인데 sheetUrl이 남아 있으면 기존 시트를 열어버리므로, existing일 때만 사용합니다.
   if (payload.sheetUrl && (payload.mode || "existing") === "existing") {
     var byUrl = SpreadsheetApp.openByUrl(payload.sheetUrl);
-    ensureSpreadsheetAccess_(byUrl, payload);
+    CRM_ACCESS_WARNING = ensureSpreadsheetAccess_(byUrl, payload);
     return byUrl;
   }
 
   var spreadsheet = SpreadsheetApp.create(payload.sheetName || payload.formTitle || "CatchForm Responses");
   if (key) props.setProperty(key, spreadsheet.getId());
-  ensureSpreadsheetAccess_(spreadsheet, payload);
+  CRM_ACCESS_WARNING = ensureSpreadsheetAccess_(spreadsheet, payload);
   return spreadsheet;
 }
 
+// CRM이 시트를 읽어가는 서비스 계정. 새로 만든 시트든 붙여넣은 기존 시트든 항상 뷰어로 넣습니다.
+var SCRIPT_VERSION = "2026-09-10";
+var CRM_ACCESS_WARNING = "";
+var CRM_READER_EMAIL = "crm-sheets-reader@crm-sync-506918.iam.gserviceaccount.com";
+
 function ensureSpreadsheetAccess_(spreadsheet, payload) {
   var email = String(payload.accountEmail || "").trim();
-  if (!email || email.indexOf("@") === -1) return;
+  if (email && email.indexOf("@") !== -1) {
+    try {
+      spreadsheet.addEditor(email);
+    } catch (err) {
+      // 공유 드라이브 정책이나 도메인 제한 때문에 공유가 막힌 경우에도 응답 기록 자체는 계속 진행합니다.
+    }
+  }
+  return ensureCrmReaderAccess_(spreadsheet);
+}
+
+// 뷰어 추가에 실패하면 조용히 넘기지 않고 사유를 돌려줍니다.
+// 실패를 삼키면 CRM이 시트를 못 읽는데도 관리자는 연동이 된 줄 알게 됩니다.
+function ensureCrmReaderAccess_(spreadsheet) {
   try {
-    spreadsheet.addEditor(email);
+    var viewers = spreadsheet.getViewers().map(function (user) { return String(user.getEmail() || "").toLowerCase(); });
+    var editors = spreadsheet.getEditors().map(function (user) { return String(user.getEmail() || "").toLowerCase(); });
+    var target = CRM_READER_EMAIL.toLowerCase();
+    if (viewers.indexOf(target) !== -1 || editors.indexOf(target) !== -1) return "";
   } catch (err) {
-    // 공유 드라이브 정책이나 도메인 제한 때문에 공유가 막힌 경우에도 응답 기록 자체는 계속 진행합니다.
+    // 목록을 못 읽어도 일단 추가는 시도합니다.
+  }
+  try {
+    spreadsheet.addViewer(CRM_READER_EMAIL);
+    return "";
+  } catch (err) {
+    return "CRM 읽기 계정(" + CRM_READER_EMAIL + ")을 뷰어로 추가하지 못했습니다: " +
+      (err && err.message ? err.message : String(err));
   }
 }
 
 function getTargetSheet_(spreadsheet, payload) {
+  // tabName이 오면 그 이름의 탭을 쓰고, 없으면 만듭니다.
+  var wantedTab = safeSheetName_(String(payload.tabName || "").trim());
+  if (String(payload.tabName || "").trim()) {
+    var found = spreadsheet.getSheetByName(wantedTab);
+    if (found) return found;
+    return spreadsheet.insertSheet(wantedTab);
+  }
+
+  // tabName이 없으면 기존 동작: 첫 탭을 쓰고, 비어 있으면 시트 이름으로 바꿔줍니다.
   var sheets = spreadsheet.getSheets();
   var sheet = sheets && sheets.length ? sheets[0] : spreadsheet.insertSheet("Responses");
   var desiredName = String(payload.sheetName || payload.formTitle || "").trim();
@@ -138,6 +196,9 @@ function getSheetPropertyKey_(payload) {
 
 function appendPayload_(sheet, payload) {
   var row = payload.row || {};
+  if (!Object.keys(row).length) {
+    throw new Error("보낼 행 데이터가 비어 있습니다. action 값이 이 스크립트 버전에서 지원되는지 확인해주세요. (현재 버전 " + SCRIPT_VERSION + ")");
+  }
   var preferredHeaders = Array.isArray(payload.columns) ? payload.columns.filter(Boolean) : [];
 
   var headers = sheet.getLastColumn()
