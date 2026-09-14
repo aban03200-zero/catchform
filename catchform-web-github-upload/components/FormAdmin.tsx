@@ -5,6 +5,7 @@
 
 import * as React from "react"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
+import { publicEnv } from "@/lib/env"
 
 // ─── Types ────────────────────────────────────────────────────────────────
 type Theme = "dark" | "light"
@@ -2307,6 +2308,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [loginPw,setLoginPw]=React.useState("")
   const [loginErr,setLoginErr]=React.useState("")
   const [loginLoading,setLoginLoading]=React.useState(false)
+  // CRM 회원가입 모달
+  const [signupOpen,setSignupOpen]=React.useState(false)
+  // iframe 내부는 다른 도메인이라 무엇이 눌렸는지 읽을 수 없다.
+  // 대신 페이지가 다시 로드되면(가입 후 로그인 화면으로 이동 등) 가입이 끝난 것으로 보고 창을 닫는다.
+  const signupLoadCountRef=React.useRef(0)
+  const [signupNotice,setSignupNotice]=React.useState("")
 
   // ── Dashboard data ─────────────────────────────────────────────────────
   const [snList,setSnList]=React.useState<any[]>([])
@@ -2985,6 +2992,49 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   },[supa,authUser,view])
 
   // ── Auth functions ────────────────────────────────────────────────────
+  // CRM 회원가입을 모달 안 iframe으로 띄운다.
+  // CRM이 임베드 전용 페이지를 내놓으면 postMessage로 완료를 알려주므로 그것도 함께 받는다.
+  // 지금은 일반 회원가입 페이지라 완료 신호가 오지 않아, 사용자가 직접 닫으면 안내를 띄운다.
+  const crmSignupSrc=(()=>{
+    const raw=publicEnv.crmSignupUrl
+    if(!raw)return ""
+    try{
+      const url=new URL(raw)
+      url.searchParams.set("v","1")
+      url.searchParams.set("source","catchform")
+      if(typeof window!=="undefined")url.searchParams.set("parentOrigin",window.location.origin)
+      return url.toString()
+    }catch{return raw}
+  })()
+  React.useEffect(()=>{
+    if(!signupOpen||typeof window==="undefined")return
+    let crmOrigin=""
+    try{crmOrigin=new URL(publicEnv.crmSignupUrl).origin}catch{}
+    const onMessage=(e:MessageEvent)=>{
+      if(!crmOrigin||e.origin!==crmOrigin)return
+      const data:any=e.data
+      if(!data||data.source!=="crm-embed")return
+      if(data.type==="complete"){
+        const email=String(data.payload?.email||"").trim()
+        if(email)setLoginEmail(email)
+        setSignupOpen(false)
+        setSignupNotice(`가입이 완료됐어요.${email?` ${email} 계정으로`:""} 비밀번호를 입력해 로그인해주세요.`)
+      }
+      if(data.type==="close")setSignupOpen(false)
+      if(data.type==="error")setLoginErr(String(data.payload?.message||"회원가입 중 오류가 발생했어요."))
+    }
+    const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape")closeCrmSignup()}
+    window.addEventListener("message",onMessage)
+    document.addEventListener("keydown",onKey)
+    return()=>{
+      window.removeEventListener("message",onMessage)
+      document.removeEventListener("keydown",onKey)
+    }
+  },[signupOpen])
+  function closeCrmSignup(){
+    setSignupOpen(false)
+    setSignupNotice("가입을 마치셨다면 이메일과 비밀번호를 입력해 로그인해주세요.")
+  }
   async function doLogin(){
     if(!supa){setLoginErr("Supabase 연결 정보가 없어요.");return}
     if(!loginEmail.trim()||!loginPw){setLoginErr("이메일과 비밀번호를 입력해주세요.");return}
@@ -5436,8 +5486,52 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             style={{width:"100%",height:46,borderRadius:10,border:"none",background:loginLoading?"rgba(49,130,246,0.6)":"#3182F6",color:"#fff",fontFamily:FONT,fontSize:14.5,fontWeight:700,cursor:loginLoading?"not-allowed":"pointer",letterSpacing:"-0.2px"}}>
             {loginLoading?"로그인 중...":"로그인"}
           </button>
+          {/* CRM 주소가 설정된 경우에만 노출한다. 없으면 눌러도 아무 일이 없는 버튼이 되어버린다. */}
+          {!!crmSignupSrc&&<>
+            <div style={{display:"flex",alignItems:"center",gap:10,margin:"18px 0 14px"}}>
+              <span style={{flex:1,height:1,background:border}}/>
+              <span style={{fontSize:11.5,color:t3}}>계정이 없으신가요?</span>
+              <span style={{flex:1,height:1,background:border}}/>
+            </div>
+            <button onClick={()=>{setSignupNotice("");setLoginErr("");signupLoadCountRef.current=0;setSignupOpen(true)}}
+              style={{width:"100%",height:44,borderRadius:10,border:`1px solid ${border}`,background:"transparent",color:t1,fontFamily:FONT,fontSize:13.5,fontWeight:600,cursor:"pointer",transition:"background .12s"}}
+              onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=adminDark?"rgba(255,255,255,0.05)":"#F7F8FA"}}
+              onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
+              회원가입
+            </button>
+          </>}
+          {!!signupNotice&&<div style={{marginTop:14,fontSize:12.5,color:"#1B62E0",padding:"9px 12px",borderRadius:8,background:"rgba(49,130,246,0.08)",border:"1px solid rgba(49,130,246,0.2)",lineHeight:1.6}}>{signupNotice}</div>}
           {!supabaseUrl&&<div style={{marginTop:18,fontSize:11.5,color:t3,textAlign:"center" as const,lineHeight:1.6}}>환경변수에 Supabase URL과 Key를 먼저 입력해주세요</div>}
         </div>
+
+        {/* CRM 회원가입 모달 */}
+        {signupOpen&&!!crmSignupSrc&&<div
+          onClick={e=>{if(e.target===e.currentTarget)closeCrmSignup()}}
+          style={{position:"absolute" as const,inset:0,zIndex:1000,background:"rgba(21,24,29,.42)",display:"flex",alignItems:"center",justifyContent:"center",padding:20,boxSizing:"border-box" as const}}>
+          <div style={{position:"relative" as const,width:"100%",maxWidth:460,height:"min(680px, 100%)",borderRadius:16,overflow:"hidden",background:"#fff",boxShadow:"0 24px 64px -12px rgba(16,24,40,.45)",display:"flex",flexDirection:"column" as const}}>
+            <div style={{flexShrink:0,height:48,display:"flex",alignItems:"center",gap:8,padding:"0 8px 0 16px",borderBottom:"1px solid #EDEFF3",background:"#fff"}}>
+              <span style={{flex:1,fontSize:13.5,fontWeight:700,color:"#15181D"}}>회원가입</span>
+              <button onClick={closeCrmSignup} aria-label="닫기"
+                style={{width:32,height:32,flexShrink:0,border:"none",borderRadius:8,background:"transparent",color:"#8D95A3",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>
+                <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <iframe src={crmSignupSrc} title="회원가입"
+              onLoad={()=>{
+                signupLoadCountRef.current+=1
+                // 첫 로드는 회원가입 화면 자체다. 그 뒤 페이지가 바뀌면 가입을 마친 것으로 본다.
+                if(signupLoadCountRef.current>1)closeCrmSignup()
+              }}
+              style={{flex:1,width:"100%",border:0,display:"block"}}/>
+            <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:10,padding:"10px 12px 10px 16px",borderTop:"1px solid #EDEFF3",background:"#FAFBFC"}}>
+              <span style={{flex:1,minWidth:0,fontSize:11.5,color:"#8D95A3",lineHeight:1.5}}>가입을 마치셨나요?</span>
+              <button onClick={closeCrmSignup}
+                style={{flexShrink:0,height:32,padding:"0 12px",border:"none",borderRadius:8,background:"#3182F6",color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const}}>
+                로그인하러 가기
+              </button>
+            </div>
+          </div>
+        </div>}
       </div>
     )
   }
