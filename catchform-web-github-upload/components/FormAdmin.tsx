@@ -3895,13 +3895,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         formSlug:savedSlug||saveSlug||"",
         formTitle:cfg.header?.title||loadedName||"CatchForm",
         submittedAt:new Date().toISOString(),
-        columns:["날짜","시간","이름","전화번호","이메일","테스트"],
+        columns:["날짜","시간","테스트"],
         row:{
           날짜:new Date().toLocaleDateString("sv-SE"),
           시간:new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",hour12:false}),
-          이름:"",
-          전화번호:"",
-          이메일:"",
           테스트:"CatchForm 연동 테스트"
         },
         answers:[{question:"테스트",answer:"CatchForm 연동 테스트",answerKey:"test"}]
@@ -5106,7 +5103,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setExpandedDuplicateResponseGroups([])
   },[loadedId,analyticsResponseScope])
   function exportAnalyticsCsv(srcRows:any[]=analyticsRows,fileSuffix="responses"){
-    const fields=getAnalyticsFields({includeConsentFields:true,includeAttributionFields:analyticsResponseScope==="submitted",rows:srcRows})
+    // utm_source·referrer 같은 유입 정보는 화면 표에도 없고 시트에서도 쓸 일이 없어 내려받기에서 뺀다.
+    // 유입 분석은 기간별 인사이트에서 본다.
+    const fields=getAnalyticsFields({includeConsentFields:true,rows:srcRows})
     const headers=["날짜","시간",...fields.map(f=>f.label)]
     const csvEscape=(v:any)=>`"${String(v??"").replace(/"/g,'""')}"`
     const lines=[headers.map(csvEscape).join(",")]

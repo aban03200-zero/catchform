@@ -1728,13 +1728,12 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         }, {})
         const [date, time] = formatSheetDateTime()
         const responseFields = getSheetResponseFields()
-        const columns = ["날짜", "시간", "이름", "전화번호", "이메일", ...responseFields.map(field => field.label || field.id)]
+        // 이름·전화번호·이메일은 폼 질문으로 이미 받고 있어서 따로 열을 두면 같은 값이 두 번 들어간다.
+        // 날짜·시간만 앞에 두고 나머지는 질문 순서 그대로 쌓는다.
+        const columns = ["날짜", "시간", ...responseFields.map(field => field.label || field.id)]
         const row = {
             "날짜": date,
             "시간": time,
-            "이름": payload.name || "",
-            "전화번호": payload.phone || "",
-            "이메일": payload.email || "",
             ...responseFields.reduce((acc: Record<string, any>, field: any) => {
                 acc[field.label || field.id] = sheetDisplayAnswer(answerRow[field.id] ?? answerRow[field.label])
                 return acc
