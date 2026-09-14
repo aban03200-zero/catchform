@@ -1706,7 +1706,16 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     }
 
     const sendGoogleSheetsIntegration = async (payload: Record<string, any>, formData: Array<{question: string; answer: any; answerKey: string}>, formConfigId: string | null) => {
-        const gs = cfg.integrations?.googleSheets
+        // 이 페이지는 정적으로 캐시돼서, 관리자가 방금 연결한 시트 설정이 아직 반영 안 된 상태일 수 있다.
+        // 그래서 연동 직후 첫 제출이 조용히 누락됐다. 제출 시점에 실제 설정을 다시 읽어 쓴다.
+        let gs = cfg.integrations?.googleSheets
+        if (supa && formConfigId) {
+            try {
+                const { data } = await supa.from("form_configs").select("config").eq("id", formConfigId).single()
+                const fresh = (data as any)?.config?.integrations?.googleSheets
+                if (fresh) gs = fresh
+            } catch {}
+        }
         // 폼별 전용 URL은 더 이상 쓰지 않는다.
         // 관리자가 잘못 넣거나 옛 배포가 만료돼도 그 폼만 조용히 실패하는 일이 반복돼,
         // 공통 환경변수 하나만 바라보도록 통일했다. (저장된 webhookUrl 값은 무시)

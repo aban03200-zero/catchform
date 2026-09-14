@@ -213,6 +213,17 @@ function displayBirthDateWithAge(value:any){
   const age=new Date().getFullYear()-year
   return`${year}.${String(month).padStart(2,"0")}.${String(day).padStart(2,"0")}(만 ${age}세)`
 }
+// 입력란 안에서 마우스를 끌어 글자를 선택하면, 조상 요소의 draggable 때문에
+// 브라우저가 HTML5 드래그를 시작해 버린다. 그 결과 편집 패널이 닫히거나 질문 순서가 바뀐다.
+//
+// dragstart의 target은 마우스가 눌린 자리가 아니라 draggable이 붙은 바깥 상자다.
+// 그래서 눌린 위치는 mousedown 때 따로 기억해 두고, dragstart에서 그 값을 보고 취소한다.
+function isTextEntryDragTarget(target:EventTarget|null){
+  const el=target as HTMLElement|null
+  if(!el||typeof el.closest!=="function")return false
+  return !!el.closest("input,textarea,select,[contenteditable='true'],[contenteditable='']")
+}
+
 function birthDateRangeOf(field:any){
   if(field?.birthDateRangeEnabled){
     let start=normalizeDateOnly(field.birthDateRangeStart)
@@ -2554,6 +2565,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [replacePos,setReplacePos]=React.useState<{top:number;right:number}|null>(null)
   const [selectedFieldId,setSelectedFieldId]=React.useState<string|null>(null)
   const [editIdx,setEditIdx]=React.useState<number|null>(null)
+  // 직전 mousedown이 입력란에서 시작했는지. 드래그를 시작할지 판단하는 데 쓴다.
+  const dragFromTextEntryRef=React.useRef(false)
   const [showAddField,setShowAddField]=React.useState(false)
   const [sheetRenamePrompt,setSheetRenamePrompt]=React.useState<{from:string;to:string}|null>(null)
   // 기존 시트에 어떤 탭이 있는지 Apps Script에 물어 드롭다운을 채운다.
@@ -6941,7 +6954,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {pageFields.map((field,idx)=>(
               <div key={(field as any).id||idx}
                 draggable
+                onMouseDownCapture={e=>{dragFromTextEntryRef.current=isTextEntryDragTarget(e.target)}}
                 onDragStart={e=>{
+                  if(dragFromTextEntryRef.current){e.preventDefault();return}
                   if((e.target as HTMLElement)?.closest?.("[data-option-drag-handle='true']")){e.stopPropagation();return}
                   setPanelDragIdx(idx);setEditIdx(null)
                 }}
@@ -7900,7 +7915,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           return <div key={field.id}
             data-cf-field={field.id}
             draggable
-            onDragStart={()=>setDragIdx(i)}
+            onMouseDownCapture={e=>{dragFromTextEntryRef.current=isTextEntryDragTarget(e.target)}}
+            onDragStart={e=>{
+              if(dragFromTextEntryRef.current){e.preventDefault();return}
+              setDragIdx(i)
+            }}
             onDragOver={e=>{
               e.preventDefault();setDragOver(i)
               const rect=(e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -8312,7 +8331,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             const kdtIsSelected=selectedFieldId===kdtId
             return <div key={field.id}
               draggable
-              onDragStart={()=>{setDragIdx(idx)}}
+              onMouseDownCapture={e=>{dragFromTextEntryRef.current=isTextEntryDragTarget(e.target)}}
+              onDragStart={e=>{
+                if(dragFromTextEntryRef.current){e.preventDefault();return}
+                setDragIdx(idx)
+              }}
               onDragOver={e=>{e.preventDefault();setDragOver(idx);const rect=(e.currentTarget as HTMLElement).getBoundingClientRect();setDragInsertAt(e.clientY<rect.top+rect.height/2?idx:idx+1)}}
               onDragEnd={()=>{if(dragIdx!==null&&dragInsertAt!==null){let t=dragInsertAt;if(t>dragIdx)t=t-1;if(t!==dragIdx)moveActiveField(dragIdx,t)}setDragIdx(null);setDragOver(null);setDragInsertAt(null)}}
               onDragLeave={()=>{setDragOver(null);setDragInsertAt(null)}}
