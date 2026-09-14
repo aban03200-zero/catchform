@@ -6976,7 +6976,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	                  </div>
                   <div
                     style={{flex:1,height:48,display:"flex",alignItems:"center",gap:10,padding:"0 8px",borderRadius:10,border:"none",background:editIdx===idx?A.blue2:"transparent",boxShadow:editIdx===idx?`inset 0 0 0 1.5px ${A.blue}`:"none",cursor:"pointer",transition:"all .1s",minWidth:0}}
-                    onClick={()=>{setPanelDragIdx(null);setPanelDragOver(null);setOptionDrag(null);setOptionDragOver(null);setEditIdx(editIdx===idx?null:idx)}}>
+                    onClick={()=>{
+                      setPanelDragIdx(null);setPanelDragOver(null);setOptionDrag(null);setOptionDragOver(null)
+                      // 펼칠 때는 캔버스에서도 그 질문이 보이도록 따라가고, 접을 때는 화면을 건드리지 않는다.
+                      if(editIdx===idx){setEditIdx(null);return}
+                      focusCanvasField(String((field as any).id||""),Number((field as any).page||pvPage))
+                    }}>
                     <div style={{width:34,height:34,borderRadius:9,background:panelFieldBg(A),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:"none",color:A.t2}}>
                       {FTYPE_ICONS[(field as any).type as string]||FTYPE_ICONS.text}
                     </div>
@@ -8330,6 +8335,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             const kdtId=field.id
             const kdtIsSelected=selectedFieldId===kdtId
             return <div key={field.id}
+              data-cf-field={field.id}
               draggable
               onMouseDownCapture={e=>{dragFromTextEntryRef.current=isTextEntryDragTarget(e.target)}}
               onDragStart={e=>{
