@@ -5,6 +5,7 @@
 
 import * as React from "react"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
+import { publicEnv } from "@/lib/env"
 
 // ─── Types ────────────────────────────────────────────────────────────────
 type Theme = "dark" | "light"
@@ -213,6 +214,17 @@ function displayBirthDateWithAge(value:any){
   const age=new Date().getFullYear()-year
   return`${year}.${String(month).padStart(2,"0")}.${String(day).padStart(2,"0")}(만 ${age}세)`
 }
+// 입력란 안에서 마우스를 끌어 글자를 선택하면, 조상 요소의 draggable 때문에
+// 브라우저가 HTML5 드래그를 시작해 버린다. 그 결과 편집 패널이 닫히거나 질문 순서가 바뀐다.
+//
+// dragstart의 target은 마우스가 눌린 자리가 아니라 draggable이 붙은 바깥 상자다.
+// 그래서 눌린 위치는 mousedown 때 따로 기억해 두고, dragstart에서 그 값을 보고 취소한다.
+function isTextEntryDragTarget(target:EventTarget|null){
+  const el=target as HTMLElement|null
+  if(!el||typeof el.closest!=="function")return false
+  return !!el.closest("input,textarea,select,[contenteditable='true'],[contenteditable='']")
+}
+
 function birthDateRangeOf(field:any){
   if(field?.birthDateRangeEnabled){
     let start=normalizeDateOnly(field.birthDateRangeStart)
@@ -2296,6 +2308,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [loginPw,setLoginPw]=React.useState("")
   const [loginErr,setLoginErr]=React.useState("")
   const [loginLoading,setLoginLoading]=React.useState(false)
+  // CRM 회원가입 모달
+  const [signupOpen,setSignupOpen]=React.useState(false)
+  // iframe 내부는 다른 도메인이라 무엇이 눌렸는지 읽을 수 없다.
+  // 대신 페이지가 다시 로드되면(가입 후 로그인 화면으로 이동 등) 가입이 끝난 것으로 보고 창을 닫는다.
+  const signupLoadCountRef=React.useRef(0)
+  const [signupNotice,setSignupNotice]=React.useState("")
 
   // ── Dashboard data ─────────────────────────────────────────────────────
   const [snList,setSnList]=React.useState<any[]>([])
@@ -2554,6 +2572,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [replacePos,setReplacePos]=React.useState<{top:number;right:number}|null>(null)
   const [selectedFieldId,setSelectedFieldId]=React.useState<string|null>(null)
   const [editIdx,setEditIdx]=React.useState<number|null>(null)
+  // 직전 mousedown이 입력란에서 시작했는지. 드래그를 시작할지 판단하는 데 쓴다.
+  const dragFromTextEntryRef=React.useRef(false)
   const [showAddField,setShowAddField]=React.useState(false)
   const [sheetRenamePrompt,setSheetRenamePrompt]=React.useState<{from:string;to:string}|null>(null)
   // 기존 시트에 어떤 탭이 있는지 Apps Script에 물어 드롭다운을 채운다.
@@ -2972,6 +2992,49 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   },[supa,authUser,view])
 
   // ── Auth functions ────────────────────────────────────────────────────
+  // CRM 회원가입을 모달 안 iframe으로 띄운다.
+  // CRM이 임베드 전용 페이지를 내놓으면 postMessage로 완료를 알려주므로 그것도 함께 받는다.
+  // 지금은 일반 회원가입 페이지라 완료 신호가 오지 않아, 사용자가 직접 닫으면 안내를 띄운다.
+  const crmSignupSrc=(()=>{
+    const raw=publicEnv.crmSignupUrl
+    if(!raw)return ""
+    try{
+      const url=new URL(raw)
+      url.searchParams.set("v","1")
+      url.searchParams.set("source","catchform")
+      if(typeof window!=="undefined")url.searchParams.set("parentOrigin",window.location.origin)
+      return url.toString()
+    }catch{return raw}
+  })()
+  React.useEffect(()=>{
+    if(!signupOpen||typeof window==="undefined")return
+    let crmOrigin=""
+    try{crmOrigin=new URL(publicEnv.crmSignupUrl).origin}catch{}
+    const onMessage=(e:MessageEvent)=>{
+      if(!crmOrigin||e.origin!==crmOrigin)return
+      const data:any=e.data
+      if(!data||data.source!=="crm-embed")return
+      if(data.type==="complete"){
+        const email=String(data.payload?.email||"").trim()
+        if(email)setLoginEmail(email)
+        setSignupOpen(false)
+        setSignupNotice(`가입이 완료됐어요.${email?` ${email} 계정으로`:""} 비밀번호를 입력해 로그인해주세요.`)
+      }
+      if(data.type==="close")setSignupOpen(false)
+      if(data.type==="error")setLoginErr(String(data.payload?.message||"회원가입 중 오류가 발생했어요."))
+    }
+    const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape")closeCrmSignup()}
+    window.addEventListener("message",onMessage)
+    document.addEventListener("keydown",onKey)
+    return()=>{
+      window.removeEventListener("message",onMessage)
+      document.removeEventListener("keydown",onKey)
+    }
+  },[signupOpen])
+  function closeCrmSignup(){
+    setSignupOpen(false)
+    setSignupNotice("가입을 마치셨다면 이메일과 비밀번호를 입력해 로그인해주세요.")
+  }
   async function doLogin(){
     if(!supa){setLoginErr("Supabase 연결 정보가 없어요.");return}
     if(!loginEmail.trim()||!loginPw){setLoginErr("이메일과 비밀번호를 입력해주세요.");return}
@@ -3882,13 +3945,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         formSlug:savedSlug||saveSlug||"",
         formTitle:cfg.header?.title||loadedName||"CatchForm",
         submittedAt:new Date().toISOString(),
-        columns:["날짜","시간","이름","전화번호","이메일","테스트"],
+        columns:["날짜","시간","테스트"],
         row:{
           날짜:new Date().toLocaleDateString("sv-SE"),
           시간:new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",hour12:false}),
-          이름:"",
-          전화번호:"",
-          이메일:"",
           테스트:"CatchForm 연동 테스트"
         },
         answers:[{question:"테스트",answer:"CatchForm 연동 테스트",answerKey:"test"}]
@@ -5093,7 +5153,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setExpandedDuplicateResponseGroups([])
   },[loadedId,analyticsResponseScope])
   function exportAnalyticsCsv(srcRows:any[]=analyticsRows,fileSuffix="responses"){
-    const fields=getAnalyticsFields({includeConsentFields:true,includeAttributionFields:analyticsResponseScope==="submitted",rows:srcRows})
+    // utm_source·referrer 같은 유입 정보는 화면 표에도 없고 시트에서도 쓸 일이 없어 내려받기에서 뺀다.
+    // 유입 분석은 기간별 인사이트에서 본다.
+    const fields=getAnalyticsFields({includeConsentFields:true,rows:srcRows})
     const headers=["날짜","시간",...fields.map(f=>f.label)]
     const csvEscape=(v:any)=>`"${String(v??"").replace(/"/g,'""')}"`
     const lines=[headers.map(csvEscape).join(",")]
@@ -5424,8 +5486,52 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             style={{width:"100%",height:46,borderRadius:10,border:"none",background:loginLoading?"rgba(49,130,246,0.6)":"#3182F6",color:"#fff",fontFamily:FONT,fontSize:14.5,fontWeight:700,cursor:loginLoading?"not-allowed":"pointer",letterSpacing:"-0.2px"}}>
             {loginLoading?"로그인 중...":"로그인"}
           </button>
+          {/* CRM 주소가 설정된 경우에만 노출한다. 없으면 눌러도 아무 일이 없는 버튼이 되어버린다. */}
+          {!!crmSignupSrc&&<>
+            <div style={{display:"flex",alignItems:"center",gap:10,margin:"18px 0 14px"}}>
+              <span style={{flex:1,height:1,background:border}}/>
+              <span style={{fontSize:11.5,color:t3}}>계정이 없으신가요?</span>
+              <span style={{flex:1,height:1,background:border}}/>
+            </div>
+            <button onClick={()=>{setSignupNotice("");setLoginErr("");signupLoadCountRef.current=0;setSignupOpen(true)}}
+              style={{width:"100%",height:44,borderRadius:10,border:`1px solid ${border}`,background:"transparent",color:t1,fontFamily:FONT,fontSize:13.5,fontWeight:600,cursor:"pointer",transition:"background .12s"}}
+              onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=adminDark?"rgba(255,255,255,0.05)":"#F7F8FA"}}
+              onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
+              회원가입
+            </button>
+          </>}
+          {!!signupNotice&&<div style={{marginTop:14,fontSize:12.5,color:"#1B62E0",padding:"9px 12px",borderRadius:8,background:"rgba(49,130,246,0.08)",border:"1px solid rgba(49,130,246,0.2)",lineHeight:1.6}}>{signupNotice}</div>}
           {!supabaseUrl&&<div style={{marginTop:18,fontSize:11.5,color:t3,textAlign:"center" as const,lineHeight:1.6}}>환경변수에 Supabase URL과 Key를 먼저 입력해주세요</div>}
         </div>
+
+        {/* CRM 회원가입 모달 */}
+        {signupOpen&&!!crmSignupSrc&&<div
+          onClick={e=>{if(e.target===e.currentTarget)closeCrmSignup()}}
+          style={{position:"absolute" as const,inset:0,zIndex:1000,background:"rgba(21,24,29,.42)",display:"flex",alignItems:"center",justifyContent:"center",padding:20,boxSizing:"border-box" as const}}>
+          <div style={{position:"relative" as const,width:"100%",maxWidth:460,height:"min(680px, 100%)",borderRadius:16,overflow:"hidden",background:"#fff",boxShadow:"0 24px 64px -12px rgba(16,24,40,.45)",display:"flex",flexDirection:"column" as const}}>
+            <div style={{flexShrink:0,height:48,display:"flex",alignItems:"center",gap:8,padding:"0 8px 0 16px",borderBottom:"1px solid #EDEFF3",background:"#fff"}}>
+              <span style={{flex:1,fontSize:13.5,fontWeight:700,color:"#15181D"}}>회원가입</span>
+              <button onClick={closeCrmSignup} aria-label="닫기"
+                style={{width:32,height:32,flexShrink:0,border:"none",borderRadius:8,background:"transparent",color:"#8D95A3",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>
+                <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <iframe src={crmSignupSrc} title="회원가입"
+              onLoad={()=>{
+                signupLoadCountRef.current+=1
+                // 첫 로드는 회원가입 화면 자체다. 그 뒤 페이지가 바뀌면 가입을 마친 것으로 본다.
+                if(signupLoadCountRef.current>1)closeCrmSignup()
+              }}
+              style={{flex:1,width:"100%",border:0,display:"block"}}/>
+            <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:10,padding:"10px 12px 10px 16px",borderTop:"1px solid #EDEFF3",background:"#FAFBFC"}}>
+              <span style={{flex:1,minWidth:0,fontSize:11.5,color:"#8D95A3",lineHeight:1.5}}>가입을 마치셨나요?</span>
+              <button onClick={closeCrmSignup}
+                style={{flexShrink:0,height:32,padding:"0 12px",border:"none",borderRadius:8,background:"#3182F6",color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const}}>
+                로그인하러 가기
+              </button>
+            </div>
+          </div>
+        </div>}
       </div>
     )
   }
@@ -6941,7 +7047,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {pageFields.map((field,idx)=>(
               <div key={(field as any).id||idx}
                 draggable
+                onMouseDownCapture={e=>{dragFromTextEntryRef.current=isTextEntryDragTarget(e.target)}}
                 onDragStart={e=>{
+                  if(dragFromTextEntryRef.current){e.preventDefault();return}
                   if((e.target as HTMLElement)?.closest?.("[data-option-drag-handle='true']")){e.stopPropagation();return}
                   setPanelDragIdx(idx);setEditIdx(null)
                 }}
@@ -6961,7 +7069,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	                  </div>
                   <div
                     style={{flex:1,height:48,display:"flex",alignItems:"center",gap:10,padding:"0 8px",borderRadius:10,border:"none",background:editIdx===idx?A.blue2:"transparent",boxShadow:editIdx===idx?`inset 0 0 0 1.5px ${A.blue}`:"none",cursor:"pointer",transition:"all .1s",minWidth:0}}
-                    onClick={()=>{setPanelDragIdx(null);setPanelDragOver(null);setOptionDrag(null);setOptionDragOver(null);setEditIdx(editIdx===idx?null:idx)}}>
+                    onClick={()=>{
+                      setPanelDragIdx(null);setPanelDragOver(null);setOptionDrag(null);setOptionDragOver(null)
+                      // 펼칠 때는 캔버스에서도 그 질문이 보이도록 따라가고, 접을 때는 화면을 건드리지 않는다.
+                      if(editIdx===idx){setEditIdx(null);return}
+                      focusCanvasField(String((field as any).id||""),Number((field as any).page||pvPage))
+                    }}>
                     <div style={{width:34,height:34,borderRadius:9,background:panelFieldBg(A),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:"none",color:A.t2}}>
                       {FTYPE_ICONS[(field as any).type as string]||FTYPE_ICONS.text}
                     </div>
@@ -7900,7 +8013,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           return <div key={field.id}
             data-cf-field={field.id}
             draggable
-            onDragStart={()=>setDragIdx(i)}
+            onMouseDownCapture={e=>{dragFromTextEntryRef.current=isTextEntryDragTarget(e.target)}}
+            onDragStart={e=>{
+              if(dragFromTextEntryRef.current){e.preventDefault();return}
+              setDragIdx(i)
+            }}
             onDragOver={e=>{
               e.preventDefault();setDragOver(i)
               const rect=(e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -8311,8 +8428,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             const kdtId=field.id
             const kdtIsSelected=selectedFieldId===kdtId
             return <div key={field.id}
+              data-cf-field={field.id}
               draggable
-              onDragStart={()=>{setDragIdx(idx)}}
+              onMouseDownCapture={e=>{dragFromTextEntryRef.current=isTextEntryDragTarget(e.target)}}
+              onDragStart={e=>{
+                if(dragFromTextEntryRef.current){e.preventDefault();return}
+                setDragIdx(idx)
+              }}
               onDragOver={e=>{e.preventDefault();setDragOver(idx);const rect=(e.currentTarget as HTMLElement).getBoundingClientRect();setDragInsertAt(e.clientY<rect.top+rect.height/2?idx:idx+1)}}
               onDragEnd={()=>{if(dragIdx!==null&&dragInsertAt!==null){let t=dragInsertAt;if(t>dragIdx)t=t-1;if(t!==dragIdx)moveActiveField(dragIdx,t)}setDragIdx(null);setDragOver(null);setDragInsertAt(null)}}
               onDragLeave={()=>{setDragOver(null);setDragInsertAt(null)}}

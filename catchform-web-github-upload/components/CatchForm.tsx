@@ -1177,25 +1177,30 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const modalTitleMarginBottom = cfg.modal.body ? 8 : (showModalShareButtons ? 16 : 28)
     const modalBodyMarginBottom = showModalShareButtons ? 16 : 28
     const shareMenuButtonStyle: React.CSSProperties = { width: "100%", height: seniorMode ? 44 : 38, border: "none", background: "transparent", color: FC.t1, display: "flex", alignItems: "center", gap: 10, padding: "0 10px", borderRadius: 10, cursor: "pointer", fontFamily: FONT, fontSize: fs(13), fontWeight:600, textAlign: "left" as const }
-    const ShareIcon = ({type,size=18}:{type:"kakao"|"instagram"|"threads"|"x"|"link";size?:number}) => {
-        if(type==="kakao")return <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
-            <path d="M24 9C13.5 9 5.5 15.2 5.5 23c0 5 3.5 9.4 8.8 11.9l-1.7 7 7.6-4.4c1.2.2 2.5.3 3.8.3 10.5 0 18.5-6.2 18.5-14.8S34.5 9 24 9z" fill="currentColor"/>
-            <text x="24" y="27.5" textAnchor="middle" fontFamily="Arial, Helvetica, sans-serif" fontSize="11.5" fontWeight="800" fill="#fff" letterSpacing="-0.7">TALK</text>
+    // 공유 아이콘 다섯 개가 한 줄에 놓이므로 같은 24 격자에, 비슷한 시각 무게로 맞춘다.
+    // 카카오는 공식 로고의 바깥 사각형 틀을 빼고 말풍선만 남겼다. 틀이 있으면 혼자만 덩어리로 보인다.
+    // 같은 24 격자라도 글리프가 격자를 채우는 정도가 달라 눈에는 크기가 달라 보인다.
+    // 특히 X는 모서리까지 꽉 찬 사선이라 가장 커 보이고, 카카오 말풍선과 링크는 안쪽에 작게 그려져 있다.
+    // 그래서 실제 그려지는 크기에 글리프별 보정값을 곱해 시각적 크기를 맞춘다.
+    const SHARE_ICON_SCALE:Record<string,number> = {kakao:1.18,instagram:0.94,threads:0.9,x:0.8,link:1.14}
+    const ShareIcon = ({type,size:baseSize=24}:{type:"kakao"|"instagram"|"threads"|"x"|"link";size?:number}) => {
+        const size=Math.round(baseSize*(SHARE_ICON_SCALE[type]??1))
+        if(type==="kakao")return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 18.75c-.591 0-1.1697-.0413-1.7317-.1209-.5626.3965-3.813 2.6797-4.1198 2.7225 0 0-.1258.0489-.2328-.0141s-.0876-.2282-.0876-.2282c.0322-.2198.8426-3.0183.992-3.5333-2.7452-1.36-4.5701-3.7686-4.5701-6.5135C2.25 6.8168 6.6152 3.375 12 3.375s9.75 3.4418 9.75 7.6875c0 4.2457-4.3652 7.6875-9.75 7.6875z" fill="currentColor"/>
+            <path d="M8.0496 9.8672h-.8777v3.3417c0 .2963-.2523.5372-.5625.5372s-.5625-.2409-.5625-.5372V9.8672h-.8777c-.3044 0-.552-.2471-.552-.5508s.2477-.5508.552-.5508h2.8804c.3044 0 .552.2471.552.5508s-.2477.5508-.552.5508zm10.9879 2.9566a.558.558 0 0 1 .108.4167.5588.5588 0 0 1-.2183.371.5572.5572 0 0 1-.3383.1135.558.558 0 0 1-.4493-.2236l-1.3192-1.7479-.1952.1952v1.2273a.5635.5635 0 0 1-.5627.5628.563.563 0 0 1-.5625-.5625V9.3281c0-.3102.2523-.5625.5625-.5625s.5625.2523.5625.5625v1.209l1.5694-1.5694c.0807-.0807.1916-.1252.312-.1252.1404 0 .2814.0606.3871.1661.0985.0984.1573.2251.1654.3566.0082.1327-.036.2542-.1241.3425l-1.2818 1.2817 1.3845 1.8344zm-8.3502-3.5023c-.095-.2699-.3829-.5475-.7503-.5557-.3663.0083-.6542.2858-.749.5551l-1.3455 3.5415c-.1708.5305-.0217.7272.1333.7988a.8568.8568 0 0 0 .3576.0776c.2346 0 .4139-.0952.4678-.2481l.2787-.7297 1.7152.0001.2785.7292c.0541.1532.2335.2484.4681.2484a.8601.8601 0 0 0 .3576-.0775c.1551-.0713.3041-.2681.1329-.7999l-1.3449-3.5398zm-1.3116 2.4433l.5618-1.5961.5618 1.5961H9.3757zm5.9056 1.3836c0 .2843-.2418.5156-.5391.5156h-1.8047c-.2973 0-.5391-.2314-.5391-.5156V9.3281c0-.3102.2576-.5625.5742-.5625s.5742.2523.5742.5625v3.3047h1.1953c.2974 0 .5392.2314.5392.5156z" fill="#fff"/>
         </svg>
-        if(type==="instagram")return <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
-            <rect x="9" y="9" width="30" height="30" rx="9" fill="currentColor"/>
-            <circle cx="24" cy="24" r="7.1" stroke="#fff" strokeWidth="4.2"/>
-            <circle cx="32.3" cy="15.9" r="2.8" fill="#fff"/>
+        if(type==="instagram")return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M7.0301.084c-1.2768.0602-2.1487.264-2.911.5634-.7888.3075-1.4575.72-2.1228 1.3877-.6652.6677-1.075 1.3368-1.3802 2.127-.2954.7638-.4956 1.6365-.552 2.914-.0564 1.2775-.0689 1.6882-.0626 4.947.0062 3.2586.0206 3.6671.0825 4.9473.061 1.2765.264 2.1482.5635 2.9107.308.7889.72 1.4573 1.388 2.1228.6679.6655 1.3365 1.0743 2.1285 1.38.7632.295 1.6361.4961 2.9134.552 1.2773.056 1.6884.069 4.9462.0627 3.2578-.0062 3.668-.0207 4.9478-.0814 1.28-.0607 2.147-.2652 2.9098-.5633.7889-.3086 1.4578-.72 2.1228-1.3881.665-.6682 1.0745-1.3378 1.3795-2.1284.2957-.7632.4966-1.636.552-2.9124.056-1.2809.0692-1.6898.063-4.948-.0063-3.2583-.021-3.6668-.0817-4.9465-.0607-1.2797-.264-2.1487-.5633-2.9117-.3084-.7889-.72-1.4568-1.3876-2.1228C21.2982 1.33 20.628.9208 19.8378.6165 19.074.321 18.2017.1197 16.9244.0645 15.6471.0093 15.236-.005 11.977.0014 8.718.0076 8.31.0215 7.0301.0839m.1402 21.6932c-1.17-.0509-1.8053-.2453-2.2287-.408-.5606-.216-.96-.4771-1.3819-.895-.422-.4178-.6811-.8186-.9-1.378-.1644-.4234-.3624-1.058-.4171-2.228-.0595-1.2645-.072-1.6442-.079-4.848-.007-3.2037.0053-3.583.0607-4.848.05-1.169.2456-1.805.408-2.2282.216-.5613.4762-.96.895-1.3816.4188-.4217.8184-.6814 1.3783-.9003.423-.1651 1.0575-.3614 2.227-.4171 1.2655-.06 1.6447-.072 4.848-.079 3.2033-.007 3.5835.005 4.8495.0608 1.169.0508 1.8053.2445 2.228.408.5608.216.96.4754 1.3816.895.4217.4194.6816.8176.9005 1.3787.1653.4217.3617 1.056.4169 2.2263.0602 1.2655.0739 1.645.0796 4.848.0058 3.203-.0055 3.5834-.061 4.848-.051 1.17-.245 1.8055-.408 2.2294-.216.5604-.4763.96-.8954 1.3814-.419.4215-.8181.6811-1.3783.9-.4224.1649-1.0577.3617-2.2262.4174-1.2656.0595-1.6448.072-4.8493.079-3.2045.007-3.5825-.006-4.848-.0608M16.953 5.5864A1.44 1.44 0 1 0 18.39 4.144a1.44 1.44 0 0 0-1.437 1.4424M5.8385 12.012c.0067 3.4032 2.7706 6.1557 6.173 6.1493 3.4026-.0065 6.157-2.7701 6.1506-6.1733-.0065-3.4032-2.771-6.1565-6.174-6.1498-3.403.0067-6.156 2.771-6.1496 6.1738M8 12.0077a4 4 0 1 1 4.008 3.9921A3.9996 3.9996 0 0 1 8 12.0077"/>
         </svg>
-        if(type==="threads")return <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
-            <path d="M32.5 21.4c-.9-7.1-6-11.5-13.4-11.5C10.7 9.9 5 15.8 5 23.7 5 31.9 11 38 20.5 38c7.8 0 13-4 13-10.2 0-5.4-4.2-8.7-11.2-8.7-5.6 0-9.1 2.5-9.1 6.1 0 3.1 2.5 5.1 6.1 5.1 5.1 0 7.9-3.3 7.9-8.4" stroke="currentColor" strokeWidth="4.6" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M30.6 12.4c6.7 2.1 10.8 7.8 11 15.3" stroke="currentColor" strokeWidth="4.6" strokeLinecap="round"/>
+        if(type==="threads")return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M18.263 11.097c-.03-3.486-1.92-5.586-5.111-5.586-2.13 0-3.922.963-4.863 2.499l2.062 1.438c.535-.843 1.272-1.543 2.628-1.543 1.528 0 2.318.85 2.544 2.431a15 15 0 0 0-2.236-.173c-4.125 0-6.068 1.867-6.068 4.336s1.943 3.99 4.804 3.99c3.139 0 5.013-2.115 5.781-4.735.798.361 1.348 1.204 1.348 2.47 0 3.387-3.907 5.232-7.22 5.232-4.885 0-8.077-3.207-8.077-8.424 0-6.392 4.223-10.487 9.9-10.487 3.808 0 5.69 1.671 6.97 3.914l2.108-1.475C21.44 2.078 18.331 0 13.663 0 6.227 0 1.168 5.277 1.168 12.934c0 7 4.953 11.066 10.856 11.066 4.878 0 9.809-2.846 9.809-7.716 0-2.545-1.46-4.231-3.569-5.187m-6.33 4.855c-1.077 0-2.026-.512-2.026-1.453 0-1.483 1.822-1.934 3.606-1.934.678 0 1.34.045 1.927.173-.422 1.927-1.671 3.215-3.508 3.214Z"/>
         </svg>
-        if(type==="link")return <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
-            <path d="M19.6 28.4a8 8 0 0 0 11.3 0l6.2-6.2A8 8 0 0 0 25.8 10.9l-3.4 3.4M28.4 19.6a8 8 0 0 0-11.3 0l-6.2 6.2a8 8 0 0 0 11.3 11.3l3.4-3.4" stroke="currentColor" strokeWidth="5.2" strokeLinecap="round" strokeLinejoin="round"/>
+        if(type==="link")return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M9.7 14.3a4.4 4.4 0 0 0 6.2 0l3-3a4.4 4.4 0 0 0-6.2-6.2l-1.4 1.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M14.3 9.7a4.4 4.4 0 0 0-6.2 0l-3 3a4.4 4.4 0 0 0 6.2 6.2l1.4-1.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
-        return <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
-            <path d="M8 8l32 32M40 8 8 40" stroke="currentColor" strokeWidth="5.8" strokeLinecap="square"/>
+        return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z"/>
         </svg>
     }
 
@@ -1706,7 +1711,16 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     }
 
     const sendGoogleSheetsIntegration = async (payload: Record<string, any>, formData: Array<{question: string; answer: any; answerKey: string}>, formConfigId: string | null) => {
-        const gs = cfg.integrations?.googleSheets
+        // 이 페이지는 정적으로 캐시돼서, 관리자가 방금 연결한 시트 설정이 아직 반영 안 된 상태일 수 있다.
+        // 그래서 연동 직후 첫 제출이 조용히 누락됐다. 제출 시점에 실제 설정을 다시 읽어 쓴다.
+        let gs = cfg.integrations?.googleSheets
+        if (supa && formConfigId) {
+            try {
+                const { data } = await supa.from("form_configs").select("config").eq("id", formConfigId).single()
+                const fresh = (data as any)?.config?.integrations?.googleSheets
+                if (fresh) gs = fresh
+            } catch {}
+        }
         // 폼별 전용 URL은 더 이상 쓰지 않는다.
         // 관리자가 잘못 넣거나 옛 배포가 만료돼도 그 폼만 조용히 실패하는 일이 반복돼,
         // 공통 환경변수 하나만 바라보도록 통일했다. (저장된 webhookUrl 값은 무시)
@@ -1719,13 +1733,12 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         }, {})
         const [date, time] = formatSheetDateTime()
         const responseFields = getSheetResponseFields()
-        const columns = ["날짜", "시간", "이름", "전화번호", "이메일", ...responseFields.map(field => field.label || field.id)]
+        // 이름·전화번호·이메일은 폼 질문으로 이미 받고 있어서 따로 열을 두면 같은 값이 두 번 들어간다.
+        // 날짜·시간만 앞에 두고 나머지는 질문 순서 그대로 쌓는다.
+        const columns = ["날짜", "시간", ...responseFields.map(field => field.label || field.id)]
         const row = {
             "날짜": date,
             "시간": time,
-            "이름": payload.name || "",
-            "전화번호": payload.phone || "",
-            "이메일": payload.email || "",
             ...responseFields.reduce((acc: Record<string, any>, field: any) => {
                 acc[field.label || field.id] = sheetDisplayAnswer(answerRow[field.id] ?? answerRow[field.label])
                 return acc
@@ -2603,19 +2616,19 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     {cfg.modal.body && <div style={{ fontSize: fs(13.5), color: FC.t2, lineHeight: 1.6, marginBottom: modalBodyMarginBottom }}>{cfg.modal.body}</div>}
                     {showModalShareButtons && <div style={{ display: "flex", justifyContent: "center", gap: "clamp(8px, 2.2vw, 18px)", marginBottom: 22 }}>
                         {modalShareButtons.kakao && <button onClick={shareKakao} title="카카오톡 공유" style={shareButtonStyle}>
-                            <ShareIcon type="kakao" size={28} />
+                            <ShareIcon type="kakao" size={24} />
                         </button>}
                         {modalShareButtons.instagram && <button onClick={shareInstagramStory} title="인스타그램 스토리로 이동" style={shareButtonStyle}>
-                            <ShareIcon type="instagram" size={28} />
+                            <ShareIcon type="instagram" size={24} />
                         </button>}
                         {modalShareButtons.threads && <button onClick={shareThreads} title="스레드 공유" style={shareButtonStyle}>
-                            <ShareIcon type="threads" size={29} />
+                            <ShareIcon type="threads" size={24} />
                         </button>}
                         {modalShareButtons.x && <button onClick={shareToX} title="X 공유" style={shareButtonStyle}>
-                            <ShareIcon type="x" size={27} />
+                            <ShareIcon type="x" size={24} />
                         </button>}
                         {modalShareButtons.link && <button onClick={() => copyShareUrl(false)} title="URL 복사" style={shareButtonStyle}>
-                            <ShareIcon type="link" size={28} />
+                            <ShareIcon type="link" size={24} />
                         </button>}
                     </div>}
                     {shareCopied && <div style={{fontSize:fs(12),color:accentText,fontWeight:600,marginTop:-10,marginBottom:12}}>URL이 복사됐어요.</div>}
