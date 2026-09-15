@@ -1856,6 +1856,22 @@ const FTYPE_ICONS:Record<string,React.ReactNode> = {
   referral: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="5" cy="8" r="2" stroke="currentColor" strokeWidth="1.4"/><circle cx="12" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.4"/><circle cx="12" cy="12" r="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M7 7l3.5-2.5M7 9l3.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
   ad: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="4" width="12" height="8" rx="2" stroke="currentColor" strokeWidth="1.4"/><path d="M4.5 9.5 6.2 6.5 8 9.5M5.2 8.4h2.2M9.5 6.5h1.1c.9 0 1.5.6 1.5 1.5s-.6 1.5-1.5 1.5H9.5v-3z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
 }
+// 질문 추가 메뉴에서 전용 항목에 호버하면 보여줄 안내.
+// 이 네 가지는 응답의 form_data가 아니라 name·phone·email·referral_source 열에 따로 저장되고,
+// 전화번호·이메일은 이 항목으로 추가해야 형식 검사까지 된다. 단답형으로 만들면 둘 다 안 된다.
+const FTYPE_HINTS:Record<string,{title:string;body:string}> = {
+  name:{title:"응답자 이름으로 따로 저장돼요",body:"응답 목록·시트에서 이름 칸으로 바로 쓰여요. 단답형으로 만들면 이름으로 인식되지 않아요."},
+  phone:{title:"이 항목으로 추가해야 번호 형식을 검사해요",body:"010-1234-5678 형식이 아니면 제출이 막혀요. 단답형으로 만들면 잘못 적은 번호도 그대로 제출돼요."},
+  email:{title:"이 항목으로 추가해야 이메일 형식을 검사해요",body:"@와 도메인이 빠진 주소는 제출이 막혀요. 단답형으로 만들면 잘못 적은 주소도 그대로 제출돼요."},
+  referral:{title:"유입경로 칸으로 따로 저장돼요",body:"자주 쓰는 선택지가 미리 들어 있고, 응답 목록에서 유입경로 열로 모아 볼 수 있어요."},
+}
+// 단답형·장문형 질문 제목만 보고 전용 항목으로 바꾸길 권한다. 오탐을 줄이려고 회사·담당자 이름 같은 표현은 뺀다.
+const DEDICATED_FIELD_RULES:{type:"phone"|"email"|"name"|"referral";label:string;test:(label:string)=>boolean}[] = [
+  {type:"phone",label:"전화번호",test:l=>/(전화\s*번호|휴대\s*폰|핸드폰|휴대\s*전화|연락처|phone)/i.test(l)},
+  {type:"email",label:"이메일",test:l=>/(이메일|e-?mail|메일\s*주소)/i.test(l)},
+  {type:"name",label:"이름",test:l=>/(^|\s)(이름|성함|성명)(을|이|은|\s|$|\(|:)/.test(l)&&!/(회사|기업|업체|학교|기관|담당자|팀|프로그램|과정|상호|제품|서비스)/.test(l)},
+  {type:"referral",label:"유입경로",test:l=>/(알게\s*되|유입\s*경로|어디(에)?서\s*(보|알|듣))/.test(l)},
+]
 const FTYPES_DATA:{type:string;label:string;divider?:boolean}[] = [
   {type:"text",label:"단답형"},
   {type:"textarea",label:"장문형"},
@@ -2657,6 +2673,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   const addFieldBtnRef=React.useRef<HTMLButtonElement|null>(null)
   const [addFieldMenuTop,setAddFieldMenuTop]=React.useState(118)
+  // 메뉴는 스크롤 영역이라 안에 말풍선을 두면 잘린다. 화면 기준 위치를 기억해 메뉴 왼쪽 바깥에 띄운다.
+  const [addFieldHint,setAddFieldHint]=React.useState<{type:string;top:number}|null>(null)
   // 메뉴를 '+ 질문 추가' 버튼 높이에 맞춰 띄우되, 화면 밖으로 넘치지 않게 위아래로 보정한다.
   function openAddFieldMenu(){
     const rect=addFieldBtnRef.current?.getBoundingClientRect()
@@ -7245,6 +7263,44 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   </div>}
                   {!isDisplayOnlyFieldType((field as any).type)&&<div style={{padding:"0 12px 14px"}}><PanelCheckRow label="필수 입력" on={!!(field as any).required} toggle={()=>patchActiveField(idx,{required:!(field as any).required})} A={A}/></div>}
                   {!isDisplayOnlyFieldType((field as any).type)&&<div style={{padding:"10px 12px"}}><F label="질문 텍스트" A={A}><TArea value={(field as any).label||""} onChange={v=>patchActiveField(idx,{label:v})} minH={36} A={A}/></F></div>}
+                  {/* 단답형·장문형으로 전화번호·이메일 같은 걸 받으면 형식 검사도, 전용 열 저장도 안 된다. 제목으로 알아채고 바꾸기를 권한다. */}
+                  {!isKdt&&((field as any).type==="text"||(field as any).type==="textarea")&&(()=>{
+                    const rule=DEDICATED_FIELD_RULES.find(r=>r.test(String((field as any).label||"")))
+                    if(!rule)return null
+                    // 전용 항목은 id로 열을 찾기 때문에 같은 id가 이미 있으면 바꿀 수 없다.
+                    const taken=cfg.form.fields.some((f:any)=>f!==field&&f.id===rule.type)
+                    const reason=rule.type==="phone"?"단답형은 번호 형식을 검사하지 않아요. 잘못 적은 번호도 그대로 제출돼요."
+                      :rule.type==="email"?"단답형은 이메일 형식을 검사하지 않아요. 잘못 적은 주소도 그대로 제출돼요."
+                      :rule.type==="name"?"단답형으로 받으면 응답자 이름 칸에 저장되지 않아요."
+                      :"단답형으로 받으면 유입경로 칸에 모이지 않아요."
+                    const convert=()=>{
+                      const patch:any={type:rule.type,id:rule.type}
+                      if(rule.type==="phone"&&!(field as any).placeholder)patch.placeholder="예) 010-1234-5678"
+                      if(rule.type==="email"&&!(field as any).placeholder)patch.placeholder="예) example@email.com"
+                      if(rule.type==="referral"){patch.opts=DEFOPTS;patch.etcPh="기타 경로를 입력해주세요."}
+                      patchActiveField(idx,patch)
+                      showToast(`${rule.label} 항목으로 바꿨어요.`,true)
+                    }
+                    return <div style={{margin:"0 12px 4px",padding:"10px 12px",borderRadius:10,
+                      background:adminDark?"rgba(245,158,11,0.12)":"#FFF7E8",boxShadow:`inset 0 0 0 1px ${adminDark?"rgba(245,158,11,0.28)":"#F6E3BE"}`}}>
+                      <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+                        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1,color:adminDark?"#FBBF5B":"#D97706"}}>
+                          <path d="M8 1.8 15 14H1L8 1.8z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/><path d="M8 6.2v3.6M8 11.6v.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                        </svg>
+                        <div style={{minWidth:0,flex:1}}>
+                          <div style={{fontSize:12.5,fontWeight:700,color:A.t1,lineHeight:1.45}}>{rule.label} 질문인가요?</div>
+                          <div style={{fontSize:11.5,color:A.t2,lineHeight:1.55,marginTop:2}}>
+                            {reason} {taken?`이 폼에는 이미 ${rule.label} 항목이 있어요.`:`${rule.label} 항목으로 바꾸면 막을 수 있어요.`}
+                          </div>
+                          {!taken&&<button onClick={convert}
+                            style={{marginTop:8,height:28,padding:"0 11px",borderRadius:7,border:`1px solid ${A.border}`,background:A.card,color:A.t1,
+                              fontFamily:FONT,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                            {rule.label} 항목으로 바꾸기
+                          </button>}
+                        </div>
+                      </div>
+                    </div>
+                  })()}
                   {/* 안내 문구 (helper) — info 제외 */}
                   {!isDisplayOnlyFieldType((field as any).type)&&(()=>{
                     const rawHelpers:any[]=((field as any).helpers)||((field as any).helper?[{text:(field as any).helper,callout:false}]:[])
@@ -7531,14 +7587,28 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   },0)
                 }
                 setShowAddField(false)
+                setAddFieldHint(null)
               }}
                 style={{height:40,display:"flex",alignItems:"center",gap:9,padding:"0 10px",borderRadius:9,border:"none",background:"transparent",cursor:"pointer",color:A.t1,fontFamily:FONT,fontSize:13,fontWeight:600,textAlign:"left" as const,transition:"background .1s"}}
-                onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=A.card2}}
-                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
+                onMouseEnter={e=>{
+                  const el=e.currentTarget as HTMLElement
+                  el.style.background=A.card2
+                  setAddFieldHint(FTYPE_HINTS[ft.type]?{type:ft.type,top:el.getBoundingClientRect().top}:null)
+                }}
+                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";setAddFieldHint(null)}}>
                 <span style={{color:A.t3,display:"flex",alignItems:"center"}}>{FTYPE_ICONS[ft.type]}</span>
                 <span style={{whiteSpace:"nowrap" as const}}>{ft.label}</span>
               </button>)}
             </div>
+            {addFieldHint&&FTYPE_HINTS[addFieldHint.type]&&<div role="tooltip"
+              style={{position:"fixed" as const,top:Math.max(12,addFieldHint.top-4),right:rightPanelW+24+320+10,zIndex:81,width:240,
+                padding:"10px 12px",borderRadius:10,background:adminDark?"#2A2F3A":"#15181D",color:"#fff",pointerEvents:"none" as const,
+                boxShadow:"0 8px 20px -8px rgba(16,24,40,.45)",animation:"coachIn .14s cubic-bezier(.4,0,.2,1)"}}>
+              {/* 꼬리는 오른쪽의 메뉴 항목을 가리킨다. */}
+              <span aria-hidden="true" style={{position:"absolute" as const,top:20,right:-4,width:9,height:9,background:adminDark?"#2A2F3A":"#15181D",transform:"rotate(45deg)",borderRadius:2}}/>
+              <div style={{fontSize:12.5,fontWeight:700,lineHeight:1.45}}>{FTYPE_HINTS[addFieldHint.type].title}</div>
+              <div style={{fontSize:11.5,lineHeight:1.55,color:"rgba(255,255,255,.72)",marginTop:3}}>{FTYPE_HINTS[addFieldHint.type].body}</div>
+            </div>}
             </>}
           </div>
           {!isKdt&&<FG title="오류 메시지" A={A} last>
