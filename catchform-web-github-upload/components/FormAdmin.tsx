@@ -498,6 +498,17 @@ function dashboardWithOperationPeriods(dashboard:DashboardMeta|undefined,periods
 const LOW_CONVERSION_MIN_SESSIONS = 30
 const LOW_CONVERSION_RATE = 15
 const LOW_CONVERSION_WINDOW_DAYS = 30
+// 전환 점검 집계 캐시. 탭을 새로 열어도 첫 화면부터 바로 보이도록 localStorage에 둔다.
+const CONVERSION_CACHE_KEY = "catchform_conversion_v2"
+const CONVERSION_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
+const readConversionCache = (): Record<string,{sessions:number;completed:number}> => {
+  try{
+    if(typeof localStorage==="undefined")return {}
+    const parsed=JSON.parse(localStorage.getItem(CONVERSION_CACHE_KEY)||"null")
+    if(parsed?.data&&Date.now()-Number(parsed.at||0)<CONVERSION_CACHE_MAX_AGE_MS)return parsed.data
+  }catch{}
+  return {}
+}
 const CLOSING_SOON_DAYS = 7
 function daysUntilOperationEnd(dashboard?:DashboardMeta|null,fallback?:{start?:string;end?:string}):number|null{
   if(dashboard?.alwaysOpen)return null
@@ -2446,7 +2457,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [pvTab,setPvTab]=React.useState<"form"|"link">("form")
   const [saved,setSaved]=React.useState<any[]>([])
   // 최근 구간 기준 폼별 참여/전환. 대시보드 콜아웃에서만 쓴다.
-  const [conversionByForm,setConversionByForm]=React.useState<Record<string,{sessions:number;completed:number}>>({})
+  const [conversionByForm,setConversionByForm]=React.useState<Record<string,{sessions:number;completed:number}>>(readConversionCache)
   React.useEffect(()=>{
     syncCourseTabsArrows()
     const el=courseTabsRef.current
@@ -4260,31 +4271,29 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(!supa||conversionLoadedRef.current)return
     conversionLoadedRef.current=true
     let cancelled=false
+    // 직전 결과는 state 초기값(readConversionCache)으로 이미 첫 화면에 들어가 있다.
+    // 여기서는 새 값을 뒤에서 받아 덮어쓰기만 한다. effect에서 캐시를 읽으면 첫 페인트보다 한 박자 늦는다.
     ;(async()=>{
       const since=new Date()
       since.setDate(since.getDate()-LOW_CONVERSION_WINDOW_DAYS)
-      const fetchPage=async(page:number)=>{
-        const from=page*1000
-        const {data,error}=await supa.from("form_response_events")
-          .select("form_id,session_id,event_type")
-          .in("event_type",["started","completed"])
-          .gte("created_at",since.toISOString())
-          .range(from,from+999)
-        if(error)throw error
-        return data||[]
+      const sinceIso=since.toISOString()
+      const base=()=>supa.from("form_response_events").select("form_id,session_id,event_type")
+        .in("event_type",["started","completed"]).gte("created_at",sinceIso)
+      // 정확한 전체 건수(count:"exact")를 먼저 세는 요청이 6초 가까이 걸려 알림이 늦게 떴다.
+      // 건수를 세지 않고 10페이지씩 한꺼번에 요청한다. 데이터보다 뒤 페이지는 빈 배열로 바로 돌아온다.
+      const fetchPage=(page:number)=>Promise.resolve(base().range(page*1000,page*1000+999))
+        .then((res:any)=>res?.data||[]).catch(()=>[])
+      const WAVE=10
+      const batches:any[][]=[]
+      for(let start=0;start<40;start+=WAVE){
+        const wave=await Promise.all(Array.from({length:WAVE},(_,i)=>fetchPage(start+i)))
+        if(cancelled)return
+        batches.push(...wave)
+        if(wave[WAVE-1].length<1000)break
       }
-      const rows:any[]=[]
-      const first=await fetchPage(0)
-      rows.push(...first)
-      if(first.length===1000){
-        // 남은 페이지는 순서대로 기다리지 않고 동시에 받는다.
-        const rest=await Promise.all([1,2,3,4,5,6,7,8,9].map(page=>fetchPage(page).catch(()=>[])))
-        rest.forEach(batch=>rows.push(...batch))
-      }
-      if(cancelled)return
       const started:Record<string,Set<string>>={}
       const done:Record<string,Set<string>>={}
-      rows.forEach((row:any)=>{
+      batches.flat().forEach((row:any)=>{
         const formId=String(row.form_id||"")
         if(!formId)return
         const sid=String(row.session_id||row.id||"")
@@ -4296,6 +4305,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         next[formId]={sessions:started[formId].size,completed:(done[formId]||new Set()).size}
       })
       setConversionByForm(next)
+      try{
+        if(typeof localStorage!=="undefined")localStorage.setItem(CONVERSION_CACHE_KEY,JSON.stringify({at:Date.now(),data:next}))
+      }catch{}
     })().catch(()=>{conversionLoadedRef.current=false})
     return ()=>{cancelled=true}
   },[supa])
@@ -5811,12 +5823,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   .filter((item:any)=>!isFormTrashed(item))
                   .map((item:any)=>{
                     if(item.config?.dashboard?.conversionCheckOff)return null
+                    // 이미 끝난 폼은 지금 고쳐도 달라질 게 없다. 진행 중인 폼만 남긴다.
+                    const operation=operationStatusOfDashboard(item.config?.dashboard,recruitmentPeriodOf(programOf(item),recruitmentPeriodModeOf(item.config)))
+                    if(operation.status!=="active")return null
                     const stat=conversionByForm[String(item.id||"")]
                     if(!stat||stat.sessions<LOW_CONVERSION_MIN_SESSIONS)return null
                     const rate=Math.round((stat.completed/stat.sessions)*1000)/10
                     if(rate>=LOW_CONVERSION_RATE)return null
-                    const days=daysUntilOperationEnd(item.config?.dashboard,recruitmentPeriodOf(programOf(item),recruitmentPeriodModeOf(item.config)))
-                    if(days!==null&&days<0)return null
                     return {item,rate,sessions:stat.sessions,completed:stat.completed}
                   })
                   .filter(Boolean)
