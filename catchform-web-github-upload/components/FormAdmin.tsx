@@ -1596,6 +1596,8 @@ type AnalyticsRowsProps={
   selectedRowIds:string[]
   expandedGroups:string[]
   cols:string
+  showSource:boolean
+  sourceOf:(row:any)=>string
   A:AT
   rowKeyOf:(row:any)=>string
   fmtDate:(value:any)=>string[]
@@ -1604,7 +1606,7 @@ type AnalyticsRowsProps={
   onToggleGroup:(key:string)=>void
 }
 const AnalyticsResponseRows=React.memo(function AnalyticsResponseRows(p:AnalyticsRowsProps){
-  const {groups,columnMeta,cellTexts,expandedGroups,cols,A,rowKeyOf,fmtDate,onOpenRow,onToggleRow,onToggleGroup}=p
+  const {groups,columnMeta,cellTexts,expandedGroups,cols,A,rowKeyOf,fmtDate,onOpenRow,onToggleRow,onToggleGroup,showSource,sourceOf}=p
   const selected=React.useMemo(()=>new Set(p.selectedRowIds),[p.selectedRowIds])
   const box=(on:boolean):React.CSSProperties=>({width:16,height:16,borderRadius:5,flexShrink:0,cursor:"pointer",
     display:"flex",alignItems:"center",justifyContent:"center",
@@ -1636,6 +1638,16 @@ const AnalyticsResponseRows=React.memo(function AnalyticsResponseRows(p:Analytic
             +{duplicateCount}
           </button>}
         </span>
+        {showSource&&(()=>{
+          const source=sourceOf(row)
+          return <span style={{minWidth:0,display:"flex",alignItems:"center"}}>
+            {source
+              ? <span title={source} style={{maxWidth:"100%",height:20,padding:"0 8px",borderRadius:6,display:"inline-flex",alignItems:"center",
+                  background:A===ALT?"#F1F3F6":A.card2,color:A.t2,fontSize:11,fontWeight:600,
+                  overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{source}</span>
+              : <span style={{fontSize:12,color:A.t4}}>—</span>}
+          </span>
+        })()}
         {columnMeta.map(({field:f}:any,ci:number)=>{
           const text=texts?texts[ci]:""
           return <span key={f.id} title={text||undefined}
@@ -1654,7 +1666,7 @@ const AnalyticsResponseRows=React.memo(function AnalyticsResponseRows(p:Analytic
   // 콜백은 동작이 동일하므로 비교에서 제외하고, 표에 보이는 값만 확인한다.
   prev.groups===next.groups&&prev.columnMeta===next.columnMeta&&prev.cellTexts===next.cellTexts&&
   prev.selectedRowIds===next.selectedRowIds&&prev.expandedGroups===next.expandedGroups&&
-  prev.cols===next.cols&&prev.A===next.A)
+  prev.cols===next.cols&&prev.A===next.A&&prev.showSource===next.showSource)
 
 function PanelCheckRow({label,on,toggle,A}:{label:string;on:boolean;toggle:()=>void;A:AT}){
   return <label onClick={toggle} style={{display:"inline-flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:12.5,fontWeight:600,color:A.t1,fontFamily:FONT,userSelect:"none" as const}}>
@@ -4584,6 +4596,29 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       notes.push(`참여 ${insight.sessions}명 중 ${untouched}명이 질문을 하나도 건드리지 않고 나갔어요. 특정 질문보다 첫 화면(헤더·안내 문구)이나 광고가 닿는 대상을 먼저 살펴보세요.`)
     }
     return notes
+  }
+  // 응답 한 건이 어디서 들어왔는지 짧은 이름으로 정리한다.
+  // 표에서 한 칸만 쓰므로 도메인이 아니라 서비스 이름으로 보여준다.
+  const RESPONSE_SOURCE_LABELS:Record<string,string>={
+    meta:"Meta", facebook:"Meta", fb:"Meta", instagram:"Instagram", ig:"Instagram", threads:"Threads",
+    google:"Google", googleads:"Google", adwords:"Google", youtube:"YouTube", naver:"네이버", 네이버:"네이버",
+    daum:"다음", kakao:"카카오톡", kakaotalk:"카카오톡", 카카오:"카카오톡", band:"밴드", tiktok:"TikTok",
+    twitter:"X", x:"X", linkedin:"LinkedIn", bing:"Bing", qr:"QR", qrcode:"QR", email:"이메일", sms:"문자",
+  }
+  function analyticsResponseSource(row:any){
+    const hostOf=(value:any)=>{
+      const raw=String(value||"").trim()
+      if(!raw)return ""
+      try{return new URL(raw.startsWith("http")?raw:`https://${raw}`).hostname.replace(/^(www|m|l|lm)\./,"")}catch{return ""}
+    }
+    // 폼의 `유입경로` 질문 답변(referral_source)은 쓰지 않는다.
+    // 그건 응답자가 고른 값이라 실제로 어떤 링크를 타고 왔는지와는 다른 이야기다.
+    const utm=String(analyticsAttributionValue(row,"utm_source")||"").trim()
+    const host=hostOf(analyticsAttributionValue(row,"referrer"))
+    const raw=utm||host
+    if(!raw)return ""
+    const key=raw.toLowerCase().replace(/\.(com|co\.kr|net|kr|us|me)$/,"").split(".")[0]
+    return RESPONSE_SOURCE_LABELS[key]||raw
   }
   // 이름·전화·이메일이 모두 같으면 같은 사람으로 본다. 중복 묶기와 지표가 같은 기준을 쓰도록 한 곳에 둔다.
   function analyticsIdentityKey(row:any){
@@ -8848,23 +8883,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	      sourceBySession[first.session_id||"unknown"]=source
 	      return{session:first.session_id||"unknown",source,country,region,city,location,completed,startedAt:first.created_at,
 	        os:qrOsName(meta),
-	        utm_source:String(meta.utm_source||"").trim(),utm_medium:String(meta.utm_medium||"").trim(),utm_campaign:String(meta.utm_campaign||"").trim()}
+	        utm_source:String(meta.utm_source||"").trim(),utm_medium:String(meta.utm_medium||"").trim(),utm_campaign:String(meta.utm_campaign||"").trim(),
+	        utm_content:String(meta.utm_content||"").trim(),utm_term:String(meta.utm_term||"").trim(),
+	        landing_page:String(meta.landing_page||meta.landing_path||"").trim(),referrer:String(meta.referrer||"").trim(),
+	        fbclid:String(meta.fbclid||"").trim(),gclid:String(meta.gclid||"").trim()}
 	    })
-    if(periodStatsOn)rows.forEach((row:any)=>{
-      if(!sessionSummaries.length){
-        const src=normalizeSourceLabel(row.referral_source)
-        sourceBySession[row.id]=src
-      }
-    })
     const sourceMap:any={}
     sessionSummaries.forEach(s=>{
       if(!sourceMap[s.source])sourceMap[s.source]={label:s.source,participation:0,complete:0,share:0,link:0}
       sourceMap[s.source].participation+=1
       if(s.completed)sourceMap[s.source].complete+=1
     })
-    if(periodStatsOn&&!sessionSummaries.length){
-      rows.forEach((row:any)=>{const src=normalizeSourceLabel(row.referral_source);sourceMap[src]=sourceMap[src]||{label:src,participation:0,complete:0,share:0,link:0};sourceMap[src].participation+=1;sourceMap[src].complete+=1})
-    }
+    // 접속 기록이 없을 때 폼의 `유입경로` 질문 답변으로 채우던 대비책은 없앴다.
+    // 응답자가 고른 값이라 실제 접속 경로와 다르고, 같은 목록에 섞이면 어느 쪽인지 알 수 없다.
     ;periodEvents.forEach((e:any)=>{
       const m=eventMeta(e)
       const sid=e.session_id||"unknown"
@@ -8915,12 +8946,21 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const periodTrendMax=Math.max(1,...periodTrend.map((d:any)=>Number(d.participation)||0))
     // 가장 높은 봉우리가 상단 기준선에 딱 붙으면 잘린 것처럼 보인다. 축을 조금 키워 여유를 둔다.
     const periodTrendAxisMax=periodTrendMax*1.12
+    // 광고 플랫폼이 한글 캠페인명을 `%5B2%ED%8C%80%5D+AI...`처럼 인코딩된 채로 한 번 더 넘기는 경우가 있다.
+    // 그대로 두면 같은 캠페인이 두 줄로 갈라지므로, 사람이 읽는 값으로 풀어서 묶는다.
+    const utmLabel=(value:any)=>{
+      let v=String(value||"").trim()
+      for(let i=0;i<2&&/%[0-9A-Fa-f]{2}/.test(v);i++){
+        try{v=decodeURIComponent(v.replace(/\+/g," "))}catch{break}
+      }
+      return v.trim()
+    }
     const utmBucketEntries=(axis:"source"|"medium"|"campaign")=>{
       const key=`utm_${axis}`
       const enter:any={}
-      sessionSummaries.forEach((item:any)=>{const v=String(item[key]||"").trim()||"없음";enter[v]=(enter[v]||0)+1})
+      sessionSummaries.forEach((item:any)=>{const v=utmLabel(item[key])||"없음";enter[v]=(enter[v]||0)+1})
       const done:any={}
-      rows.forEach((row:any)=>{const v=String(analyticsAttributionValue(row,key)||"").trim()||"없음";done[v]=(done[v]||0)+1})
+      rows.forEach((row:any)=>{const v=utmLabel(analyticsAttributionValue(row,key))||"없음";done[v]=(done[v]||0)+1})
       return Object.keys(enter).map(k=>({label:k,participation:enter[k],complete:done[k]||0}))
         .sort((a:any,b:any)=>b.participation-a.participation)
     }
@@ -8945,13 +8985,28 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     }
     const GLOBE_ICON="data:image/svg+xml;utf8,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.2" stroke="#A8AEB9" stroke-width="1.3"/><path d="M1.8 8h12.4M8 1.8c1.7 1.8 2.6 3.9 2.6 6.2S9.7 12.4 8 14.2C6.3 12.4 5.4 10.3 5.4 8S6.3 3.6 8 1.8z" stroke="#A8AEB9" stroke-width="1.3"/></svg>')
     const faviconUrl=(domain:string)=>`https://icons.duckduckgo.com/ip3/${domain}.ico`
+    // 라벨이 도메인이면 그대로 쓰고, `facebook` 처럼 서비스 이름이면 도메인으로 바꿔 파비콘을 찾는다.
+    // utm_source 로 들어오는 값은 도메인이 아니라 이름이라, 이 표가 없으면 전부 지구본으로 떨어진다.
+    const SOURCE_DOMAIN_MAP:Record<string,string>={
+      facebook:"facebook.com", fb:"facebook.com", meta:"meta.com", instagram:"instagram.com", ig:"instagram.com",
+      threads:"threads.net", google:"google.com", googleads:"google.com", adwords:"google.com", youtube:"youtube.com",
+      naver:"naver.com", 네이버:"naver.com", daum:"daum.net", kakao:"kakao.com", kakaotalk:"kakao.com", 카카오:"kakao.com",
+      band:"band.us", 밴드:"band.us", tiktok:"tiktok.com", twitter:"x.com", x:"x.com", linkedin:"linkedin.com",
+      bing:"bing.com", yahoo:"yahoo.com", 카페:"cafe.naver.com", blog:"blog.naver.com", 블로그:"blog.naver.com",
+      email:"", mail:"", sms:"", qr:"",
+    }
     const sourceIconUrl=(name:string)=>{
-      if(periodSourceAxis!=="domain")return GLOBE_ICON
-      let dom=/\./.test(name)?name:""
-      if(name==="QR")dom=""
-      if(name.toLowerCase()==="meta")dom="meta.com"
-      if(dom.startsWith("m."))dom=dom.slice(2)
-      return dom?faviconUrl(dom):GLOBE_ICON
+      const raw=String(name||"").trim()
+      if(!raw||raw===UNKNOWN_SOURCE_LABEL)return GLOBE_ICON
+      const key=raw.toLowerCase()
+      if(key in SOURCE_DOMAIN_MAP){
+        const mapped=SOURCE_DOMAIN_MAP[key]
+        return mapped?faviconUrl(mapped):GLOBE_ICON
+      }
+      // `l.facebook.com`, `m.naver.com` 처럼 앞에 붙는 조각은 떼야 파비콘이 잡힌다.
+      let dom=/\./.test(raw)?raw.replace(/^(www|m|l|lm|ko|kr)\./,""):""
+      if(!dom)return GLOBE_ICON
+      return faviconUrl(dom)
     }
     const placeIconUrl=(name:string)=>name.startsWith("대한민국")?"https://flagcdn.com/w40/kr.png":name.startsWith("미국")?"https://flagcdn.com/w40/us.png":GLOBE_ICON
     const shareIconUrl=(name:string)=>{
@@ -9006,16 +9061,26 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const periodSourceSessions=(label:string)=>sessionSummaries.filter((item:any)=>
       periodSourceAxis==="domain"
         ? item.source===label
-        : (String(item[`utm_${periodSourceAxis}`]||"").trim()||"없음")===label)
+        : (utmLabel(item[`utm_${periodSourceAxis}`])||"없음")===label)
     // 연령은 접속 정보가 아니라 제출한 답변에 있으므로, 채널이 붙은 응답을 따로 모은다.
+    // 전체 축의 라벨은 utm_source 또는 referrer 호스트라서, 응답에 저장된 같은 값들과 비교해 매칭한다.
+    const hostOf=(value:any)=>{
+      const raw=String(value||"").trim()
+      if(!raw)return ""
+      try{return new URL(raw.startsWith("http")?raw:`https://${raw}`).hostname.replace(/^www\./,"")}catch{return ""}
+    }
     const periodSourceRows=(label:string)=>rows.filter((row:any)=>{
       if(!inPeriodRange(row.created_at))return false
       if(periodSourceAxis==="domain"){
-        const utm=normalizeSourceLabel(analyticsAttributionValue(row,"utm_source"))
-        const referral=normalizeSourceLabel(row.referral_source)
-        return utm===label||referral===label
+        // 여기서도 `유입경로` 질문 답변은 쓰지 않는다. 실제 접속 경로만 본다.
+        const candidates=[
+          normalizeSourceLabel(analyticsAttributionValue(row,"utm_source")),
+          normalizeSourceLabel(hostOf(analyticsAttributionValue(row,"referrer"))),
+          normalizeSourceLabel(hostOf(analyticsAttributionValue(row,"landing_page"))),
+        ]
+        return candidates.includes(label)
       }
-      return (String(analyticsAttributionValue(row,`utm_${periodSourceAxis}`)||"").trim()||"없음")===label
+      return (utmLabel(analyticsAttributionValue(row,`utm_${periodSourceAxis}`))||"없음")===label
     })
     const periodBreakdown=(list:any[],pick:(item:any)=>string,limit=6)=>{
       const map:any={}
@@ -9309,8 +9374,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {(()=>{
               // 시안 구조: 좌측 그리드 표 + 우측 400px 상세 패널.
               // 열 너비는 grid-template-columns로 고정하고, 긴 답변은 상세 패널에서 전문을 본다.
-              const cols=`36px 128px ${analyticsColumnMeta.map(()=>"minmax(150px,1fr)").join(" ")}`
-              const minW=Math.max(900,164+analyticsColumnMeta.length*170)
+              // 작성 중 응답에는 유입 정보가 없어서 열을 만들어봐야 전부 빈칸이 된다.
+              const showSourceColumn=analyticsResponseScope==="submitted"
+              const cols=`36px 128px ${showSourceColumn?"92px ":""}${analyticsColumnMeta.map(()=>"minmax(150px,1fr)").join(" ")}`
+              const minW=Math.max(900,(showSourceColumn?256:164)+analyticsColumnMeta.length*170)
               const allOn=allResponseRowsSelected
               const box=(on:boolean):React.CSSProperties=>({width:16,height:16,borderRadius:5,flexShrink:0,cursor:"pointer",
                 display:"flex",alignItems:"center",justifyContent:"center",
@@ -9333,6 +9400,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                             padding:"0 28px 9px",paddingTop:2,background:A.card,fontSize:11.5,fontWeight:600,color:A.t3,boxShadow:`inset 0 -1px 0 ${A===ALT?"#EFF1F4":A.border}`}}>
                             <span onClick={()=>toggleAllResponseRows()} style={box(allOn)}>{allOn&&check}</span>
                             <span>제출 시각</span>
+                            {showSourceColumn&&<span>유입</span>}
                             {analyticsColumnMeta.map(({field:f,fileCount}:any)=>(
                               <span key={f.id} style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
                                 <span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{f.label}</span>
@@ -9350,6 +9418,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                             selectedRowIds={selectedAnalyticsRowIds}
                             expandedGroups={expandedDuplicateResponseGroups}
                             cols={cols}
+                            showSource={showSourceColumn}
+                            sourceOf={analyticsResponseSource}
                             A={A}
                             rowKeyOf={analyticsRowKey}
                             fmtDate={fmtAnalyticsDate}
@@ -9742,7 +9812,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   <span style={{fontSize:15,fontWeight:700,color:A.t1,flexShrink:0}}>유입경로</span>
                   <div style={{flex:1}}/>
                   <div style={{display:"flex",alignItems:"center",gap:2,padding:3,borderRadius:9,background:A===ALT?"#F1F3F6":A.card2,flexShrink:0}}>
-                    {([{id:"domain",label:"도메인"},{id:"source",label:"source"},{id:"medium",label:"medium"},{id:"campaign",label:"campaign"}] as const).map(axis=>{
+                    {([{id:"domain",label:"전체"},{id:"source",label:"source"},{id:"medium",label:"medium"},{id:"campaign",label:"campaign"}] as const).map(axis=>{
                       const on=periodSourceAxis===axis.id
                       return <button key={axis.id} onClick={()=>setPeriodSourceAxis(axis.id)}
                         style={{height:26,padding:"0 10px",flexShrink:0,whiteSpace:"nowrap" as const,border:"none",borderRadius:7,fontSize:12,fontFamily:FONT,cursor:"pointer",
@@ -9793,11 +9863,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                         </div>
                         {detailSessions.length===0
                           ? <div style={{fontSize:12,color:A.t3}}>이 채널의 접속 기록이 아직 없습니다.</div>
-                          : groups.filter(group=>group.rows.length||group.title.startsWith("연령대")).map(group=>(
-                            <div key={group.title} style={{display:"flex",flexDirection:"column" as const,gap:6}}>
+                          : (()=>{
+                            const shown=groups.filter(group=>group.rows.length||group.title.startsWith("연령대"))
+                            const age=shown.filter(g=>g.title.startsWith("연령대"))
+                            // 위치·기기는 항목 이름이 짧아 한 줄을 다 쓰면 막대가 멀찍이 떨어져 읽기 나쁘다. 좌우로 나눈다.
+                            const pair=shown.filter(g=>g.title==="위치"||g.title==="기기")
+                            const renderGroup=(group:any)=>(
+                            <div key={group.title} style={{display:"flex",flexDirection:"column" as const,gap:6,minWidth:0}}>
                               <div style={{fontSize:11.5,fontWeight:600,color:A.t3}}>{group.title}</div>
-                              {group.rows.map(row=>(
-                                <div key={row.label} style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) 46px 32px",gap:8,alignItems:"center"}}>
+                              {group.rows.map((row:any)=>(
+                                <div key={row.label} style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) 40px 28px",gap:6,alignItems:"center"}}>
                                   <span title={row.label} style={{minWidth:0,fontSize:12.5,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{row.label}</span>
                                   <span style={{height:5,borderRadius:3,background:A===ALT?"#E7EAEF":A.bg,overflow:"hidden"}}>
                                     <span style={{display:"block",height:"100%",borderRadius:3,background:A.blue,width:`${Math.max(4,row.pct)}%`}}/>
@@ -9805,15 +9880,67 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                                   <span style={{fontSize:12,color:A.t3,textAlign:"right" as const,fontVariantNumeric:"tabular-nums" as const}}>{row.count}</span>
                                 </div>
                               ))}
-                            </div>
-                          ))}
-                        <div style={{fontSize:11,color:A.t4,lineHeight:1.55}}>연령대는 제출된 답변(연령대 · 생년월일)에서, 위치와 기기는 접속 정보에서 가져옵니다. 그래서 위치·기기에는 답을 남기지 않고 나간 사람도 포함됩니다.</div>
+                            </div>)
+                            return <>
+                              {age.map(renderGroup)}
+                              {pair.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:16}}>
+                                {pair.map(renderGroup)}
+                              </div>}
+                            </>
+                          })()}
+                        {/* 응답 하나하나의 유입 정보를 이 채널 단위로 모아서 보여준다.
+                            값이 하나도 없는 항목(예: gclid)은 굳이 줄을 차지하지 않게 숨긴다. */}
+                        {(()=>{
+                          // 지금 보고 있는 축은 빼둔다. `source` 탭에서 meta를 펼쳤는데
+                          // `utm_source: meta`가 또 나오는 건 방금 누른 값을 되풀이하는 것뿐이다.
+                          const selfKey=periodSourceAxis==="domain"?"":`utm_${periodSourceAxis}`
+                          const specs=[
+                            {key:"utm_source",label:"utm_source"},{key:"utm_medium",label:"utm_medium"},
+                            {key:"utm_campaign",label:"utm_campaign"},{key:"utm_content",label:"utm_content"},
+                            {key:"utm_term",label:"utm_term"},{key:"landing_page",label:"landing_page"},
+                            {key:"referrer",label:"referrer"},{key:"fbclid",label:"fbclid"},{key:"gclid",label:"gclid"},
+                          ].filter(spec=>spec.key!==selfKey)
+                          const blocks=specs.map(spec=>{
+                            const counts=new Map<string,number>()
+                            let filled=0
+                            detailSessions.forEach((item:any)=>{
+                              const value=spec.key.startsWith("utm_")?utmLabel(item[spec.key]):String(item[spec.key]||"").trim()
+                              if(!value)return
+                              filled+=1
+                              // 클릭 식별자는 사람마다 값이 달라 나열해봐야 의미가 없다. 몇 건이 붙어 있는지만 센다.
+                              const bucket=(spec.key==="fbclid"||spec.key==="gclid")?"값 있음":value
+                              counts.set(bucket,(counts.get(bucket)||0)+1)
+                            })
+                            return {...spec,filled,rows:Array.from(counts.entries()).sort((a,b)=>b[1]-a[1]).slice(0,5)}
+                          }).filter(block=>block.filled>0)
+                          if(!blocks.length)return null
+                          return <div style={{display:"flex",flexDirection:"column" as const,gap:8}}>
+                            <div style={{fontSize:11.5,fontWeight:600,color:A.t3}}>유입 정보</div>
+                            {blocks.map(block=>(
+                              <div key={block.key} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                                <span style={{flexShrink:0,width:96,fontSize:11,color:A.t3,fontFamily:"ui-monospace,SFMono-Regular,Menlo,monospace",lineHeight:1.7}}>{block.label}</span>
+                                <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column" as const,gap:2}}>
+                                  {block.rows.map(([value,count]:any)=>(
+                                    <div key={value} style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+                                      <span title={value} style={{flex:1,minWidth:0,fontSize:12,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{value}</span>
+                                      <span style={{flexShrink:0,fontSize:11.5,color:A.t3,fontVariantNumeric:"tabular-nums" as const}}>{count}</span>
+                                    </div>
+                                  ))}
+                                  {block.filled<detailSessions.length&&<div style={{fontSize:10.5,color:A.t4}}>나머지 {detailSessions.length-block.filled}건은 값 없음</div>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        })()}
+                        <div style={{fontSize:11,color:A.t4,lineHeight:1.55}}>연령대는 제출된 답변(연령대 · 생년월일)에서, 위치·기기·유입 정보는 접속 정보에서 가져옵니다. 그래서 답을 남기지 않고 나간 사람도 포함됩니다.</div>
                       </div>}
                     </React.Fragment>
                   })}
                 </div>}
                 <div style={{marginTop:16,padding:"12px 14px",borderRadius:10,background:A===ALT?"#F6F7F9":A.card2,fontSize:12,color:A.t3,lineHeight:1.6}}>
-                  출처 미확인은 URL 직접 입력, 카카오톡·문자·메일 앱, 즐겨찾기처럼 referrer가 전달되지 않는 방문입니다. 링크에 utm_source를 붙이면 채널별로 분리해서 볼 수 있어요.
+                  {periodSourceAxis==="domain"
+                    ? <><b style={{color:A.t2,fontWeight:600}}>전체</b>는 링크에 붙은 utm_source가 있으면 그 값을, 없으면 어느 사이트에서 왔는지를 보여줍니다. 광고와 그 밖의 유입을 한 화면에서 같이 볼 때 씁니다. 출처 미확인은 URL 직접 입력, 카카오톡·문자·메일 앱, 즐겨찾기처럼 어디서 왔는지 전달되지 않는 방문입니다.</>
+                    : <>이 탭은 링크에 붙인 <b style={{color:A.t2,fontWeight:600}}>utm_{periodSourceAxis}</b> 값만 모아서 보여줍니다. 값이 없는 유입은 `없음`으로 묶입니다. 링크마다 값을 다르게 붙여야 캠페인·소재별로 나눠 볼 수 있어요.</>}
                 </div>
               </div>
               <div style={{paddingLeft:28,minWidth:0,boxShadow:`inset 1px 0 0 ${A===ALT?"#EDEFF3":A.border}`}}>
