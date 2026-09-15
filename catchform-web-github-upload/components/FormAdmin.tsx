@@ -144,6 +144,7 @@ if(typeof document!=="undefined"&&!document.getElementById("catchform-keyframes"
     @keyframes actionSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
     @keyframes skeletonPulse{0%,100%{opacity:1}50%{opacity:0.4}}
     @keyframes updateDrop{from{opacity:0;transform:translate(-50%,-14px)}to{opacity:1;transform:translate(-50%,0)}}
+    @keyframes coachIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
   `;
   document.head.appendChild(s)
 }
@@ -2355,6 +2356,34 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [dashProgramGroupFilter,setDashProgramGroupFilter]=React.useState("")
   const [dashShowEmptyGroups,setDashShowEmptyGroups]=React.useState(false)
   const [showCustomAppType,setShowCustomAppType]=React.useState(false)
+  // `전환` 체크박스는 무엇을 뜻하는지 처음 보면 알기 어렵다. 한 번 닫거나 체크하면 다시 띄우지 않는다.
+  // localStorage는 서버 렌더링 때 없으므로 마운트 후에 읽는다.
+  const CONVERSION_COACH_KEY="catchform_coach_conversion_v1"
+  const [conversionCoachOpen,setConversionCoachOpen]=React.useState(false)
+  // 말풍선 꼬리를 체크박스 중심에 맞추기 위해 실제 위치를 잰다. 라벨 글자 폭은 폰트에 따라 달라서 고정값으로 두면 어긋난다.
+  const conversionCheckRef=React.useRef<HTMLSpanElement|null>(null)
+  const conversionCoachRef=React.useRef<HTMLDivElement|null>(null)
+  const [conversionCoachTail,setConversionCoachTail]=React.useState<number|null>(null)
+  React.useLayoutEffect(()=>{
+    if(!conversionCoachOpen)return
+    const measure=()=>{
+      const box=conversionCoachRef.current?.getBoundingClientRect()
+      // PanelCheckRow의 첫 자식이 16px 체크박스다.
+      const check=(conversionCheckRef.current?.querySelector("label > span") as HTMLElement|null)?.getBoundingClientRect()
+      if(!box||!check)return
+      setConversionCoachTail(Math.round(box.right-(check.left+check.width/2)))
+    }
+    measure()
+    window.addEventListener("resize",measure)
+    return ()=>window.removeEventListener("resize",measure)
+  })
+  React.useEffect(()=>{
+    try{if(localStorage.getItem(CONVERSION_COACH_KEY)!=="1")setConversionCoachOpen(true)}catch{}
+  },[])
+  const dismissConversionCoach=()=>{
+    setConversionCoachOpen(false)
+    try{localStorage.setItem(CONVERSION_COACH_KEY,"1")}catch{}
+  }
   const [openConsentIdx,setOpenConsentIdx]=React.useState<Record<number,boolean>>({})
   React.useEffect(()=>{
     const rgb=adminDark?"255,255,255":"141,149,163"
@@ -6710,15 +6739,40 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       onChange={v=>{setShowCustomAppType(false);setCfg(p=>({...p,header:{...p.header,applicationType:v,applicationTypeIsConversion:false}}))}}
                       options={[{value:"pre",label:"사전 알림"},{value:"formal",label:"정식 신청"}]}/>
                     {custom||showCustomAppType
-                      ? <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      ? <div style={{display:"flex",flexDirection:"column" as const,gap:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:10}}>
                           <div style={{flex:1,minWidth:0}}>
                             <TIn value={custom?cfg.header.applicationType||"":""} onChange={v=>uh("applicationType",v)} placeholder="직접 입력 (예: interview)" A={A}/>
                           </div>
-                          {/* 직접 입력한 유형도 전환(메타 픽셀 Lead)으로 볼지 폼 작성자가 직접 정한다. */}
-                          <span style={{flexShrink:0}} title="체크하면 이 폼의 제출을 광고 전환으로 집계합니다.">
+                          {/* 직접 입력한 유형도 전환(메타 픽셀 Lead · GA generate_lead)으로 볼지 폼 작성자가 직접 정한다. */}
+                          <span ref={conversionCheckRef} style={{flexShrink:0}} title="체크하면 이 폼의 제출을 광고 전환으로 집계합니다.">
                             <PanelCheckRow label="전환" on={!!cfg.header.applicationTypeIsConversion}
-                              toggle={()=>uh("applicationTypeIsConversion",!cfg.header.applicationTypeIsConversion)} A={A}/>
+                              toggle={()=>{
+                                const next=!cfg.header.applicationTypeIsConversion
+                                uh("applicationTypeIsConversion",next)
+                                if(next&&conversionCoachOpen)dismissConversionCoach()
+                              }} A={A}/>
                           </span>
+                        </div>
+                        {conversionCoachOpen&&!cfg.header.applicationTypeIsConversion&&<div ref={conversionCoachRef} role="note"
+                          style={{position:"relative" as const,marginTop:10,padding:"11px 34px 11px 12px",borderRadius:10,
+                            background:adminDark?"#2A2F3A":"#15181D",color:"#fff",boxShadow:"0 8px 20px -8px rgba(16,24,40,.45)",
+                            animation:"coachIn .2s cubic-bezier(.4,0,.2,1)"}}>
+                          {/* 꼬리는 오른쪽의 `전환` 체크박스를 가리킨다. */}
+                          <span aria-hidden="true" style={{position:"absolute" as const,top:-5,right:(conversionCoachTail??44)-5,width:10,height:10,
+                            background:adminDark?"#2A2F3A":"#15181D",transform:"rotate(45deg)",borderRadius:2}}/>
+                          <div style={{fontSize:12.5,fontWeight:700,lineHeight:1.45}}>실제 전환 데이터를 잡고 싶다면 체크하세요</div>
+                          <div style={{fontSize:11.5,lineHeight:1.55,color:"rgba(255,255,255,.72)",marginTop:3}}>
+                            체크하면 이 폼의 제출 완료가 메타 픽셀과 구글 애널리틱스에 광고 전환으로 집계돼요.
+                          </div>
+                          <button onClick={dismissConversionCoach} aria-label="안내 닫기"
+                            style={{position:"absolute" as const,top:7,right:7,width:22,height:22,borderRadius:6,border:"none",padding:0,
+                              background:"transparent",color:"rgba(255,255,255,.6)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
+                            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background="rgba(255,255,255,.12)";(e.currentTarget as HTMLElement).style.color="#fff"}}
+                            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color="rgba(255,255,255,.6)"}}>
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                          </button>
+                        </div>}
                         </div>
                       : <button onClick={()=>setShowCustomAppType(true)}
                           style={{alignSelf:"flex-start" as const,height:28,padding:"0 2px",border:"none",background:"transparent",color:A.t2,fontFamily:FONT,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
