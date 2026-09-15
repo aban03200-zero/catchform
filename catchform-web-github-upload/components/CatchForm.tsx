@@ -1535,7 +1535,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         const dateLimitError = dateBirthYearLimitError(field, val)
         if (dateLimitError) return dateLimitError
         if (field.type === "email" && val && !isValidEmail(val)) return "올바른 이메일 형식을 입력해주세요."
-        if (field.type === "text" && field.id.toLowerCase().includes("phone") && val && !isValidPhone(val)) return "올바른 휴대폰 번호를 입력해주세요."
+        // 전화번호 항목은 입력칸을 벗어날 때만 검사해서, 바로 제출하면 잘못된 번호가 통과했다. 제출 시에도 같은 규칙으로 막는다.
+        if (((field.type as any) === "phone" || (field.type === "text" && field.id.toLowerCase().includes("phone"))) && val && !isValidPhone(val)) return "올바른 휴대폰 번호를 입력해주세요."
         return ""
     }
 
