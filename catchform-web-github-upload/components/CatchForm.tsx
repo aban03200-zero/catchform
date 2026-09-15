@@ -7,6 +7,7 @@
 import * as React from "react"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 import { initMetaPixel, trackLead } from "@/lib/metaPixel"
+import { initGoogleTag, trackGoogleSubmit } from "@/lib/googleTag"
 
 const runtimeEnv = (key: string) => {
     try {
@@ -885,6 +886,10 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     React.useEffect(() => {
         initMetaPixel(cfg.brand, isFormalApplication)
     }, [cfg.brand, isFormalApplication])
+    React.useEffect(() => {
+        // 봇 방문은 캐치폼 분석과 똑같이 회사 GA에도 보내지 않는다.
+        if (!isBotClient()) initGoogleTag()
+    }, [])
 
     const setVal = (id: string, v: string) => setVals(p => ({ ...p, [id]: v }))
     const setErr = (id: string, msg: string) => setErrors(p => ({ ...p, [id]: msg }))
@@ -2026,6 +2031,13 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 form_id: formConfigId || formId || "",
                 form_slug: formSlug || "",
                 program_id: cfg.header?.programId || "",
+            })
+            trackGoogleSubmit(isFormalApplication, {
+                form_slug: formSlug || "",
+                form_title: cfg.header?.title || "",
+                form_type: cfg.formType || "",
+                application_type: cfg.header?.applicationType || "",
+                brand: cfg.brand || "",
             })
             clearDraft()
             setShareCopied(false)
