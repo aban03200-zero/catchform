@@ -5708,6 +5708,25 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             count:saved.filter((item:any)=>brandOf(item)===brand.id).length,
           }))
           const tableColumns="minmax(240px,1.8fr) 60px 84px 82px 78px 92px 158px"
+          // 로딩 스켈레톤은 실제 행과 같은 열·높이로 그린다. 둥근 회색 박스만 쌓아두면
+          // 데이터가 들어오는 순간 모양이 통째로 바뀌어 화면이 튀어 보인다.
+          const dashSkel=(w:number|string,h:number,delay:number,extra:React.CSSProperties={})=>
+            <span style={{display:"block",width:w,height:h,borderRadius:h>=20?6:4,background:adminDark?A.card2:"#EEF0F4",
+              animation:"skeletonPulse 1.4s ease-in-out infinite",animationDelay:`${delay}s`,...extra}}/>
+          const dashSkeletonRows=(count:number)=>Array.from({length:count},(_,i)=>{
+            const d=i*0.08
+            return <div key={i} style={{display:"grid",gridTemplateColumns:tableColumns,alignItems:"center",gap:12,minHeight:48,padding:"0 24px"}}>
+              <span style={{paddingRight:12}}>{dashSkel(`${[62,48,70,54,40,66,50,58][i%8]}%`,12,d)}</span>
+              {dashSkel(15,15,d,{borderRadius:4})}
+              {dashSkel(44,11,d)}
+              {dashSkel(46,20,d)}
+              <span style={{display:"flex",flexDirection:"column" as const,gap:6}}>{dashSkel(18,11,d)}{dashSkel(48,3,d,{borderRadius:2})}</span>
+              {dashSkel(64,11,d)}
+              <span style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8}}>
+                {dashSkel(16,16,d,{borderRadius:4})}{dashSkel(16,16,d,{borderRadius:4})}{dashSkel(16,16,d,{borderRadius:4})}{dashSkel(46,28,d,{borderRadius:7})}
+              </span>
+            </div>
+          })
           const sideButton=(active:boolean):React.CSSProperties=>({width:"100%",height:32,padding:"0 8px",borderRadius:A.r,border:"none",background:active?A.blue2:"transparent",color:active?A.blue:A.t2,fontFamily:FONT,fontSize:12.5,fontWeight:active?600:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left" as const})
           const sidebarToolButton=(color:string=A.t2):React.CSSProperties=>({width:"100%",height:32,padding:"0 8px",borderRadius:A.r,border:"none",background:"transparent",color,fontFamily:FONT,fontSize:12.5,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:8,textAlign:"left" as const})
           const openGuide=()=>{
@@ -5946,6 +5965,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   </div>
                 </div>
               })()
+                // 폼 목록을 처음 받는 동안에는 콜아웃 자리를 비워두지 않는다. 다 받은 뒤 알림이 위에서 끼어들며 목록이 밀려 내려가는 걸 막는다.
+                if(dashLoading&&!sidebarItems.length){
+                  const head=(delay:number)=><div style={{flex:1,minWidth:0,height:46,borderRadius:12,display:"flex",alignItems:"center",gap:10,padding:"0 14px 0 16px",
+                    boxShadow:`inset 0 0 0 1px ${adminDark?A.border:"#EEF0F4"}`}}>
+                    {dashSkel(16,16,delay,{borderRadius:"50%"})}{dashSkel(120,12,delay)}{dashSkel(26,20,delay,{borderRadius:999})}
+                    <span style={{flex:1}}/>{dashSkel(10,10,delay,{borderRadius:3})}
+                  </div>
+                  return <div style={{flexShrink:0,display:"flex",alignItems:"flex-start",gap:12,padding:"18px 24px 16px"}}>{head(0)}{head(0.1)}</div>
+                }
                 if(!closingCard&&!lowConversionCard)return null
                 return <div style={{flexShrink:0,display:"flex",alignItems:"flex-start",gap:12,padding:"18px 24px 16px"}}>
                   {closingCard}
@@ -6043,7 +6071,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     <span>폼 이름</span><span>교육과정</span><span>폼 유형</span><span>상태</span><span>응답 수</span><span>수정일</span><span style={{textAlign:"right"}}>액션</span>
                   </div>
                   <div style={{minWidth:940,padding:"0 0 10px"}}>
-                  {dashLoading?<div style={{padding:"8px 24px"}}>{[1,2,3,4,5].map(i=><div key={i} style={{height:48,borderRadius:A.r,background:A.card2,marginBottom:8,animation:"skeletonPulse 1.4s ease-in-out infinite"}}/>)}</div>
+                  {dashLoading?<div>{dashSkeletonRows(10)}</div>
                   :filtered.length===0?<div style={{padding:"72px 20px",textAlign:"center" as const}}>
                     <div style={{fontSize:13.5,fontWeight:600,color:A.t2}}>조건에 맞는 폼이 없어요.</div>
                     <div style={{fontSize:12.5,color:A.t3,marginTop:5}}>필터를 초기화하거나 검색어를 지워보세요.</div>
@@ -6110,9 +6138,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       </div>
                     </div>
                   })}
-                  {!dashLoading&&dashLoadingMore&&<div style={{padding:"8px 24px"}}>
-                    {[0,1,2].map(i=><div key={i} style={{height:48,borderRadius:A.r,background:A.card2,marginBottom:8,animation:"skeletonPulse 1.4s ease-in-out infinite",animationDelay:`${i*0.12}s`}}/>)}
-                  </div>}
+                  {!dashLoading&&dashLoadingMore&&<div>{dashSkeletonRows(3)}</div>}
                   {!dashLoading&&!dashLoadingMore&&!dashHasMore&&filtered.length>0&&<div style={{height:42,display:"flex",alignItems:"center",justifyContent:"center",color:A.t3,fontSize:12,borderTop:`1px solid ${A.border}`}}>모든 폼을 불러왔어요.</div>}
                   </div>
                 </div>
