@@ -143,6 +143,7 @@ if(typeof document!=="undefined"&&!document.getElementById("catchform-keyframes"
     @keyframes toastOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-10px)}}
     @keyframes actionSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
     @keyframes skeletonPulse{0%,100%{opacity:1}50%{opacity:0.4}}
+    @keyframes updateDrop{from{opacity:0;transform:translate(-50%,-14px)}to{opacity:1;transform:translate(-50%,0)}}
   `;
   document.head.appendChild(s)
 }
@@ -2789,15 +2790,25 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   function renderUpdateRefreshPrompt(){
     if(!appUpdateAvailable)return null
-    return <div style={{position:"absolute" as const,right:24,bottom:24,zIndex:110000,padding:"12px 14px",borderRadius:A.r2,background:A.card,border:`1px solid ${A.blue}44`,boxShadow:A.shadow,display:"flex",alignItems:"center",gap:12,maxWidth:360}}>
-      <div style={{width:32,height:32,borderRadius:A.r,background:A.blue2,color:A.blue,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-        <svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M8 2v4l2-2M8 6 6 4M3.5 9.5a4.5 4.5 0 0 0 8.2 2.6M12.5 6.5a4.5 4.5 0 0 0-8.2-2.6" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round"/></svg>
-      </div>
-      <div style={{minWidth:0,flex:1}}>
-        <div style={{fontSize:13,fontWeight:600,color:A.t1,marginBottom:3}}>새로운 기능이 업데이트되었어요.</div>
-        <div style={{fontSize:12,color:A.t3,lineHeight:1.45}}>새로고침하면 최신 화면으로 사용할 수 있어요.</div>
-      </div>
-      <button onClick={()=>window.location.reload()} style={{height:34,padding:"0 12px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:600,cursor:"pointer",flexShrink:0}}>새로고침</button>
+    // 이전에는 우측 하단에 흰 카드로 떠서 배경에 묻혀 잘 안 보였다.
+    // 상단 가운데는 어느 화면에서도 비어 있는 자리라, 작업을 가리지 않으면서 눈에 들어온다.
+    return <div style={{position:"absolute" as const,top:12,left:"50%",zIndex:110000,
+      display:"flex",alignItems:"center",gap:10,height:44,padding:"0 6px 0 14px",borderRadius:999,
+      background:A.blue,color:"#fff",boxShadow:"0 10px 28px -8px rgba(49,130,246,.55)",
+      animation:"updateDrop .26s cubic-bezier(.4,0,.2,1)",whiteSpace:"nowrap" as const}}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{flexShrink:0}}>
+        <path d="M20.5 12a8.5 8.5 0 1 1-2.49-6.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        <path d="M20.5 4v5h-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+      <span style={{fontSize:13,fontWeight:600}}>새 버전이 배포됐어요</span>
+      <span style={{fontSize:12.5,opacity:.85}}>새로고침하면 바로 쓸 수 있어요</span>
+      <button onClick={()=>window.location.reload()}
+        style={{flexShrink:0,height:32,padding:"0 14px",borderRadius:999,border:"none",background:"#fff",color:A.blue,
+          fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer"}}
+        onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background="#EAF2FE"}}
+        onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="#fff"}}>
+        새로고침
+      </button>
     </div>
   }
 
