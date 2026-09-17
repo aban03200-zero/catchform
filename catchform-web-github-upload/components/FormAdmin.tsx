@@ -2912,6 +2912,45 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     )
     return (full.data||[]).map(normalizeFormSummary)
   }
+  // 공개 폼 페이지는 Vercel에 저장본으로 두고 내보낸다. 설정을 바꾸면 그 주소의 저장본을 비워 다음 방문자부터 새 설정을 보게 한다.
+  // 실패해도 최대 1시간 안에는 자동으로 반영되므로 저장 흐름은 막지 않는다.
+  // 편집 중에는 자동 저장마다 요청이 생기는데, 동시에 여러 개가 나가면 서로 밀려 느려지고 실패했다.
+  // 그래서 한 번에 하나씩만 보내고, 보내는 동안 생긴 주소는 모아 두었다가 다음 요청에 한꺼번에 담는다.
+  const revalidatePending=React.useRef<Set<string>>(new Set())
+  const revalidateChain=React.useRef<Promise<void>>(Promise.resolve())
+  function revalidatePublicForms(...slugs:any[]):Promise<void>{
+    const targets=slugs.map(slug=>String(slug||"").trim()).filter(Boolean)
+    if(!supa||!targets.length)return Promise.resolve()
+    targets.forEach(slug=>revalidatePending.current.add(slug))
+    const send=async()=>{
+      const batch=Array.from(revalidatePending.current)
+      if(!batch.length)return
+      revalidatePending.current.clear()
+      try{
+        const {data}=await supa.auth.getSession()
+        const token=data?.session?.access_token||""
+        if(!token)return
+        await fetch("/api/admin/revalidate-form",{method:"POST",keepalive:true,headers:{"content-type":"application/json",authorization:`Bearer ${token}`},body:JSON.stringify({slugs:batch})})
+      }catch{}
+    }
+    revalidateChain.current=revalidateChain.current.then(send)
+    return revalidateChain.current
+  }
+  // 자동 저장·수정 저장은 구글 시트 연동 상태처럼 방문자 화면과 무관한 값만 바뀔 때도 돈다.
+  // 그때마다 공개 페이지를 다시 만들면 Vercel 사용량만 늘어서, 방문자에게 보이는 부분이 바뀐 경우에만 새로 만든다.
+  const publicFormSignature=React.useRef<{key:string;value:string}>({key:"",value:""})
+  const publicSignatureOf=(config:any)=>{
+    const {integrations:_integrations,...rest}=config||{}
+    return JSON.stringify(rest)
+  }
+  function revalidatePublicFormIfChanged(formId:string,slug:string,config:any):Promise<void>{
+    const key=`${formId}:${slug}`
+    const signature=publicSignatureOf(config)
+    // 내용이 같아도 앞서 보낸 요청이 아직 진행 중일 수 있으니, 그 요청이 끝나는 시점을 돌려준다.
+    if(publicFormSignature.current.key===key&&publicFormSignature.current.value===signature)return revalidateChain.current
+    publicFormSignature.current={key,value:signature}
+    return revalidatePublicForms(slug)
+  }
   async function getFullFormRow(item:any){
     if(item?.config&&!item.__summary&&(item.config.form||item.config.kdtFields))return {config:item.config,slug:item.slug,name:item.name,brand:item.brand||item.config?.brand}
     if(!supa||!item?.id)throw new Error("폼 정보를 불러올 수 없어요.")
@@ -3342,6 +3381,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       next.dashboard={...(next.dashboard||{}),editPasswordHash:""}
       const{error}=await supa.from("form_configs").update({config:next,updated_at:new Date().toISOString()}).eq("id",item.id)
       if(error)throw error
+      void revalidatePublicForms(full.slug||item.slug)
       delete fullFormCache.current[item.id]
       if(loadedId===item.id)setCfg(prev=>({...prev,dashboard:{...(prev.dashboard||{}),editPasswordHash:""}}))
       setEditPasswordPrompt(null)
@@ -3443,6 +3483,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const updatedAt=new Date().toISOString()
       const {error}=await supa.from("form_configs").update({name:nextName,config:next,brand:dbBrandValue(dashboardSettings.brand),updated_at:updatedAt}).eq("id",dashboardSettings.item.id)
       if(error)throw error
+      void revalidatePublicForms(dashboardSettings.item.slug)
       await syncLinkedProgramResponses(dashboardSettings.item.id,next)
       delete fullFormCache.current[dashboardSettings.item.id]
       if(dashboardSettings.item.__fromBuilder){
@@ -3738,6 +3779,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const{data,error}=await supa.from("form_configs").update({config:next,updated_at:new Date().toISOString()}).eq("id",id).select("id")
       if(error)throw error
       if(!data||data.length===0){showToast("휴지통으로 이동할 폼을 찾지 못했거나 권한이 없어요.",false);return}
+      void revalidatePublicForms(full.slug)
       delete fullFormCache.current[id]
       setEditorTabs(prev=>prev.filter(tab=>tab.id!==id))
       if(loadedId===id){setLoadedId("");setLoadedName("");setSavedSlug("");setActiveEditorTabKey("");setView("dashboard")}
@@ -3758,6 +3800,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       next.dashboard=dashboard
       const{error}=await supa.from("form_configs").update({config:next,updated_at:new Date().toISOString()}).eq("id",item.id)
       if(error)throw error
+      void revalidatePublicForms(full.slug||item.slug)
       const restoredAnalyticsScopes=await restoreActiveAnalyticsTrashForForm(item.id,full.slug||item.slug||"")
       delete fullFormCache.current[item.id]
       showToast(restoredAnalyticsScopes>0
@@ -3787,6 +3830,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       await deleteFrom("form_response_events")
       const {error}=await supa.from("form_configs").delete().eq("id",id)
       if(error)throw error
+      void revalidatePublicForms(item.slug)
       delete fullFormCache.current[id]
       setEditorTabs(prev=>prev.filter(tab=>tab.id!==id))
       if(loadedId===id){setLoadedId("");setLoadedName("");setSavedSlug("");setActiveEditorTabKey("");setView("dashboard")}
@@ -3819,6 +3863,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           await deleteFrom("form_response_events")
           const {error}=await supa.from("form_configs").delete().eq("id",id)
           if(error)throw error
+          void revalidatePublicForms(item.slug)
           delete fullFormCache.current[id]
           setEditorTabs(prev=>prev.filter(tab=>tab.id!==id))
           if(loadedId===id){setLoadedId("");setLoadedName("");setSavedSlug("");setActiveEditorTabKey("");setView("dashboard")}
@@ -3873,6 +3918,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         : "슬러그 변경 실패: "+msg,false)
       return
     }
+    void revalidatePublicForms(savedSlug,next)
     setSavedSlug(next);setSlugDraft(next);showToast("슬러그가 변경됐어요.")
     loadList();loadDashboard(supa)
   }
@@ -3890,6 +3936,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       if(error)throw error
       const nextId=ins?.id||""
       const nextSlug=ins?.slug||slug
+      void revalidatePublicForms(nextSlug)
       const nextKey=editorTabKeyFor(nextId)||activeEditorTabKey||draftEditorTabKey()
       setShowSave(false);setSaveName("");setSaveSlug("")
       setSavedSlug(nextSlug);setLoadedId(nextId);setLoadedName(nextName);setActiveEditorTabKey(nextKey)
@@ -3917,7 +3964,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	    const updatedAt=new Date().toISOString()
 	    fullFormCache.current[loadedId]={updatedAt,data:{config:cfgFinal,slug:savedSlug,name:loadedName,brand:currentBrand}}
 	    supa.from("form_configs").update({config:cfgFinal,brand:dbBrandValue(currentBrand),updated_at:updatedAt}).eq("id",loadedId)
-		      .then(({error})=>{if(error)showToast("저장 중 오류가 발생했어요",false);else{void syncLinkedProgramResponses(loadedId,cfgFinal);loadList();loadDashboard(supa)}})
+		      .then(({error})=>{if(error)showToast("저장 중 오류가 발생했어요",false);else{void revalidatePublicFormIfChanged(loadedId,savedSlug,cfgFinal);void syncLinkedProgramResponses(loadedId,cfgFinal);loadList();loadDashboard(supa)}})
 		  }
   function onSaveClick(){if(loadedId)setShowUpdateModal(true);else setShowSave(true)}
   function getBrandFormBaseUrl(brand=currentBrand){
@@ -3961,7 +4008,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }),currentBrand)
       const{error}=await supa.from("form_configs").update({config:nextCfg,brand:dbBrandValue(currentBrand),updated_at:now}).eq("id",loadedId)
       if(error)throw error
+      // 새 창이 옛 저장본을 먼저 받지 않도록, 페이지 새로 만들기 요청이 끝난 뒤에 연다. 오래 걸려도 3초만 기다린다.
+      const revalidated=revalidatePublicFormIfChanged(loadedId,savedSlug,nextCfg)
       await syncLinkedProgramResponses(loadedId,nextCfg)
+      await Promise.race([revalidated,new Promise(resolve=>setTimeout(resolve,3000))])
       setCfg(nextCfg)
       fullFormCache.current[loadedId]={updatedAt:now,data:{config:nextCfg,slug:savedSlug,name:loadedName,brand:currentBrand}}
       loadList();loadDashboard(supa)
@@ -5148,8 +5198,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       for(const [tableName,tableRows] of submittedByTable.entries()){
         const ids=tableRows.map(row=>row.id).filter(Boolean)
         if(!ids.length)continue
-        const {error}=await supa.from(tableName).delete().in("id",ids)
+        // PostgREST 는 권한(RLS)에 막혀도 오류가 아니라 "0건 삭제"를 돌려준다.
+        // 지운 행을 돌려받아 실제로 지워졌는지 확인하지 않으면, 아무것도 안 지우고 성공했다고 알리게 된다.
+        const {data:removed,error}=await supa.from(tableName).delete().in("id",ids).select("id")
         if(error)throw error
+        if((removed||[]).length<ids.length){
+          throw new Error(`${tableName} 응답을 지울 권한이 없어요. (요청 ${ids.length}건 중 ${(removed||[]).length}건만 삭제)`)
+        }
         deletedGroups.push({tableName,rows:tableRows.map(stripAnalyticsInternalRow)})
       }
       setSelectedAnalyticsRowIds([])
@@ -5159,10 +5214,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       for(const group of deletedGroups){
         try{await supa.from(group.tableName).upsert(group.rows,{onConflict:"id",ignoreDuplicates:true})}catch{}
       }
+      let rollbackLeft=0
       if(insertedTrashIds.length){
-        try{await supa.from("form_response_events").delete().in("id",insertedTrashIds)}catch{}
+        try{
+          const {data:undone}=await supa.from("form_response_events").delete().in("id",insertedTrashIds).select("id")
+          rollbackLeft=insertedTrashIds.length-((undone||[]).length)
+        }catch{rollbackLeft=insertedTrashIds.length}
       }
-      showToast("선택 응답 삭제 실패: "+((error as any)?.message||"오류"),false)
+      // 되돌리기까지 막히면 휴지통에 빈 기록만 남는다. 그 사실을 감추지 않는다.
+      showToast("선택 응답 삭제 실패: "+((error as any)?.message||"오류")+(rollbackLeft?" (휴지통 기록 정리도 실패했어요)":""),false)
     }finally{
       setAnalyticsSelectedDeleteBusy(false)
     }
@@ -5288,6 +5348,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   React.useEffect(()=>{
     if(!supa||!loadedId||view!=="builder")return
     if(autoSaveTimer.current)clearTimeout(autoSaveTimer.current)
+    const signatureKey=`${loadedId}:${savedSlug}`
+    // 폼을 처음 연 순간의 설정은 이미 공개 페이지와 같으므로 기준으로만 삼는다.
+    if(publicFormSignature.current.key!==signatureKey)publicFormSignature.current={key:signatureKey,value:publicSignatureOf(applyBrandDefaults({...cfg,brand:currentBrand,dashboard:dashboardWithOperationPeriods(cfg.dashboard)},currentBrand))}
     if(unlinkedOperationPeriodError())return
     setAutoSaved(false)
     setAutoSaving(false)
@@ -5299,12 +5362,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           setAutoSaving(false)
           if(!error){
             setAutoSaved(true)
+            void revalidatePublicFormIfChanged(loadedId,savedSlug,cfgFinal)
             void syncLinkedProgramResponses(loadedId,cfgFinal)
           }
         })
     },2000)
     return ()=>{if(autoSaveTimer.current)clearTimeout(autoSaveTimer.current)}
-  },[cfg,currentBrand,loadedId,view,supa])
+  },[cfg,currentBrand,loadedId,view,supa,savedSlug])
 
   // ── Image upload ──────────────────────────────────────────────────────
   function setImageNaturalSize(target:"header"|"field"|"ad",url:string,fieldId?:string){
@@ -9098,20 +9162,65 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const periodTrendAxisMax=periodTrendMax*1.12
     // 광고 플랫폼이 한글 캠페인명을 `%5B2%ED%8C%80%5D+AI...`처럼 인코딩된 채로 한 번 더 넘기는 경우가 있다.
     // 그대로 두면 같은 캠페인이 두 줄로 갈라지므로, 사람이 읽는 값으로 풀어서 묶는다.
-    const utmLabel=(value:any)=>{
-      let v=String(value||"").trim()
+    // 광고 플랫폼이 값을 인코딩한 채로 넘기는 데다, 길면 글자 중간에서 잘라 보낸다.
+    // (메타는 한글 캠페인명을 126자에서 끊어 보냈다. `%EC%99%` 처럼 끝이 깨져 통째로 변환에 실패했다.)
+    // 끊긴 끄트머리는 버리고 읽을 수 있는 데까지 푼다. truncated 는 뒤에서 온전한 이름에 합치는 데 쓴다.
+    const utmDecoded=(value:any)=>{
+      const raw=String(value||"").trim()
+      let v=raw
+      let truncated=false
       for(let i=0;i<2&&/%[0-9A-Fa-f]{2}/.test(v);i++){
-        try{v=decodeURIComponent(v.replace(/\+/g," "))}catch{break}
+        let candidate=v.replace(/\+/g," ")
+        // 끝에 남은 반쪽짜리 이스케이프(`%`, `%E`)를 먼저 턴다.
+        const head=candidate.replace(/%[0-9A-Fa-f]?$/,"")
+        if(head!==candidate){candidate=head;truncated=true}
+        let decoded=""
+        let ok=false
+        for(let cut=0;cut<6;cut++){
+          try{decoded=decodeURIComponent(candidate);ok=true;break}
+          catch{
+            const shorter=candidate.replace(/%[0-9A-Fa-f]{2}$/,"")
+            if(shorter===candidate)break
+            candidate=shorter
+            truncated=true
+          }
+        }
+        if(!ok)break
+        v=decoded
       }
-      return v.trim()
+      return {text:v.trim(),truncated}
+    }
+    const utmLabel=(value:any)=>utmDecoded(value).text
+    // 잘려 들어온 값은 온전한 이름의 앞부분이라, 같은 캠페인으로 본다.
+    const utmMatches=(value:any,label:string)=>{
+      const d=utmDecoded(value)
+      const text=d.text||"없음"
+      if(text===label)return true
+      return d.truncated&&!!d.text&&label.startsWith(d.text)
     }
     const utmBucketEntries=(axis:"source"|"medium"|"campaign")=>{
       const key=`utm_${axis}`
       const enter:any={}
-      sessionSummaries.forEach((item:any)=>{const v=utmLabel(item[key])||"없음";enter[v]=(enter[v]||0)+1})
       const done:any={}
-      rows.forEach((row:any)=>{const v=utmLabel(analyticsAttributionValue(row,key))||"없음";done[v]=(done[v]||0)+1})
-      return Object.keys(enter).map(k=>({label:k,participation:enter[k],complete:done[k]||0}))
+      const truncated=new Set<string>()
+      const full=new Set<string>()
+      const tally=(raw:any,target:any)=>{
+        const d=utmDecoded(raw)
+        const v=d.text||"없음"
+        if(d.truncated&&d.text)truncated.add(v); else full.add(v)
+        target[v]=(target[v]||0)+1
+      }
+      sessionSummaries.forEach((item:any)=>tally(item[key],enter))
+      rows.forEach((row:any)=>tally(analyticsAttributionValue(row,key),done))
+      // 잘린 라벨은 그 앞부분으로 시작하는 온전한 라벨에 합친다. 없으면 잘린 채로 둔다.
+      const canon=(label:string)=>{
+        if(!truncated.has(label))return label
+        return Array.from(full).filter(f=>f!==label&&f.startsWith(label)).sort((a,b)=>a.length-b.length)[0]||label
+      }
+      const fold=(src:any)=>{const out:any={};Object.keys(src).forEach(k=>{const c=canon(k);out[c]=(out[c]||0)+src[k]});return out}
+      const enterFolded=fold(enter)
+      const doneFolded=fold(done)
+      return Object.keys(enterFolded).map(k=>({label:k,participation:enterFolded[k],complete:doneFolded[k]||0}))
         .sort((a:any,b:any)=>b.participation-a.participation)
     }
     const periodSourceList=periodSourceAxis==="domain"?sourceEntries:utmBucketEntries(periodSourceAxis)
@@ -9211,7 +9320,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const periodSourceSessions=(label:string)=>sessionSummaries.filter((item:any)=>
       periodSourceAxis==="domain"
         ? item.source===label
-        : (utmLabel(item[`utm_${periodSourceAxis}`])||"없음")===label)
+        : utmMatches(item[`utm_${periodSourceAxis}`],label))
     // 연령은 접속 정보가 아니라 제출한 답변에 있으므로, 채널이 붙은 응답을 따로 모은다.
     // 전체 축의 라벨은 utm_source 또는 referrer 호스트라서, 응답에 저장된 같은 값들과 비교해 매칭한다.
     const hostOf=(value:any)=>{
@@ -9230,7 +9339,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         ]
         return candidates.includes(label)
       }
-      return (utmLabel(analyticsAttributionValue(row,`utm_${periodSourceAxis}`))||"없음")===label
+      return utmMatches(analyticsAttributionValue(row,`utm_${periodSourceAxis}`),label)
     })
     const periodBreakdown=(list:any[],pick:(item:any)=>string,limit=6)=>{
       const map:any={}
@@ -9973,6 +10082,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 {periodSourceList.length===0?emptyState("유입경로 데이터가 아직 없습니다."):<div {...fadeScrollProps} style={{height:322,overflowY:"auto" as const,paddingRight:4,display:"flex",flexDirection:"column" as const,gap:4}}>
                   {periodSourceList.map((item:any)=>{
                     const label=String(item.label)
+                    // 광고 플랫폼이 `{{campaign.name}}` 자리를 실제 이름으로 바꾸지 않고 그대로 보낸 경우다.
+                    // 원문을 그대로 보여주면 무슨 값인지 알 수 없어서, 뜻을 적고 원문은 툴팁으로 남긴다.
+                    const unresolved=/^\{\{.+\}\}$/.test(label)
+                    const displayLabel=unresolved?`값이 안 채워진 광고 링크 (${label})`:label
                     const enter=Number(item.participation)||0
                     const done=Number(item.complete)||0
                     const rate=enter?Math.round((done/enter)*1000)/10:0
@@ -9998,7 +10111,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                         onMouseEnter={e=>{if(!open)periodHoverIn(e)}} onMouseLeave={e=>{if(!open)periodHoverOut(e)}}>
                         <span style={periodBarFill(Math.round((enter/periodSourceMax)*100),A.blue)}/>
                         <span style={periodIconWrap}><span style={periodIconImg(sourceIconUrl(label))}/></span>
-                        <span style={{position:"relative" as const,flex:1,minWidth:0,fontSize:13,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{label}</span>
+                        <span title={unresolved?`광고 링크의 ${label} 자리가 캠페인 이름으로 바뀌지 않은 채 들어온 유입입니다.`:label}
+                          style={{position:"relative" as const,flex:1,minWidth:0,fontSize:13,color:unresolved?A.t3:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{displayLabel}</span>
                         <span style={{position:"relative" as const,fontSize:12.5,color:A.t3,flexShrink:0,fontVariantNumeric:"tabular-nums" as const}}>{rate?`${rate}%`:"—"}</span>
                         <span style={{position:"relative" as const,fontSize:13,fontWeight:600,color:A.t1,flexShrink:0,minWidth:36,textAlign:"right" as const,fontVariantNumeric:"tabular-nums" as const}}>{enter}</span>
                         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{position:"relative" as const,flexShrink:0,color:A.t3,transform:open?"rotate(180deg)":"none",transition:"transform .15s"}}>

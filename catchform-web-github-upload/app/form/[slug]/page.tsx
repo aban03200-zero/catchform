@@ -2,7 +2,9 @@ import { CatchFormClient } from "@/components/CatchFormClient"
 import { publicEnv } from "@/lib/env"
 
 export const dynamic = "force-static"
-export const revalidate = 60
+// 방문할 때마다 다시 만들지 않고 저장본을 내보낸다. 관리자가 설정을 바꾸면 /api/admin/revalidate-form 이 바로 비운다.
+// 캐치폼 밖에서 바뀐 내용(프로그램 모집 기간, Supabase 직접 수정)은 최대 1시간 안에 반영된다.
+export const revalidate = 3600
 
 function firstDateValue(source: any, keys: string[]) {
   for (const key of keys) {
@@ -83,7 +85,7 @@ async function getProgram(baseUrl: string, programId: string) {
       apikey: publicEnv.supabaseAnonKey,
       authorization: `Bearer ${publicEnv.supabaseAnonKey}`,
     },
-    next: { revalidate: 60 },
+    next: { revalidate: 3600 },
   })
   if (!res.ok) return null
   const rows = (await res.json()) as any[]
@@ -102,7 +104,7 @@ async function getInitialForm(slug: string) {
         apikey: publicEnv.supabaseAnonKey,
         authorization: `Bearer ${publicEnv.supabaseAnonKey}`,
       },
-      next: { revalidate: 60 },
+      next: { revalidate: 3600 },
     })
     if (!res.ok) return null
     const rows = (await res.json()) as Array<{ id: string; config: unknown }>
