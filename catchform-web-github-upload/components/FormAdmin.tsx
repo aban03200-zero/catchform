@@ -9098,20 +9098,65 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const periodTrendAxisMax=periodTrendMax*1.12
     // 광고 플랫폼이 한글 캠페인명을 `%5B2%ED%8C%80%5D+AI...`처럼 인코딩된 채로 한 번 더 넘기는 경우가 있다.
     // 그대로 두면 같은 캠페인이 두 줄로 갈라지므로, 사람이 읽는 값으로 풀어서 묶는다.
-    const utmLabel=(value:any)=>{
-      let v=String(value||"").trim()
+    // 광고 플랫폼이 값을 인코딩한 채로 넘기는 데다, 길면 글자 중간에서 잘라 보낸다.
+    // (메타는 한글 캠페인명을 126자에서 끊어 보냈다. `%EC%99%` 처럼 끝이 깨져 통째로 변환에 실패했다.)
+    // 끊긴 끄트머리는 버리고 읽을 수 있는 데까지 푼다. truncated 는 뒤에서 온전한 이름에 합치는 데 쓴다.
+    const utmDecoded=(value:any)=>{
+      const raw=String(value||"").trim()
+      let v=raw
+      let truncated=false
       for(let i=0;i<2&&/%[0-9A-Fa-f]{2}/.test(v);i++){
-        try{v=decodeURIComponent(v.replace(/\+/g," "))}catch{break}
+        let candidate=v.replace(/\+/g," ")
+        // 끝에 남은 반쪽짜리 이스케이프(`%`, `%E`)를 먼저 턴다.
+        const head=candidate.replace(/%[0-9A-Fa-f]?$/,"")
+        if(head!==candidate){candidate=head;truncated=true}
+        let decoded=""
+        let ok=false
+        for(let cut=0;cut<6;cut++){
+          try{decoded=decodeURIComponent(candidate);ok=true;break}
+          catch{
+            const shorter=candidate.replace(/%[0-9A-Fa-f]{2}$/,"")
+            if(shorter===candidate)break
+            candidate=shorter
+            truncated=true
+          }
+        }
+        if(!ok)break
+        v=decoded
       }
-      return v.trim()
+      return {text:v.trim(),truncated}
+    }
+    const utmLabel=(value:any)=>utmDecoded(value).text
+    // 잘려 들어온 값은 온전한 이름의 앞부분이라, 같은 캠페인으로 본다.
+    const utmMatches=(value:any,label:string)=>{
+      const d=utmDecoded(value)
+      const text=d.text||"없음"
+      if(text===label)return true
+      return d.truncated&&!!d.text&&label.startsWith(d.text)
     }
     const utmBucketEntries=(axis:"source"|"medium"|"campaign")=>{
       const key=`utm_${axis}`
       const enter:any={}
-      sessionSummaries.forEach((item:any)=>{const v=utmLabel(item[key])||"없음";enter[v]=(enter[v]||0)+1})
       const done:any={}
-      rows.forEach((row:any)=>{const v=utmLabel(analyticsAttributionValue(row,key))||"없음";done[v]=(done[v]||0)+1})
-      return Object.keys(enter).map(k=>({label:k,participation:enter[k],complete:done[k]||0}))
+      const truncated=new Set<string>()
+      const full=new Set<string>()
+      const tally=(raw:any,target:any)=>{
+        const d=utmDecoded(raw)
+        const v=d.text||"없음"
+        if(d.truncated&&d.text)truncated.add(v); else full.add(v)
+        target[v]=(target[v]||0)+1
+      }
+      sessionSummaries.forEach((item:any)=>tally(item[key],enter))
+      rows.forEach((row:any)=>tally(analyticsAttributionValue(row,key),done))
+      // 잘린 라벨은 그 앞부분으로 시작하는 온전한 라벨에 합친다. 없으면 잘린 채로 둔다.
+      const canon=(label:string)=>{
+        if(!truncated.has(label))return label
+        return Array.from(full).filter(f=>f!==label&&f.startsWith(label)).sort((a,b)=>a.length-b.length)[0]||label
+      }
+      const fold=(src:any)=>{const out:any={};Object.keys(src).forEach(k=>{const c=canon(k);out[c]=(out[c]||0)+src[k]});return out}
+      const enterFolded=fold(enter)
+      const doneFolded=fold(done)
+      return Object.keys(enterFolded).map(k=>({label:k,participation:enterFolded[k],complete:doneFolded[k]||0}))
         .sort((a:any,b:any)=>b.participation-a.participation)
     }
     const periodSourceList=periodSourceAxis==="domain"?sourceEntries:utmBucketEntries(periodSourceAxis)
@@ -9211,7 +9256,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const periodSourceSessions=(label:string)=>sessionSummaries.filter((item:any)=>
       periodSourceAxis==="domain"
         ? item.source===label
-        : (utmLabel(item[`utm_${periodSourceAxis}`])||"없음")===label)
+        : utmMatches(item[`utm_${periodSourceAxis}`],label))
     // 연령은 접속 정보가 아니라 제출한 답변에 있으므로, 채널이 붙은 응답을 따로 모은다.
     // 전체 축의 라벨은 utm_source 또는 referrer 호스트라서, 응답에 저장된 같은 값들과 비교해 매칭한다.
     const hostOf=(value:any)=>{
@@ -9230,7 +9275,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         ]
         return candidates.includes(label)
       }
-      return (utmLabel(analyticsAttributionValue(row,`utm_${periodSourceAxis}`))||"없음")===label
+      return utmMatches(analyticsAttributionValue(row,`utm_${periodSourceAxis}`),label)
     })
     const periodBreakdown=(list:any[],pick:(item:any)=>string,limit=6)=>{
       const map:any={}
@@ -9973,6 +10018,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 {periodSourceList.length===0?emptyState("유입경로 데이터가 아직 없습니다."):<div {...fadeScrollProps} style={{height:322,overflowY:"auto" as const,paddingRight:4,display:"flex",flexDirection:"column" as const,gap:4}}>
                   {periodSourceList.map((item:any)=>{
                     const label=String(item.label)
+                    // 광고 플랫폼이 `{{campaign.name}}` 자리를 실제 이름으로 바꾸지 않고 그대로 보낸 경우다.
+                    // 원문을 그대로 보여주면 무슨 값인지 알 수 없어서, 뜻을 적고 원문은 툴팁으로 남긴다.
+                    const unresolved=/^\{\{.+\}\}$/.test(label)
+                    const displayLabel=unresolved?`값이 안 채워진 광고 링크 (${label})`:label
                     const enter=Number(item.participation)||0
                     const done=Number(item.complete)||0
                     const rate=enter?Math.round((done/enter)*1000)/10:0
@@ -9998,7 +10047,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                         onMouseEnter={e=>{if(!open)periodHoverIn(e)}} onMouseLeave={e=>{if(!open)periodHoverOut(e)}}>
                         <span style={periodBarFill(Math.round((enter/periodSourceMax)*100),A.blue)}/>
                         <span style={periodIconWrap}><span style={periodIconImg(sourceIconUrl(label))}/></span>
-                        <span style={{position:"relative" as const,flex:1,minWidth:0,fontSize:13,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{label}</span>
+                        <span title={unresolved?`광고 링크의 ${label} 자리가 캠페인 이름으로 바뀌지 않은 채 들어온 유입입니다.`:label}
+                          style={{position:"relative" as const,flex:1,minWidth:0,fontSize:13,color:unresolved?A.t3:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{displayLabel}</span>
                         <span style={{position:"relative" as const,fontSize:12.5,color:A.t3,flexShrink:0,fontVariantNumeric:"tabular-nums" as const}}>{rate?`${rate}%`:"—"}</span>
                         <span style={{position:"relative" as const,fontSize:13,fontWeight:600,color:A.t1,flexShrink:0,minWidth:36,textAlign:"right" as const,fontVariantNumeric:"tabular-nums" as const}}>{enter}</span>
                         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{position:"relative" as const,flexShrink:0,color:A.t3,transform:open?"rotate(180deg)":"none",transition:"transform .15s"}}>
