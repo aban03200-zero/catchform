@@ -2912,6 +2912,45 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     )
     return (full.data||[]).map(normalizeFormSummary)
   }
+  // 공개 폼 페이지는 Vercel에 저장본으로 두고 내보낸다. 설정을 바꾸면 그 주소의 저장본을 비워 다음 방문자부터 새 설정을 보게 한다.
+  // 실패해도 최대 1시간 안에는 자동으로 반영되므로 저장 흐름은 막지 않는다.
+  // 편집 중에는 자동 저장마다 요청이 생기는데, 동시에 여러 개가 나가면 서로 밀려 느려지고 실패했다.
+  // 그래서 한 번에 하나씩만 보내고, 보내는 동안 생긴 주소는 모아 두었다가 다음 요청에 한꺼번에 담는다.
+  const revalidatePending=React.useRef<Set<string>>(new Set())
+  const revalidateChain=React.useRef<Promise<void>>(Promise.resolve())
+  function revalidatePublicForms(...slugs:any[]):Promise<void>{
+    const targets=slugs.map(slug=>String(slug||"").trim()).filter(Boolean)
+    if(!supa||!targets.length)return Promise.resolve()
+    targets.forEach(slug=>revalidatePending.current.add(slug))
+    const send=async()=>{
+      const batch=Array.from(revalidatePending.current)
+      if(!batch.length)return
+      revalidatePending.current.clear()
+      try{
+        const {data}=await supa.auth.getSession()
+        const token=data?.session?.access_token||""
+        if(!token)return
+        await fetch("/api/admin/revalidate-form",{method:"POST",keepalive:true,headers:{"content-type":"application/json",authorization:`Bearer ${token}`},body:JSON.stringify({slugs:batch})})
+      }catch{}
+    }
+    revalidateChain.current=revalidateChain.current.then(send)
+    return revalidateChain.current
+  }
+  // 자동 저장·수정 저장은 구글 시트 연동 상태처럼 방문자 화면과 무관한 값만 바뀔 때도 돈다.
+  // 그때마다 공개 페이지를 다시 만들면 Vercel 사용량만 늘어서, 방문자에게 보이는 부분이 바뀐 경우에만 새로 만든다.
+  const publicFormSignature=React.useRef<{key:string;value:string}>({key:"",value:""})
+  const publicSignatureOf=(config:any)=>{
+    const {integrations:_integrations,...rest}=config||{}
+    return JSON.stringify(rest)
+  }
+  function revalidatePublicFormIfChanged(formId:string,slug:string,config:any):Promise<void>{
+    const key=`${formId}:${slug}`
+    const signature=publicSignatureOf(config)
+    // 내용이 같아도 앞서 보낸 요청이 아직 진행 중일 수 있으니, 그 요청이 끝나는 시점을 돌려준다.
+    if(publicFormSignature.current.key===key&&publicFormSignature.current.value===signature)return revalidateChain.current
+    publicFormSignature.current={key,value:signature}
+    return revalidatePublicForms(slug)
+  }
   async function getFullFormRow(item:any){
     if(item?.config&&!item.__summary&&(item.config.form||item.config.kdtFields))return {config:item.config,slug:item.slug,name:item.name,brand:item.brand||item.config?.brand}
     if(!supa||!item?.id)throw new Error("폼 정보를 불러올 수 없어요.")
@@ -3342,6 +3381,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       next.dashboard={...(next.dashboard||{}),editPasswordHash:""}
       const{error}=await supa.from("form_configs").update({config:next,updated_at:new Date().toISOString()}).eq("id",item.id)
       if(error)throw error
+      void revalidatePublicForms(full.slug||item.slug)
       delete fullFormCache.current[item.id]
       if(loadedId===item.id)setCfg(prev=>({...prev,dashboard:{...(prev.dashboard||{}),editPasswordHash:""}}))
       setEditPasswordPrompt(null)
@@ -3443,6 +3483,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const updatedAt=new Date().toISOString()
       const {error}=await supa.from("form_configs").update({name:nextName,config:next,brand:dbBrandValue(dashboardSettings.brand),updated_at:updatedAt}).eq("id",dashboardSettings.item.id)
       if(error)throw error
+      void revalidatePublicForms(dashboardSettings.item.slug)
       await syncLinkedProgramResponses(dashboardSettings.item.id,next)
       delete fullFormCache.current[dashboardSettings.item.id]
       if(dashboardSettings.item.__fromBuilder){
@@ -3738,6 +3779,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const{data,error}=await supa.from("form_configs").update({config:next,updated_at:new Date().toISOString()}).eq("id",id).select("id")
       if(error)throw error
       if(!data||data.length===0){showToast("휴지통으로 이동할 폼을 찾지 못했거나 권한이 없어요.",false);return}
+      void revalidatePublicForms(full.slug)
       delete fullFormCache.current[id]
       setEditorTabs(prev=>prev.filter(tab=>tab.id!==id))
       if(loadedId===id){setLoadedId("");setLoadedName("");setSavedSlug("");setActiveEditorTabKey("");setView("dashboard")}
@@ -3758,6 +3800,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       next.dashboard=dashboard
       const{error}=await supa.from("form_configs").update({config:next,updated_at:new Date().toISOString()}).eq("id",item.id)
       if(error)throw error
+      void revalidatePublicForms(full.slug||item.slug)
       const restoredAnalyticsScopes=await restoreActiveAnalyticsTrashForForm(item.id,full.slug||item.slug||"")
       delete fullFormCache.current[item.id]
       showToast(restoredAnalyticsScopes>0
@@ -3787,6 +3830,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       await deleteFrom("form_response_events")
       const {error}=await supa.from("form_configs").delete().eq("id",id)
       if(error)throw error
+      void revalidatePublicForms(item.slug)
       delete fullFormCache.current[id]
       setEditorTabs(prev=>prev.filter(tab=>tab.id!==id))
       if(loadedId===id){setLoadedId("");setLoadedName("");setSavedSlug("");setActiveEditorTabKey("");setView("dashboard")}
@@ -3819,6 +3863,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           await deleteFrom("form_response_events")
           const {error}=await supa.from("form_configs").delete().eq("id",id)
           if(error)throw error
+          void revalidatePublicForms(item.slug)
           delete fullFormCache.current[id]
           setEditorTabs(prev=>prev.filter(tab=>tab.id!==id))
           if(loadedId===id){setLoadedId("");setLoadedName("");setSavedSlug("");setActiveEditorTabKey("");setView("dashboard")}
@@ -3873,6 +3918,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         : "슬러그 변경 실패: "+msg,false)
       return
     }
+    void revalidatePublicForms(savedSlug,next)
     setSavedSlug(next);setSlugDraft(next);showToast("슬러그가 변경됐어요.")
     loadList();loadDashboard(supa)
   }
@@ -3890,6 +3936,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       if(error)throw error
       const nextId=ins?.id||""
       const nextSlug=ins?.slug||slug
+      void revalidatePublicForms(nextSlug)
       const nextKey=editorTabKeyFor(nextId)||activeEditorTabKey||draftEditorTabKey()
       setShowSave(false);setSaveName("");setSaveSlug("")
       setSavedSlug(nextSlug);setLoadedId(nextId);setLoadedName(nextName);setActiveEditorTabKey(nextKey)
@@ -3917,7 +3964,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	    const updatedAt=new Date().toISOString()
 	    fullFormCache.current[loadedId]={updatedAt,data:{config:cfgFinal,slug:savedSlug,name:loadedName,brand:currentBrand}}
 	    supa.from("form_configs").update({config:cfgFinal,brand:dbBrandValue(currentBrand),updated_at:updatedAt}).eq("id",loadedId)
-		      .then(({error})=>{if(error)showToast("저장 중 오류가 발생했어요",false);else{void syncLinkedProgramResponses(loadedId,cfgFinal);loadList();loadDashboard(supa)}})
+		      .then(({error})=>{if(error)showToast("저장 중 오류가 발생했어요",false);else{void revalidatePublicFormIfChanged(loadedId,savedSlug,cfgFinal);void syncLinkedProgramResponses(loadedId,cfgFinal);loadList();loadDashboard(supa)}})
 		  }
   function onSaveClick(){if(loadedId)setShowUpdateModal(true);else setShowSave(true)}
   function getBrandFormBaseUrl(brand=currentBrand){
@@ -3961,7 +4008,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }),currentBrand)
       const{error}=await supa.from("form_configs").update({config:nextCfg,brand:dbBrandValue(currentBrand),updated_at:now}).eq("id",loadedId)
       if(error)throw error
+      // 새 창이 옛 저장본을 먼저 받지 않도록, 페이지 새로 만들기 요청이 끝난 뒤에 연다. 오래 걸려도 3초만 기다린다.
+      const revalidated=revalidatePublicFormIfChanged(loadedId,savedSlug,nextCfg)
       await syncLinkedProgramResponses(loadedId,nextCfg)
+      await Promise.race([revalidated,new Promise(resolve=>setTimeout(resolve,3000))])
       setCfg(nextCfg)
       fullFormCache.current[loadedId]={updatedAt:now,data:{config:nextCfg,slug:savedSlug,name:loadedName,brand:currentBrand}}
       loadList();loadDashboard(supa)
@@ -5298,6 +5348,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   React.useEffect(()=>{
     if(!supa||!loadedId||view!=="builder")return
     if(autoSaveTimer.current)clearTimeout(autoSaveTimer.current)
+    const signatureKey=`${loadedId}:${savedSlug}`
+    // 폼을 처음 연 순간의 설정은 이미 공개 페이지와 같으므로 기준으로만 삼는다.
+    if(publicFormSignature.current.key!==signatureKey)publicFormSignature.current={key:signatureKey,value:publicSignatureOf(applyBrandDefaults({...cfg,brand:currentBrand,dashboard:dashboardWithOperationPeriods(cfg.dashboard)},currentBrand))}
     if(unlinkedOperationPeriodError())return
     setAutoSaved(false)
     setAutoSaving(false)
@@ -5309,12 +5362,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           setAutoSaving(false)
           if(!error){
             setAutoSaved(true)
+            void revalidatePublicFormIfChanged(loadedId,savedSlug,cfgFinal)
             void syncLinkedProgramResponses(loadedId,cfgFinal)
           }
         })
     },2000)
     return ()=>{if(autoSaveTimer.current)clearTimeout(autoSaveTimer.current)}
-  },[cfg,currentBrand,loadedId,view,supa])
+  },[cfg,currentBrand,loadedId,view,supa,savedSlug])
 
   // ── Image upload ──────────────────────────────────────────────────────
   function setImageNaturalSize(target:"header"|"field"|"ad",url:string,fieldId?:string){
