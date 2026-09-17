@@ -5148,8 +5148,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       for(const [tableName,tableRows] of submittedByTable.entries()){
         const ids=tableRows.map(row=>row.id).filter(Boolean)
         if(!ids.length)continue
-        const {error}=await supa.from(tableName).delete().in("id",ids)
+        // PostgREST 는 권한(RLS)에 막혀도 오류가 아니라 "0건 삭제"를 돌려준다.
+        // 지운 행을 돌려받아 실제로 지워졌는지 확인하지 않으면, 아무것도 안 지우고 성공했다고 알리게 된다.
+        const {data:removed,error}=await supa.from(tableName).delete().in("id",ids).select("id")
         if(error)throw error
+        if((removed||[]).length<ids.length){
+          throw new Error(`${tableName} 응답을 지울 권한이 없어요. (요청 ${ids.length}건 중 ${(removed||[]).length}건만 삭제)`)
+        }
         deletedGroups.push({tableName,rows:tableRows.map(stripAnalyticsInternalRow)})
       }
       setSelectedAnalyticsRowIds([])
@@ -5159,10 +5164,15 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       for(const group of deletedGroups){
         try{await supa.from(group.tableName).upsert(group.rows,{onConflict:"id",ignoreDuplicates:true})}catch{}
       }
+      let rollbackLeft=0
       if(insertedTrashIds.length){
-        try{await supa.from("form_response_events").delete().in("id",insertedTrashIds)}catch{}
+        try{
+          const {data:undone}=await supa.from("form_response_events").delete().in("id",insertedTrashIds).select("id")
+          rollbackLeft=insertedTrashIds.length-((undone||[]).length)
+        }catch{rollbackLeft=insertedTrashIds.length}
       }
-      showToast("선택 응답 삭제 실패: "+((error as any)?.message||"오류"),false)
+      // 되돌리기까지 막히면 휴지통에 빈 기록만 남는다. 그 사실을 감추지 않는다.
+      showToast("선택 응답 삭제 실패: "+((error as any)?.message||"오류")+(rollbackLeft?" (휴지통 기록 정리도 실패했어요)":""),false)
     }finally{
       setAnalyticsSelectedDeleteBusy(false)
     }
