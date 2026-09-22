@@ -1382,3 +1382,32 @@ DB 조치
   HTML 파일)에서 들어온 응답이었다. 해당 페이지에는 시트 연동이 없다
 - `business-02`의 응답이 삭제되지 않던 원인은 RLS가 아니라 테이블 권한이었다.
   `company_applications`에 `authenticated` DELETE GRANT가 빠져 있어 추가했다
+
+### 남아 있던 42501 원인 규명과 해결 (같은 날 오후)
+
+배포 후에도 `42501 new row violates row-level security policy`가 5~8분에 한 번씩 계속 찍혔다.
+정책·권한을 다시 확인했더니 INSERT `with_check true`, UPDATE `using true / with_check true`,
+`anon`·`authenticated` UPDATE 권한까지 모두 정상이었다.
+
+Postgres 로그의 상세를 펼쳐 실제 문장을 확인해서 원인을 특정했다.
+
+- USER가 `authenticator` — 로그인하지 않은 방문자(`anon`) 자격의 요청이었다.
+- 문장은 임시저장 upsert이고 끝에 `RETURNING 1`이 붙는다.
+  PostgREST가 처리 건수를 세기 위해 쓴 뒤 결과를 다시 **읽는다**.
+- `form_response_events`의 SELECT 정책은 `auth.role() = 'authenticated'`라
+  이 읽기 단계에서 거부됐다. INSERT·UPDATE 정책을 열어도 소용이 없었다.
+- 대부분의 폼은 로그인이 켜져 있어 통과하고, **로그인이 꺼진 폼만** 실패했다.
+  그래서 낮고 일정한 빈도로 나온 것이다.
+
+SELECT 정책을 `anon`에게 열면 작성 중이던 이름·연락처가 누구에게나 보이므로 열 수 없다.
+대신 서버가 대신 쓰도록 바꿨다.
+
+- `app/api/form-status-event/route.ts` 신규 — `draft_saved`·`leave`만 받아
+  `service_role` 자격으로 upsert 한다. 이벤트 종류 제한, id UUID 검사,
+  본문 크기 상한(128KB), 필드 길이 제한을 둔다.
+- `components/CatchForm.tsx` — 이 두 이벤트는 이 경로로 보낸다.
+  나머지 이벤트는 덮어쓰기가 아니라서 기존처럼 브라우저에서 바로 쓴다.
+- 창을 닫을 때 보내는 경우(`keepalive`)도 같은 경로를 쓴다.
+
+확인: 잘못된 이벤트 종류·id·JSON은 400, 정상 요청은 204,
+같은 id로 두 번 보내면 덮어쓰기가 되는 것까지 로컬에서 확인했다.
