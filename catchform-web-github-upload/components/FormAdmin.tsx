@@ -4392,9 +4392,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       // 건수를 세지 않고 10페이지씩 한꺼번에 요청한다. 데이터보다 뒤 페이지는 빈 배열로 바로 돌아온다.
       const fetchPage=(page:number)=>Promise.resolve(base().range(page*1000,page*1000+999))
         .then((res:any)=>res?.data||[]).catch(()=>[])
-      const WAVE=10
+      // 예전에는 1000행 조회를 10개씩 동시에 던졌다. 관리자 화면을 여러 명이 켜면
+      // DB 연결 자리가 순식간에 동나서, 같은 DB를 쓰는 CRM·인사이드아웃·스나이퍼팩토리
+      // 로그인까지 전부 막혔다(2026-09-22 장애). 동시 요청 수와 최대 페이지 수를 줄인다.
+      const WAVE=3
+      const MAX_PAGES=12
       const batches:any[][]=[]
-      for(let start=0;start<40;start+=WAVE){
+      for(let start=0;start<MAX_PAGES;start+=WAVE){
         const wave=await Promise.all(Array.from({length:WAVE},(_,i)=>fetchPage(start+i)))
         if(cancelled)return
         batches.push(...wave)
@@ -4454,9 +4458,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const first=await fetchPage(0)
       rows.push(...first)
       if(first.length===1000){
-        // 남은 페이지는 한 장씩 기다리지 않고 동시에 받는다.
-        const rest=await Promise.all([1,2,3,4,5,6,7].map(page=>fetchPage(page).catch(()=>[])))
-        rest.forEach(batch=>rows.push(...batch))
+        // 남은 페이지는 한 장씩 기다리지 않고 동시에 받되, 한 번에 3개까지만 던진다.
+        // 동시 요청이 많으면 DB 연결 자리를 다 써서 로그인까지 막힌다(2026-09-22 장애).
+        for(const group of [[1,2,3],[4,5,6],[7]]){
+          const rest=await Promise.all(group.map(page=>fetchPage(page).catch(()=>[])))
+          rest.forEach(batch=>rows.push(...batch))
+          if(rest[rest.length-1].length<1000)break
+        }
       }
       const isBotRow=(row:any)=>{
         const ua=String(row.ua||"").toLowerCase()

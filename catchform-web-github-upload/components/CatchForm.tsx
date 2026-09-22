@@ -1094,9 +1094,11 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         }
         if (!supa) return
         if (statusMode) {
-            supa.from("form_response_events").upsert(payload as any, { onConflict: "id" }).then(({ error }) => {
-                if (error) supa.from("form_response_events").insert(basePayload).then(() => {})
-            })
+            // 임시저장·이탈은 한 세션당 한 줄을 계속 덮어쓰는 기록이다.
+            // 예전에는 덮어쓰기가 실패하면 새 줄을 넣어 되살렸는데,
+            // 권한 문제로 덮어쓰기가 계속 실패하자 0.9초마다 새 줄이 쌓여 10만 건이 됐고 DB가 멈췄다.
+            // 실패하면 그냥 넘긴다. 이 기록 하나가 빠지는 것보다 DB가 버티는 게 중요하다.
+            supa.from("form_response_events").upsert(payload as any, { onConflict: "id" }).then(() => {})
             return
         }
         supa.from("form_response_events").insert(payload).then(() => {})
@@ -1639,7 +1641,9 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     React.useEffect(() => {
         if (!draftLoadedRef.current) return
         if (remoteDraftTimerRef.current) window.clearTimeout(remoteDraftTimerRef.current)
-        remoteDraftTimerRef.current = window.setTimeout(() => saveRemoteDraft(false), 900)
+        // 0.9초는 타이핑 도중에도 계속 전송이 걸린다. 임시저장은 실시간일 필요가 없고,
+        // 페이지를 넘기거나 창을 닫을 때 따로 한 번 더 저장하므로 3초로 늦춰 전송량을 줄인다.
+        remoteDraftTimerRef.current = window.setTimeout(() => saveRemoteDraft(false), 3000)
         return () => {
             if (remoteDraftTimerRef.current) window.clearTimeout(remoteDraftTimerRef.current)
         }
