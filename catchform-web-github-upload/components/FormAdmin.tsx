@@ -30,9 +30,9 @@ type KdtField = { id:string; label:string; type:KdtFieldType; required?:boolean;
 type AdMode = "image"|"split"
 type ModalShareKey = "kakao"|"instagram"|"threads"|"x"|"link"
 type ModalShareButtons = Record<ModalShareKey,boolean>
-type FieldType = "text"|"name"|"phone"|"email"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"|"ad"
+type FieldType = "text"|"name"|"phone"|"email"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"|"ad"|"scale"
 type HelperItem = { text:string; callout?:boolean }
-type FormField = { id:string; type:FieldType; label:string; placeholder?:string; helper?:string; helpers?:HelperItem[]; required?:boolean; opts?:Opt[]; etcPh?:string; dupCheck?:boolean; page?:number; cols?:number; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMode?:AdMode; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string; birthYearLimitEnabled?:boolean; birthYearLimitYear?:number|string; birthYearLimitMessage?:string; birthDateRangeEnabled?:boolean; birthDateRangeStart?:string; birthDateRangeEnd?:string; birthDateRangeMessage?:string }
+type FormField = { id:string; type:FieldType; label:string; placeholder?:string; helper?:string; helpers?:HelperItem[]; required?:boolean; opts?:Opt[]; etcPh?:string; dupCheck?:boolean; page?:number; cols?:number; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMode?:AdMode; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string; birthYearLimitEnabled?:boolean; birthYearLimitYear?:number|string; birthYearLimitMessage?:string; birthDateRangeEnabled?:boolean; birthDateRangeStart?:string; birthDateRangeEnd?:string; birthDateRangeMessage?:string; scaleMin?:number; scaleMax?:number; scaleMinLabel?:string; scaleMaxLabel?:string }
 type FormAdConfig = { enabled:boolean; adMode:AdMode; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string }
 type QrLink = { code:string; url:string; label?:string; type?:string; createdAt?:string }
 type Cfg = {
@@ -47,7 +47,7 @@ type Cfg = {
   integrations?: { googleSheets?: { enabled:boolean; mode:"existing"|"new"; accountEmail:string; sheetUrl:string; sheetName:string; tabName?:string; tabGid?:string; createdSheetName?:string; webhookUrl:string; lastSyncStatus?:"idle"|"sent"|"error"; lastSyncAt?:string; lastSyncMessage?:string }; qrLinks?:QrLink[] }
   dashboard?: DashboardMeta
   brand: string
-  formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"
+  formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"|"survey"
   kdtFields?: KdtField[]
 }
 type EditorTab = { key:string; id:string; name:string; slug:string; brand:string; cfg:Cfg; isDraft?:boolean }
@@ -318,6 +318,7 @@ const ANALYTICS_EVENT_SELECT = "id,form_id,form_slug,session_id,event_type,page,
 function legacyDashboardFormType(formType?:Cfg["formType"]):DashboardFormType{
   if(formType==="alert")return"alert"
   if(formType==="recruit")return"recruit"
+  if(formType==="survey")return"survey"
   if(formType==="kdt"||formType==="edu_biz"||formType==="company")return"application"
   return"other"
 }
@@ -1330,6 +1331,28 @@ const DEF_RECRUIT: Cfg = {
   formType:"recruit" as const,
   kdtFields:undefined,
 }
+// 만족도 조사용 템플릿. 점수 문항은 막대를 끌어서 고르는 슬라이더로 만들어 두었고,
+// 값은 1~5 숫자로 저장돼서 응답 목록·시트에서 그대로 평균을 낼 수 있다.
+const DEF_SURVEY: Cfg = {
+  header:{imageUrl:"",programId:"",overline:"만족도 조사",title:"폼 제목을 입력해주세요.",educationStart:"",educationEnd:"",tuitionFree:false,tuitionFreeText:"",tuitionAmount:"",stipend:"",noticeEnabled:true,noticeIconEnabled:true,noticeIconText:"i",noticeText:"응답해주신 내용은 프로그램 개선을 위해서만 사용돼요. 1~2분이면 충분해요."},
+  form:{showNum:true,dupText:"이미 참여해주셨어요.",pages:1,fields:[
+    {id:"name",type:"name" as const,label:"성함",placeholder:"예) 홍길동",helper:"* 익명으로 남기고 싶으시면 비워두셔도 괜찮아요.",required:false},
+    {id:"overall_score",type:"scale" as const,label:"전반적인 만족도는 어떠셨나요?",required:true,scaleMin:1,scaleMax:5,scaleMinLabel:"매우 불만족",scaleMaxLabel:"매우 만족"},
+    {id:"content_score",type:"scale" as const,label:"내용(커리큘럼·구성)은 어떠셨나요?",required:true,scaleMin:1,scaleMax:5,scaleMinLabel:"매우 불만족",scaleMaxLabel:"매우 만족"},
+    {id:"operation_score",type:"scale" as const,label:"운영과 안내는 어떠셨나요?",required:true,scaleMin:1,scaleMax:5,scaleMinLabel:"매우 불만족",scaleMaxLabel:"매우 만족"},
+    {id:"recommend_score",type:"scale" as const,label:"다른 분에게 추천하고 싶으신가요?",required:true,scaleMin:1,scaleMax:5,scaleMinLabel:"전혀 추천 안 함",scaleMaxLabel:"꼭 추천하고 싶음"},
+    {id:"good_point",type:"textarea" as const,label:"가장 만족스러웠던 점은 무엇인가요?",placeholder:"좋았던 점을 자유롭게 적어주세요.",required:false},
+    {id:"improve_point",type:"textarea" as const,label:"개선되었으면 하는 점이 있다면 알려주세요.",placeholder:"아쉬웠던 점이나 바라는 점을 자유롭게 적어주세요.",required:false},
+  ]},
+  consents:[{enabled:true,required:true,title:"개인정보 수집 및 이용동의",body:"수집 항목: 성함(선택)\n수집 목적: 만족도 조사 결과 확인 및 프로그램 개선\n보유 기간: 조사 종료 후 1년",checkLabel:"개인정보 수집 및 이용에 동의합니다.",policyUrl:""}],
+  cta:{label:"만족도 평가 제출하기",loadLabel:"제출 중...",height:48,bg:"#529DFF",color:"#FFFFFF"},
+  modal:{title:"소중한 의견 감사합니다!",body:"남겨주신 평가는 다음 프로그램을 더 좋게 만드는 데 사용할게요.",btnLabel:"교육과정 더 보러가기",btnUrl:"https://insideout.or.kr/program",btnReplace:false},
+  styles:{theme:"light",fieldH:44,qGap:28,maxW:560,labelGap:12,seniorMode:false},
+  auth:{enabled:true,loginUrl:"/login",errText:"로그인이 필요해요."},
+  brand:"",
+  formType:"survey" as const,
+  kdtFields:undefined,
+}
 // ─── Helpers ──────────────────────────────────────────────────────────────
 let _sb: SupabaseClient|null = null
 function getSB(url?:string,key?:string):SupabaseClient|null {
@@ -1840,6 +1863,23 @@ function Btn({children,onClick,variant="ghost",disabled=false,sm=false,A}:{child
 
 
 // ─── Field type icons ─────────────────────────────────────────────────────
+// 점수 슬라이더(막대를 끌어서 고르는 질문)의 공통 설정.
+// 값은 다른 질문과 똑같이 문자열 숫자("4")로 저장돼서 응답 목록·시트에 그대로 쌓인다.
+const SCALE_MIN_LABEL_DEFAULT = "매우 불만족"
+const SCALE_MAX_LABEL_DEFAULT = "매우 만족"
+function scaleMinOf(field:any){const n=Number(field?.scaleMin);return Number.isFinite(n)?Math.round(n):1}
+function scaleMaxOf(field:any){const min=scaleMinOf(field);const n=Number(field?.scaleMax);const max=Number.isFinite(n)?Math.round(n):5;return max>min?max:min+1}
+// 브라우저마다 range 입력의 막대·손잡이를 따로 꾸며야 해서 인라인 스타일로는 안 된다.
+const SCALE_SLIDER_CSS = `
+.cf-scale{-webkit-appearance:none;appearance:none;width:100%;height:24px;margin:0;background:transparent;outline:none;cursor:pointer;display:block;touch-action:none}
+.cf-scale::-webkit-slider-runnable-track{height:8px;border-radius:999px;background:var(--cf-fill)}
+.cf-scale::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:24px;height:24px;margin-top:-8px;border-radius:50%;background:#fff;border:3px solid var(--cf-thumb);box-shadow:0 2px 8px rgba(0,0,0,.18);transition:transform .12s}
+.cf-scale:active::-webkit-slider-thumb{transform:scale(1.12)}
+.cf-scale::-moz-range-track{height:8px;border-radius:999px;background:var(--cf-fill)}
+.cf-scale::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:#fff;border:3px solid var(--cf-thumb);box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.cf-scale:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px var(--cf-ring)}
+.cf-scale:focus-visible::-moz-range-thumb{box-shadow:0 0 0 4px var(--cf-ring)}
+`
 const FTYPE_ICONS:Record<string,React.ReactNode> = {
   text: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h8M2 12h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>,
   phone: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 2h3l1.5 3.5-1.8 1.1a9 9 0 0 0 3.7 3.7l1.1-1.8L15 10v3a1 1 0 0 1-1 1C5.6 14 2 8.4 2 3a1 1 0 0 1 1-1z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>,
@@ -1854,6 +1894,7 @@ const FTYPE_ICONS:Record<string,React.ReactNode> = {
   time: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4"/><path d="M8 5v3l2 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   name: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.4"/><path d="M2.5 13.5c0-3.038 2.462-5.5 5.5-5.5s5.5 2.462 5.5 5.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>,
   referral: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="5" cy="8" r="2" stroke="currentColor" strokeWidth="1.4"/><circle cx="12" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.4"/><circle cx="12" cy="12" r="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M7 7l3.5-2.5M7 9l3.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
+  scale: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 8h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><circle cx="10" cy="8" r="2.6" stroke="currentColor" strokeWidth="1.4" fill="none"/></svg>,
   ad: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="4" width="12" height="8" rx="2" stroke="currentColor" strokeWidth="1.4"/><path d="M4.5 9.5 6.2 6.5 8 9.5M5.2 8.4h2.2M9.5 6.5h1.1c.9 0 1.5.6 1.5 1.5s-.6 1.5-1.5 1.5H9.5v-3z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
 }
 // 질문 추가 메뉴에서 전용 항목에 호버하면 보여줄 안내.
@@ -1884,6 +1925,7 @@ const FTYPES_DATA:{type:string;label:string;divider?:boolean}[] = [
   {type:"button_select",label:"단일 선택"},
   {type:"checkbox",label:"복수 선택"},
   {type:"dropdown",label:"드롭다운"},
+  {type:"scale",label:"점수 슬라이더"},
   {type:"---2",label:"",divider:true},
   {type:"file",label:"첨부파일"},
   {type:"---3",label:"",divider:true},
@@ -2862,7 +2904,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(!appUpdateAvailable)return null
     // 이전에는 우측 하단에 흰 카드로 떠서 배경에 묻혀 잘 안 보였다.
     // 상단 가운데는 어느 화면에서도 비어 있는 자리라, 작업을 가리지 않으면서 눈에 들어온다.
-    return <div style={{position:"absolute" as const,top:12,left:"50%",zIndex:110000,
+    // 가운데 정렬은 transform 으로 한다. 등장 애니메이션(updateDrop)에만 넣으면 애니메이션이 끝난 뒤 오른쪽으로 치우친다.
+    return <div style={{position:"absolute" as const,top:12,left:"50%",transform:"translateX(-50%)",zIndex:110000,
       display:"flex",alignItems:"center",gap:10,height:44,padding:"0 6px 0 14px",borderRadius:999,
       background:A.blue,color:"#fff",boxShadow:"0 10px 28px -8px rgba(49,130,246,.55)",
       animation:"updateDrop .26s cubic-bezier(.4,0,.2,1)",whiteSpace:"nowrap" as const}}>
@@ -3290,12 +3333,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       edu_biz:DEF_EDU_BIZ,
       company:DEF_COMPANY,
       recruit:DEF_RECRUIT,
+      survey:DEF_SURVEY,
     }
     const base=dc(templates[tpl]||DEF)
     base.brand=brand
     base.cta.bg=ctaBg
     base.dashboard={...(base.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft"}
     if(tpl==="kdt")base.dashboard={...(base.dashboard||{}),formTypeTag:"application"}
+    if(tpl==="survey")base.dashboard={...(base.dashboard||{}),formTypeTag:"survey"}
     const branded=applyBrandDefaults(base,brand)
     setShowTemplateModal(false);setPendingBrand(null)
     upsertEditorTab({key:draftEditorTabKey(),id:"",name:"새 폼",slug:"",brand,cfg:branded,isDraft:true},{resetPanel:true})
@@ -3564,6 +3609,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       date:     {id:"",         label:"날짜를 선택해주세요.",                    placeholder:"",                         required:false},
       time:     {id:"",         label:"시간을 선택해주세요.",                    placeholder:"",                         required:false},
       file:     {id:"",         label:"파일을 첨부해주세요.",                    placeholder:"파일 업로드",              required:false},
+      scale:    {id:"",         label:"만족도를 평가해주세요.",                  placeholder:"",                         required:true},
     }
     const preset = fieldDefs[type]
     const id = preset?.id ? preset.id : "f_"+Date.now()
@@ -3579,6 +3625,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       ]
       extra.placeholder="선택해주세요."
       if(type==="button_select"||type==="checkbox")extra.cols=2
+    }
+    if(type==="scale"){
+      extra.scaleMin=1;extra.scaleMax=5
+      extra.scaleMinLabel=SCALE_MIN_LABEL_DEFAULT;extra.scaleMaxLabel=SCALE_MAX_LABEL_DEFAULT
     }
     const finalType = type==="referral" ? "dropdown" : type
     setCfg(p=>({...p,form:{...p.form,fields:[...p.form.fields,{id,type:finalType,label:defaultLabel,placeholder:defaultPh,page:pvPage,...extra}]}}))
@@ -3972,6 +4022,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(normalized==="SNIPERFACTORY"||normalized==="SFACSPACE")return CATCHFORM_DIRECT_FORM_BASE_URL
     return (formBaseUrl||"").replace(/\/+$/,"")
   }
+  // 로컬 개발 서버에서 "폼 열기"를 누르면 운영 사이트가 열려서, 방금 고친 내용이 보이지 않는다.
+  // 운영 페이지는 만들어 둔 저장본을 최대 1시간 그대로 쓰고, 로컬에서 보낸 새로고침 요청도 로컬에만 닿기 때문이다.
+  // 공유 링크·QR 주소는 그대로 두고, 이 버튼으로 여는 주소만 로컬로 바꾼다.
+  function devPreviewFormUrl(url:string){
+    if(!url||typeof window==="undefined")return url
+    const host=window.location.hostname
+    if(host!=="localhost"&&host!=="127.0.0.1")return url
+    try{
+      const parsed=new URL(url)
+      if(parsed.origin===window.location.origin)return url
+      if(!parsed.pathname.startsWith("/form/"))return url
+      return `${window.location.origin}${parsed.pathname}${parsed.search}`
+    }catch{return url}
+  }
   function buildPublicFormUrl(slug=savedSlug,brand=currentBrand){
     const safeSlug=String(slug||"").trim()
     if(!safeSlug)return""
@@ -3982,7 +4046,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   async function publishAndOpenForm(){
     if(!savedSlug||!loadedId){showToast("폼을 먼저 저장해주세요",false);return}
-    const target=buildPublicFormUrl()
+    const target=devPreviewFormUrl(buildPublicFormUrl())
     if(!target){showToast("브랜드별 배포 페이지 URL을 먼저 설정해주세요",false);return}
     const periodError=unlinkedOperationPeriodError()
     if(periodError){showToast(periodError,false);return}
@@ -4392,9 +4456,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       // 건수를 세지 않고 10페이지씩 한꺼번에 요청한다. 데이터보다 뒤 페이지는 빈 배열로 바로 돌아온다.
       const fetchPage=(page:number)=>Promise.resolve(base().range(page*1000,page*1000+999))
         .then((res:any)=>res?.data||[]).catch(()=>[])
-      const WAVE=10
+      // 예전에는 1000행 조회를 10개씩 동시에 던졌다. 관리자 화면을 여러 명이 켜면
+      // DB 연결 자리가 순식간에 동나서, 같은 DB를 쓰는 CRM·인사이드아웃·스나이퍼팩토리
+      // 로그인까지 전부 막혔다(2026-09-22 장애). 동시 요청 수와 최대 페이지 수를 줄인다.
+      const WAVE=3
+      const MAX_PAGES=12
       const batches:any[][]=[]
-      for(let start=0;start<40;start+=WAVE){
+      for(let start=0;start<MAX_PAGES;start+=WAVE){
         const wave=await Promise.all(Array.from({length:WAVE},(_,i)=>fetchPage(start+i)))
         if(cancelled)return
         batches.push(...wave)
@@ -4454,9 +4522,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const first=await fetchPage(0)
       rows.push(...first)
       if(first.length===1000){
-        // 남은 페이지는 한 장씩 기다리지 않고 동시에 받는다.
-        const rest=await Promise.all([1,2,3,4,5,6,7].map(page=>fetchPage(page).catch(()=>[])))
-        rest.forEach(batch=>rows.push(...batch))
+        // 남은 페이지는 한 장씩 기다리지 않고 동시에 받되, 한 번에 3개까지만 던진다.
+        // 동시 요청이 많으면 DB 연결 자리를 다 써서 로그인까지 막힌다(2026-09-22 장애).
+        for(const group of [[1,2,3],[4,5,6],[7]]){
+          const rest=await Promise.all(group.map(page=>fetchPage(page).catch(()=>[])))
+          rest.forEach(batch=>rows.push(...batch))
+          if(rest[rest.length-1].length<1000)break
+        }
       }
       const isBotRow=(row:any)=>{
         const ua=String(row.ua||"").toLowerCase()
@@ -6449,6 +6521,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 {id:"recruit" as const,
                   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke={A.t2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><circle cx="12" cy="7" r="4" stroke={A.t2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>,
                   label:"채용 폼", desc:"입사 지원자를 모집하는 채용 신청폼"},
+                {id:"survey" as const,
+                  icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 3.5l2.6 5.27 5.82.85-4.21 4.1.99 5.78L12 16.77l-5.2 2.73.99-5.78-4.21-4.1 5.82-.85z" stroke={A.t2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+                  label:"만족도 조사 설문폼", desc:"점수와 의견으로 만족도를 평가받는 설문 폼"},
                 {id:"blank" as const,
                   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" stroke={A.t2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>,
                   label:"빈 템플릿", desc:"아무것도 없이 처음부터 직접 만들어나가는 폼"},
@@ -7531,6 +7606,24 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     <div style={{padding:"10px 12px"}}><F label="선택 안내 문구" hint="아무것도 선택하지 않았을 때 표시됩니다" A={A}><TIn value={(field as any).placeholder||"선택해주세요."} onChange={v=>patchActiveField(idx,{placeholder:v})} A={A}/></F></div>}
                   {(field as any).type==="file"&&
                     <div style={{padding:"10px 12px"}}><F label="버튼 안내 문구" hint={FILE_LIMIT_TEXT} A={A}><TIn value={(field as any).placeholder||"파일 업로드"} onChange={v=>patchActiveField(idx,{placeholder:v})} A={A}/></F></div>}
+                  {(field as any).type==="scale"&&(()=>{
+                    const sMin=scaleMinOf(field),sMax=scaleMaxOf(field)
+                    return <div style={{padding:"10px 12px"}}>
+                      <F label="점수 범위" hint="예) 1 ~ 5로 두면 5단계 만족도가 됩니다. 최대 11단계까지 눈금 숫자가 표시돼요." A={A}>
+                        <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto minmax(0,1fr)",gap:8,alignItems:"center"}}>
+                          <TIn type="number" value={String(sMin)} onChange={v=>patchActiveField(idx,{scaleMin:Math.round(Number(v)||0)})} A={A}/>
+                          <span style={{fontSize:12.5,fontWeight:700,color:A.t3,fontFamily:FONT}}>~</span>
+                          <TIn type="number" value={String(sMax)} onChange={v=>patchActiveField(idx,{scaleMax:Math.round(Number(v)||0)})} A={A}/>
+                        </div>
+                      </F>
+                      <F label="왼쪽 끝 설명" hint="비워두면 표시되지 않아요." A={A}>
+                        <TIn value={(field as any).scaleMinLabel??""} onChange={v=>patchActiveField(idx,{scaleMinLabel:v})} placeholder={SCALE_MIN_LABEL_DEFAULT} A={A}/>
+                      </F>
+                      <F label="오른쪽 끝 설명" hint="비워두면 표시되지 않아요." A={A}>
+                        <TIn value={(field as any).scaleMaxLabel??""} onChange={v=>patchActiveField(idx,{scaleMaxLabel:v})} placeholder={SCALE_MAX_LABEL_DEFAULT} A={A}/>
+                      </F>
+                    </div>
+                  })()}
                   {(field as any).type==="date"&&(()=>{
                     const nowYear=new Date().getFullYear()
                     const legacyYear=birthYearLimitOf(field)
@@ -8280,6 +8373,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             {type:"date" as FieldType,label:"날짜"},
             {type:"dropdown" as FieldType,label:"드롭다운"},
             {type:"button_select" as FieldType,label:"버튼 선택"},
+            {type:"scale" as FieldType,label:"점수 슬라이더"},
             {type:"checkbox" as FieldType,label:"체크박스"},
             {type:"textarea" as FieldType,label:"장문 입력"},
           ]
@@ -8612,6 +8706,36 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                   placeholder={field.etcPh||"직접 입력해주세요."} style={inp}
                   onFocus={e=>e.target.style.borderColor=accentC} onBlur={e=>e.target.style.borderColor=FC.fieldBorder}/>
               </div>}
+              </div>
+            })()}
+            {field.type==="scale"&&(()=>{
+              const sMin=scaleMinOf(field),sMax=scaleMaxOf(field)
+              const picked=String(val||"").trim()!==""&&Number.isFinite(Number(val))
+              const cur=picked?Math.min(sMax,Math.max(sMin,Math.round(Number(val)))):Math.round((sMin+sMax)/2)
+              const pct=((cur-sMin)/(sMax-sMin))*100
+              const barC=picked?accentC:FC.fieldBorder
+              const minLabel=(field as any).scaleMinLabel??""
+              const maxLabel=(field as any).scaleMaxLabel??""
+              const ticks=sMax-sMin<=10?Array.from({length:sMax-sMin+1},(_,i)=>sMin+i):[]
+              return <div>
+                <style>{SCALE_SLIDER_CSS}</style>
+                <div style={{display:"flex",alignItems:"baseline",justifyContent:"center",gap:3,marginBottom:10,minHeight:fs(28)}}>
+                  {picked
+                    ? <><span style={{fontSize:fs(26),fontWeight:700,color:accentC,lineHeight:1.1,fontFamily:FONT}}>{cur}</span>
+                        <span style={{fontSize:fs(13),fontWeight:600,color:accentC,fontFamily:FONT}}>점</span></>
+                    : <span style={{fontSize:fs(13),color:FC.t3,fontFamily:FONT}}>막대를 끌어서 점수를 선택해주세요.</span>}
+                </div>
+                <input type="range" className="cf-scale" min={sMin} max={sMax} step={1} value={cur}
+                  onPointerDown={()=>{if(!picked)setVal(String(cur))}}
+                  onChange={e=>setVal(e.target.value)}
+                  style={{"--cf-fill":`linear-gradient(90deg, ${barC} 0%, ${barC} ${pct}%, ${FC.fieldBorder} ${pct}%, ${FC.fieldBorder} 100%)`,"--cf-thumb":picked?accentC:FC.t3,"--cf-ring":accentC+"33"} as React.CSSProperties}/>
+                {!!ticks.length&&<div style={{display:"flex",justifyContent:"space-between",padding:"0 2px",marginTop:6}}>
+                  {ticks.map(n=><span key={n} style={{fontSize:fs(11),fontFamily:FONT,fontWeight:picked&&n===cur?700:500,color:picked&&n===cur?accentC:FC.t3}}>{n}</span>)}
+                </div>}
+                {(minLabel||maxLabel)&&<div style={{display:"flex",justifyContent:"space-between",gap:10,marginTop:6}}>
+                  <span style={{fontSize:fs(11.5),color:FC.t3,fontFamily:FONT}}>{minLabel}</span>
+                  <span style={{fontSize:fs(11.5),color:FC.t3,fontFamily:FONT,textAlign:"right" as const}}>{maxLabel}</span>
+                </div>}
               </div>
             })()}
             {field.type==="checkbox"&&(()=>{
@@ -10803,6 +10927,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                 {id:"recruit" as const,
                   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke={A.t2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><circle cx="12" cy="7" r="4" stroke={A.t2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>,
                   label:"채용 폼", desc:"입사 지원자를 모집하는 채용 신청폼"},
+                {id:"survey" as const,
+                  icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 3.5l2.6 5.27 5.82.85-4.21 4.1.99 5.78L12 16.77l-5.2 2.73.99-5.78-4.21-4.1 5.82-.85z" stroke={A.t2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+                  label:"만족도 조사 설문폼", desc:"점수와 의견으로 만족도를 평가받는 설문 폼"},
                 {id:"blank" as const,
                   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" stroke={A.t2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>,
                   label:"빈 템플릿", desc:"아무것도 없이 처음부터 직접 만들어나가는 폼"},

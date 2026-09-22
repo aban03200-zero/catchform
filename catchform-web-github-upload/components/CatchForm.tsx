@@ -48,7 +48,10 @@ type OperationPeriodType = "range"|"single"
 type OperationPeriod = { id:string; type:OperationPeriodType; label?:string; start?:string; end?:string; date?:string; enabled?:boolean }
 type EducationScheduleType = "range"|"single"
 type EducationSchedule = { id:string; type:EducationScheduleType; label?:string; start?:string; end?:string; date?:string }
-type FieldType = "text"|"name"|"email"|"phone"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"|"ad"
+type FieldType = "text"|"name"|"email"|"phone"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"|"ad"|"scale"
+// 점수 슬라이더(막대를 끌어서 고르는 질문). 값은 다른 질문처럼 문자열 숫자("4")로 저장된다.
+function scaleMinOf(field: any) { const n = Number(field?.scaleMin); return Number.isFinite(n) ? Math.round(n) : 1 }
+function scaleMaxOf(field: any) { const min = scaleMinOf(field); const n = Number(field?.scaleMax); const max = Number.isFinite(n) ? Math.round(n) : 5; return max > min ? max : min + 1 }
 type FormField = {
     id: string; type: FieldType; label: string; placeholder?: string
     helper?: string; helpers?: HelperItem[]; required?: boolean
@@ -58,6 +61,7 @@ type FormField = {
     adMode?: AdMode; adMainText?: string; adSubText?: string; adElementText?: string; adElementImageUrl?: string; adHref?: string; adBg?: string; adTextColor?: string
     birthYearLimitEnabled?: boolean; birthYearLimitYear?: number | string; birthYearLimitMessage?: string
     birthDateRangeEnabled?: boolean; birthDateRangeStart?: string; birthDateRangeEnd?: string; birthDateRangeMessage?: string
+    scaleMin?: number; scaleMax?: number; scaleMinLabel?: string; scaleMaxLabel?: string
 }
 type FormAdConfig = {
     enabled: boolean; adMode: AdMode
@@ -92,7 +96,7 @@ type Cfg = {
     integrations?: { googleSheets?: { enabled: boolean; mode: "existing"|"new"; accountEmail: string; sheetUrl: string; sheetName: string; tabName?: string; createdSheetName?: string; webhookUrl: string; lastSyncStatus?: "idle"|"sent"|"error"; lastSyncAt?: string; lastSyncMessage?: string } }
     dashboard?: { isPublished?: boolean; publishedAt?: string; operationStart?: string; operationEnd?: string; operationPeriods?: OperationPeriod[]; alwaysOpen?: boolean }
     brand: string
-    formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"
+    formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"|"survey"
     kdtFields?: KdtField[]
 }
 
@@ -194,6 +198,20 @@ function isCompanyApplicationConfig(config: any) {
 }
 
 const SNIPERFACTORY_AUTH_SUFFIX = ".sniperfactory"
+
+// 로그인 모달에서 안내할 브랜드별 회원가입·다른 로그인 방법 주소.
+// 폼은 catchform 주소에서 열려서 "/login" 같은 상대 주소를 쓰면 없는 페이지(404)로 간다.
+const BRAND_AUTH_LINKS: Record<string, { signupUrl: string; altLoginUrl?: string; altLoginLabel?: string }> = {
+    SNIPERFACTORY: {
+        signupUrl: "https://sniperfactory.com/signup",
+        altLoginUrl: "https://sniperfactory.com/login",
+        altLoginLabel: "카카오톡으로 로그인하기",
+    },
+    INSIDEOUT: { signupUrl: "https://insideout.or.kr/signup" },
+}
+function brandAuthLinks(brand: string) {
+    return BRAND_AUTH_LINKS[String(brand || "").trim().toUpperCase()] || null
+}
 
 function authLoginEmail(email: string, brand: string) {
     const raw = email.trim()
@@ -353,7 +371,9 @@ function postAppsScriptPayload(url: string, payload: any, opts: { allowDirectFal
         } catch {}
         throw Object.assign(new Error(message), { noDirectFallback: true })
     }).catch((err) => {
-        if (allowDirectFallback && !(err as any)?.noDirectFallback && typeof window !== "undefined") return directPost()
+        // 여기로 오는 건 대부분 "보내긴 했는데 응답을 못 받은" 경우다.
+        // 그때 다시 보내면 Apps Script가 이미 쓴 행을 한 번 더 써서 시트에 같은 응답이 두 줄 남는다.
+        // 직접 전송은 원래 의도대로 /api/google-sheets 경로가 없을 때(404)만 쓴다.
         throw err
     })
 }
@@ -852,6 +872,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const [authEmail, setAuthEmail] = React.useState("")
     const [authPw, setAuthPw] = React.useState("")
     const [authErr, setAuthErr] = React.useState("")
+    const [signupOpen, setSignupOpen] = React.useState(false)
+    const [signupNotice, setSignupNotice] = React.useState("")
     const [authLoading, setAuthLoading] = React.useState(false)
     const [geoMeta, setGeoMeta] = React.useState<Record<string, string>>({})
     const [geoLoaded, setGeoLoaded] = React.useState(false)
@@ -888,8 +910,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     }, [cfg.brand, isFormalApplication])
     React.useEffect(() => {
         // 봇 방문은 캐치폼 분석과 똑같이 회사 GA에도 보내지 않는다.
-        if (!isBotClient()) initGoogleTag()
-    }, [])
+        if (!isBotClient()) initGoogleTag(cfg.brand)
+    }, [cfg.brand])
 
     const setVal = (id: string, v: string) => setVals(p => ({ ...p, [id]: v }))
     const setErr = (id: string, msg: string) => setErrors(p => ({ ...p, [id]: msg }))
@@ -1094,9 +1116,11 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         }
         if (!supa) return
         if (statusMode) {
-            supa.from("form_response_events").upsert(payload as any, { onConflict: "id" }).then(({ error }) => {
-                if (error) supa.from("form_response_events").insert(basePayload).then(() => {})
-            })
+            // 임시저장·이탈은 한 세션당 한 줄을 계속 덮어쓰는 기록이다.
+            // 예전에는 덮어쓰기가 실패하면 새 줄을 넣어 되살렸는데,
+            // 권한 문제로 덮어쓰기가 계속 실패하자 0.9초마다 새 줄이 쌓여 10만 건이 됐고 DB가 멈췄다.
+            // 실패하면 그냥 넘긴다. 이 기록 하나가 빠지는 것보다 DB가 버티는 게 중요하다.
+            supa.from("form_response_events").upsert(payload as any, { onConflict: "id" }).then(() => {})
             return
         }
         supa.from("form_response_events").insert(payload).then(() => {})
@@ -1639,7 +1663,9 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     React.useEffect(() => {
         if (!draftLoadedRef.current) return
         if (remoteDraftTimerRef.current) window.clearTimeout(remoteDraftTimerRef.current)
-        remoteDraftTimerRef.current = window.setTimeout(() => saveRemoteDraft(false), 900)
+        // 0.9초는 타이핑 도중에도 계속 전송이 걸린다. 임시저장은 실시간일 필요가 없고,
+        // 페이지를 넘기거나 창을 닫을 때 따로 한 번 더 저장하므로 3초로 늦춰 전송량을 줄인다.
+        remoteDraftTimerRef.current = window.setTimeout(() => saveRemoteDraft(false), 3000)
         return () => {
             if (remoteDraftTimerRef.current) window.clearTimeout(remoteDraftTimerRef.current)
         }
@@ -2330,6 +2356,39 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 </div>
             })()}
 
+            {/* Scale slider */}
+            {f.type === "scale" && (() => {
+                const sMin = scaleMinOf(f), sMax = scaleMaxOf(f)
+                const picked = String(val || "").trim() !== "" && Number.isFinite(Number(val))
+                const cur = picked ? Math.min(sMax, Math.max(sMin, Math.round(Number(val)))) : Math.round((sMin + sMax) / 2)
+                const pct = ((cur - sMin) / (sMax - sMin)) * 100
+                const barC = picked ? accentBg : FC.fieldBorder
+                const minLabel = f.scaleMinLabel ?? ""
+                const maxLabel = f.scaleMaxLabel ?? ""
+                const ticks = sMax - sMin <= 10 ? Array.from({ length: sMax - sMin + 1 }, (_, i) => sMin + i) : []
+                const commit = (next: number) => { trackFieldTouch(f); setVal(f.id, String(next)); clearErr(f.id) }
+                return <div>
+                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 3, marginBottom: 10, minHeight: fs(28) }}>
+                        {picked
+                            ? <><span style={{ fontSize: fs(26), fontWeight: 700, color: accentBg, lineHeight: 1.1 }}>{cur}</span>
+                                <span style={{ fontSize: fs(13), fontWeight: 600, color: accentBg }}>점</span></>
+                            : <span style={{ fontSize: fs(13), color: fieldErr ? FC.red : FC.t3 }}>막대를 끌어서 점수를 선택해주세요.</span>}
+                    </div>
+                    {/* 손잡이를 처음 누른 자리에서 값이 바뀌지 않는 경우(가운데를 그대로 누른 경우)에도 선택으로 인정한다. */}
+                    <input type="range" className="cf-scale" min={sMin} max={sMax} step={1} value={cur}
+                        onPointerDown={() => { if (!picked) commit(cur) }}
+                        onChange={e => commit(Number(e.target.value))}
+                        style={{ "--cf-fill": `linear-gradient(90deg, ${barC} 0%, ${barC} ${pct}%, ${FC.fieldBorder} ${pct}%, ${FC.fieldBorder} 100%)`, "--cf-thumb": picked ? accentBg : FC.t3, "--cf-ring": accentBg + "33" } as React.CSSProperties} />
+                    {!!ticks.length && <div style={{ display: "flex", justifyContent: "space-between", padding: "0 2px", marginTop: 6 }}>
+                        {ticks.map(n => <span key={n} style={{ fontSize: fs(11), fontWeight: picked && n === cur ? 700 : 500, color: picked && n === cur ? accentBg : FC.t3 }}>{n}</span>)}
+                    </div>}
+                    {(minLabel || maxLabel) && <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 6 }}>
+                        <span style={{ fontSize: fs(11.5), color: FC.t3 }}>{minLabel}</span>
+                        <span style={{ fontSize: fs(11.5), color: FC.t3, textAlign: "right" }}>{maxLabel}</span>
+                    </div>}
+                </div>
+            })()}
+
             {/* Checkbox */}
             {f.type === "checkbox" && (() => {
                 const checkedVals = checked[f.id] || []
@@ -2463,7 +2522,15 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
     return (
         <div style={{ width: "100%", minHeight: "100vh", background: FC.bg, color: FC.t1, "--link-color": accentBg } as React.CSSProperties}>
-            <style>{`@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css'); body,html{background:${FC.bg}!important;margin:0;}`}</style>
+            <style>{`@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css'); body,html{background:${FC.bg}!important;margin:0;}
+.cf-scale{-webkit-appearance:none;appearance:none;width:100%;height:24px;margin:0;background:transparent;outline:none;cursor:pointer;display:block;touch-action:none}
+.cf-scale::-webkit-slider-runnable-track{height:8px;border-radius:999px;background:var(--cf-fill)}
+.cf-scale::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:24px;height:24px;margin-top:-8px;border-radius:50%;background:#fff;border:3px solid var(--cf-thumb);box-shadow:0 2px 8px rgba(0,0,0,.18);transition:transform .12s}
+.cf-scale:active::-webkit-slider-thumb{transform:scale(1.12)}
+.cf-scale::-moz-range-track{height:8px;border-radius:999px;background:var(--cf-fill)}
+.cf-scale::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:#fff;border:3px solid var(--cf-thumb);box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.cf-scale:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px var(--cf-ring)}
+.cf-scale:focus-visible::-moz-range-thumb{box-shadow:0 0 0 4px var(--cf-ring)}`}</style>
             <button onClick={() => setShareMenuOpen(v => !v)} title="폼 공유하기"
                 style={{ position: "fixed", right: 20, bottom: 20, zIndex: 900, height: seniorMode ? 50 : 44, padding: "0 15px", borderRadius: 999, border: `1px solid ${accentBg}33`, background: accentBg, color: cfg.cta.color || "#fff", boxShadow: "0 10px 28px rgba(0,0,0,0.18)", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontFamily: FONT, fontSize: fs(13.5), fontWeight:600 }}>
                 <svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M8 10V2.8M5.3 5.5 8 2.8l2.7 2.7M3 7.5v4.8c0 .7.5 1.2 1.2 1.2h7.6c.7 0 1.2-.5 1.2-1.2V7.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -2510,11 +2577,54 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                         style={{ width: "100%", height: seniorFieldHeight(seniorMode, 48), borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: fs(14), fontWeight:600, cursor: authLoading ? "not-allowed" : "pointer", opacity: authLoading ? 0.7 : 1 }}>
                         {authLoading ? "로그인 중..." : "로그인"}
                     </button>
-                    {cfg.auth.loginUrl && <div style={{ marginTop: 12, textAlign: "center" as const }}>
-                        <a href={cfg.auth.loginUrl} style={{ fontSize: fs(12), color: FC.t3, fontFamily: FONT }}>다른 방법으로 로그인</a>
-                    </div>}
+                    {(() => {
+                        const links = brandAuthLinks(cfg.brand)
+                        // 브랜드 안내가 없으면 관리자가 넣어둔 전체 주소만 쓴다. 상대 주소는 404가 나므로 보여주지 않는다.
+                        const altUrl = links?.altLoginUrl || (/^https?:\/\//i.test(cfg.auth.loginUrl || "") ? cfg.auth.loginUrl : "")
+                        const altLabel = links?.altLoginLabel || "다른 방법으로 로그인"
+                        const signupUrl = links?.signupUrl || ""
+                        if (!altUrl && !signupUrl) return null
+                        const linkStyle = { fontSize: fs(12.5), color: accentText, fontFamily: FONT, fontWeight: 600, textDecoration: "none" } as React.CSSProperties
+                        return <div style={{ marginTop: 16, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                            {altUrl && <a href={altUrl} target="_blank" rel="noopener noreferrer"
+                                style={{ ...linkStyle, width: "100%", height: seniorFieldHeight(seniorMode, 44), borderRadius: fr, border: `1px solid ${FC.fieldBorder}`, display: "flex", alignItems: "center", justifyContent: "center", color: FC.t1 }}>{altLabel}</a>}
+                            {signupUrl && <div style={{ fontSize: fs(12.5), color: FC.t3, fontFamily: FONT }}>
+                                회원이 아니신가요? <button onClick={() => { setAuthErr(""); setSignupNotice(""); setSignupOpen(true) }}
+                                    style={{ ...linkStyle, border: "none", background: "transparent", padding: 0, cursor: "pointer" }}>회원가입</button>
+                            </div>}
+                            {!!signupNotice && <div style={{ fontSize: fs(12), color: accentText, lineHeight: 1.6, textAlign: "center", padding: "9px 12px", borderRadius: fr, background: accentBg + "0f", border: `1px solid ${accentBg}33`, fontFamily: FONT }}>{signupNotice}</div>}
+                        </div>
+                    })()}
                 </div>
             </div>}
+            {/* 회원가입 모달 — 브랜드 사이트의 가입 화면을 그대로 띄운다.
+                새 탭으로 보내면 응답하던 폼에서 벗어나게 되어, 창 안에서 끝내고 바로 로그인할 수 있게 한다. */}
+            {signupOpen && (() => {
+                const signupUrl = brandAuthLinks(cfg.brand)?.signupUrl || ""
+                if (!signupUrl) return null
+                const close = () => { setSignupOpen(false); setSignupNotice("가입을 마치셨다면 이메일과 비밀번호로 로그인해주세요.") }
+                return <div onClick={e => { if (e.target === e.currentTarget) close() }}
+                    style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, boxSizing: "border-box" }}>
+                    {/* 브랜드 가입 화면이 PC 기준으로 만들어져 있어, 창이 좁으면 글자가 겹쳐 보인다. 화면이 허락하는 만큼 넓게 띄운다. */}
+                    <div style={{ width: "100%", maxWidth: 920, height: "min(780px, 100%)", borderRadius: 16, overflow: "hidden", background: "#fff", boxShadow: "0 24px 64px -12px rgba(0,0,0,0.45)", display: "flex", flexDirection: "column" }}>
+                        <div style={{ flexShrink: 0, height: 48, display: "flex", alignItems: "center", gap: 8, padding: "0 8px 0 16px", borderBottom: "1px solid #EDEFF3", background: "#fff" }}>
+                            <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: "#15181D", fontFamily: FONT }}>회원가입</span>
+                            <button onClick={close} aria-label="닫기"
+                                style={{ width: 32, height: 32, flexShrink: 0, border: "none", borderRadius: 8, background: "transparent", color: "#8D95A3", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                                <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+                            </button>
+                        </div>
+                        <iframe src={signupUrl} title="회원가입" style={{ flex: 1, width: "100%", border: 0, display: "block" }} />
+                        <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "10px 12px 10px 16px", borderTop: "1px solid #EDEFF3", background: "#FAFBFC" }}>
+                            <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: "#8D95A3", lineHeight: 1.5, fontFamily: FONT }}>가입을 마치셨나요?</span>
+                            <button onClick={close}
+                                style={{ flexShrink: 0, height: 32, padding: "0 12px", border: "none", borderRadius: 8, background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+                                로그인하러 가기
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            })()}
             <div style={{ width: "100%", maxWidth: cfg.styles.maxW, margin: "0 auto", fontFamily: FONT, padding: seniorMode ? "44px 20px 88px" : "40px 20px 80px", boxSizing: "border-box" as const }}>
             {operationGate && <div style={{ marginBottom: 18, padding: "13px 14px", borderRadius: fr, background: `${FC.red}0f`, border: `1px solid ${FC.red}30`, color: FC.red, fontFamily: FONT }}>
                 <div style={{ fontSize: fs(13.5), fontWeight: 600, marginBottom: 4 }}>{operationGate.title}</div>
