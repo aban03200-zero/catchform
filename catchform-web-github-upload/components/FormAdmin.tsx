@@ -4022,6 +4022,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(normalized==="SNIPERFACTORY"||normalized==="SFACSPACE")return CATCHFORM_DIRECT_FORM_BASE_URL
     return (formBaseUrl||"").replace(/\/+$/,"")
   }
+  // 로컬 개발 서버에서 "폼 열기"를 누르면 운영 사이트가 열려서, 방금 고친 내용이 보이지 않는다.
+  // 운영 페이지는 만들어 둔 저장본을 최대 1시간 그대로 쓰고, 로컬에서 보낸 새로고침 요청도 로컬에만 닿기 때문이다.
+  // 공유 링크·QR 주소는 그대로 두고, 이 버튼으로 여는 주소만 로컬로 바꾼다.
+  function devPreviewFormUrl(url:string){
+    if(!url||typeof window==="undefined")return url
+    const host=window.location.hostname
+    if(host!=="localhost"&&host!=="127.0.0.1")return url
+    try{
+      const parsed=new URL(url)
+      if(parsed.origin===window.location.origin)return url
+      if(!parsed.pathname.startsWith("/form/"))return url
+      return `${window.location.origin}${parsed.pathname}${parsed.search}`
+    }catch{return url}
+  }
   function buildPublicFormUrl(slug=savedSlug,brand=currentBrand){
     const safeSlug=String(slug||"").trim()
     if(!safeSlug)return""
@@ -4032,7 +4046,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   async function publishAndOpenForm(){
     if(!savedSlug||!loadedId){showToast("폼을 먼저 저장해주세요",false);return}
-    const target=buildPublicFormUrl()
+    const target=devPreviewFormUrl(buildPublicFormUrl())
     if(!target){showToast("브랜드별 배포 페이지 URL을 먼저 설정해주세요",false);return}
     const periodError=unlinkedOperationPeriodError()
     if(periodError){showToast(periodError,false);return}
