@@ -908,8 +908,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     }, [cfg.brand, isFormalApplication])
     React.useEffect(() => {
         // 봇 방문은 캐치폼 분석과 똑같이 회사 GA에도 보내지 않는다.
-        if (!isBotClient()) initGoogleTag()
-    }, [])
+        if (!isBotClient()) initGoogleTag(cfg.brand)
+    }, [cfg.brand])
 
     const setVal = (id: string, v: string) => setVals(p => ({ ...p, [id]: v }))
     const setErr = (id: string, msg: string) => setErrors(p => ({ ...p, [id]: msg }))
