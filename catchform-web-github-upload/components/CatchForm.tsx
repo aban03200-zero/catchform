@@ -199,6 +199,20 @@ function isCompanyApplicationConfig(config: any) {
 
 const SNIPERFACTORY_AUTH_SUFFIX = ".sniperfactory"
 
+// 로그인 모달에서 안내할 브랜드별 회원가입·다른 로그인 방법 주소.
+// 폼은 catchform 주소에서 열려서 "/login" 같은 상대 주소를 쓰면 없는 페이지(404)로 간다.
+const BRAND_AUTH_LINKS: Record<string, { signupUrl: string; altLoginUrl?: string; altLoginLabel?: string }> = {
+    SNIPERFACTORY: {
+        signupUrl: "https://sniperfactory.com/signup",
+        altLoginUrl: "https://sniperfactory.com/login",
+        altLoginLabel: "카카오톡으로 로그인하기",
+    },
+    INSIDEOUT: { signupUrl: "https://insideout.or.kr/signup" },
+}
+function brandAuthLinks(brand: string) {
+    return BRAND_AUTH_LINKS[String(brand || "").trim().toUpperCase()] || null
+}
+
 function authLoginEmail(email: string, brand: string) {
     const raw = email.trim()
     const normalizedBrand = String(brand || "").trim().toUpperCase()
@@ -856,6 +870,8 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const [authEmail, setAuthEmail] = React.useState("")
     const [authPw, setAuthPw] = React.useState("")
     const [authErr, setAuthErr] = React.useState("")
+    const [signupOpen, setSignupOpen] = React.useState(false)
+    const [signupNotice, setSignupNotice] = React.useState("")
     const [authLoading, setAuthLoading] = React.useState(false)
     const [geoMeta, setGeoMeta] = React.useState<Record<string, string>>({})
     const [geoLoaded, setGeoLoaded] = React.useState(false)
@@ -2559,11 +2575,54 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                         style={{ width: "100%", height: seniorFieldHeight(seniorMode, 48), borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: fs(14), fontWeight:600, cursor: authLoading ? "not-allowed" : "pointer", opacity: authLoading ? 0.7 : 1 }}>
                         {authLoading ? "로그인 중..." : "로그인"}
                     </button>
-                    {cfg.auth.loginUrl && <div style={{ marginTop: 12, textAlign: "center" as const }}>
-                        <a href={cfg.auth.loginUrl} style={{ fontSize: fs(12), color: FC.t3, fontFamily: FONT }}>다른 방법으로 로그인</a>
-                    </div>}
+                    {(() => {
+                        const links = brandAuthLinks(cfg.brand)
+                        // 브랜드 안내가 없으면 관리자가 넣어둔 전체 주소만 쓴다. 상대 주소는 404가 나므로 보여주지 않는다.
+                        const altUrl = links?.altLoginUrl || (/^https?:\/\//i.test(cfg.auth.loginUrl || "") ? cfg.auth.loginUrl : "")
+                        const altLabel = links?.altLoginLabel || "다른 방법으로 로그인"
+                        const signupUrl = links?.signupUrl || ""
+                        if (!altUrl && !signupUrl) return null
+                        const linkStyle = { fontSize: fs(12.5), color: accentText, fontFamily: FONT, fontWeight: 600, textDecoration: "none" } as React.CSSProperties
+                        return <div style={{ marginTop: 16, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                            {altUrl && <a href={altUrl} target="_blank" rel="noopener noreferrer"
+                                style={{ ...linkStyle, width: "100%", height: seniorFieldHeight(seniorMode, 44), borderRadius: fr, border: `1px solid ${FC.fieldBorder}`, display: "flex", alignItems: "center", justifyContent: "center", color: FC.t1 }}>{altLabel}</a>}
+                            {signupUrl && <div style={{ fontSize: fs(12.5), color: FC.t3, fontFamily: FONT }}>
+                                회원이 아니신가요? <button onClick={() => { setAuthErr(""); setSignupNotice(""); setSignupOpen(true) }}
+                                    style={{ ...linkStyle, border: "none", background: "transparent", padding: 0, cursor: "pointer" }}>회원가입</button>
+                            </div>}
+                            {!!signupNotice && <div style={{ fontSize: fs(12), color: accentText, lineHeight: 1.6, textAlign: "center", padding: "9px 12px", borderRadius: fr, background: accentBg + "0f", border: `1px solid ${accentBg}33`, fontFamily: FONT }}>{signupNotice}</div>}
+                        </div>
+                    })()}
                 </div>
             </div>}
+            {/* 회원가입 모달 — 브랜드 사이트의 가입 화면을 그대로 띄운다.
+                새 탭으로 보내면 응답하던 폼에서 벗어나게 되어, 창 안에서 끝내고 바로 로그인할 수 있게 한다. */}
+            {signupOpen && (() => {
+                const signupUrl = brandAuthLinks(cfg.brand)?.signupUrl || ""
+                if (!signupUrl) return null
+                const close = () => { setSignupOpen(false); setSignupNotice("가입을 마치셨다면 이메일과 비밀번호로 로그인해주세요.") }
+                return <div onClick={e => { if (e.target === e.currentTarget) close() }}
+                    style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, boxSizing: "border-box" }}>
+                    {/* 브랜드 가입 화면이 PC 기준으로 만들어져 있어, 창이 좁으면 글자가 겹쳐 보인다. 화면이 허락하는 만큼 넓게 띄운다. */}
+                    <div style={{ width: "100%", maxWidth: 920, height: "min(780px, 100%)", borderRadius: 16, overflow: "hidden", background: "#fff", boxShadow: "0 24px 64px -12px rgba(0,0,0,0.45)", display: "flex", flexDirection: "column" }}>
+                        <div style={{ flexShrink: 0, height: 48, display: "flex", alignItems: "center", gap: 8, padding: "0 8px 0 16px", borderBottom: "1px solid #EDEFF3", background: "#fff" }}>
+                            <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: "#15181D", fontFamily: FONT }}>회원가입</span>
+                            <button onClick={close} aria-label="닫기"
+                                style={{ width: 32, height: 32, flexShrink: 0, border: "none", borderRadius: 8, background: "transparent", color: "#8D95A3", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                                <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+                            </button>
+                        </div>
+                        <iframe src={signupUrl} title="회원가입" style={{ flex: 1, width: "100%", border: 0, display: "block" }} />
+                        <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "10px 12px 10px 16px", borderTop: "1px solid #EDEFF3", background: "#FAFBFC" }}>
+                            <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: "#8D95A3", lineHeight: 1.5, fontFamily: FONT }}>가입을 마치셨나요?</span>
+                            <button onClick={close}
+                                style={{ flexShrink: 0, height: 32, padding: "0 12px", border: "none", borderRadius: 8, background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+                                로그인하러 가기
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            })()}
             <div style={{ width: "100%", maxWidth: cfg.styles.maxW, margin: "0 auto", fontFamily: FONT, padding: seniorMode ? "44px 20px 88px" : "40px 20px 80px", boxSizing: "border-box" as const }}>
             {operationGate && <div style={{ marginBottom: 18, padding: "13px 14px", borderRadius: fr, background: `${FC.red}0f`, border: `1px solid ${FC.red}30`, color: FC.red, fontFamily: FONT }}>
                 <div style={{ fontSize: fs(13.5), fontWeight: 600, marginBottom: 4 }}>{operationGate.title}</div>
