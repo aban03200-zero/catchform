@@ -371,7 +371,9 @@ function postAppsScriptPayload(url: string, payload: any, opts: { allowDirectFal
         } catch {}
         throw Object.assign(new Error(message), { noDirectFallback: true })
     }).catch((err) => {
-        if (allowDirectFallback && !(err as any)?.noDirectFallback && typeof window !== "undefined") return directPost()
+        // 여기로 오는 건 대부분 "보내긴 했는데 응답을 못 받은" 경우다.
+        // 그때 다시 보내면 Apps Script가 이미 쓴 행을 한 번 더 써서 시트에 같은 응답이 두 줄 남는다.
+        // 직접 전송은 원래 의도대로 /api/google-sheets 경로가 없을 때(404)만 쓴다.
         throw err
     })
 }
