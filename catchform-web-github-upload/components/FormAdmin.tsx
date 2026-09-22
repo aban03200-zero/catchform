@@ -2904,7 +2904,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(!appUpdateAvailable)return null
     // 이전에는 우측 하단에 흰 카드로 떠서 배경에 묻혀 잘 안 보였다.
     // 상단 가운데는 어느 화면에서도 비어 있는 자리라, 작업을 가리지 않으면서 눈에 들어온다.
-    return <div style={{position:"absolute" as const,top:12,left:"50%",zIndex:110000,
+    // 가운데 정렬은 transform 으로 한다. 등장 애니메이션(updateDrop)에만 넣으면 애니메이션이 끝난 뒤 오른쪽으로 치우친다.
+    return <div style={{position:"absolute" as const,top:12,left:"50%",transform:"translateX(-50%)",zIndex:110000,
       display:"flex",alignItems:"center",gap:10,height:44,padding:"0 6px 0 14px",borderRadius:999,
       background:A.blue,color:"#fff",boxShadow:"0 10px 28px -8px rgba(49,130,246,.55)",
       animation:"updateDrop .26s cubic-bezier(.4,0,.2,1)",whiteSpace:"nowrap" as const}}>
