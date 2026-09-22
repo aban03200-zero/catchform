@@ -48,7 +48,10 @@ type OperationPeriodType = "range"|"single"
 type OperationPeriod = { id:string; type:OperationPeriodType; label?:string; start?:string; end?:string; date?:string; enabled?:boolean }
 type EducationScheduleType = "range"|"single"
 type EducationSchedule = { id:string; type:EducationScheduleType; label?:string; start?:string; end?:string; date?:string }
-type FieldType = "text"|"name"|"email"|"phone"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"|"ad"
+type FieldType = "text"|"name"|"email"|"phone"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"|"ad"|"scale"
+// 점수 슬라이더(막대를 끌어서 고르는 질문). 값은 다른 질문처럼 문자열 숫자("4")로 저장된다.
+function scaleMinOf(field: any) { const n = Number(field?.scaleMin); return Number.isFinite(n) ? Math.round(n) : 1 }
+function scaleMaxOf(field: any) { const min = scaleMinOf(field); const n = Number(field?.scaleMax); const max = Number.isFinite(n) ? Math.round(n) : 5; return max > min ? max : min + 1 }
 type FormField = {
     id: string; type: FieldType; label: string; placeholder?: string
     helper?: string; helpers?: HelperItem[]; required?: boolean
@@ -58,6 +61,7 @@ type FormField = {
     adMode?: AdMode; adMainText?: string; adSubText?: string; adElementText?: string; adElementImageUrl?: string; adHref?: string; adBg?: string; adTextColor?: string
     birthYearLimitEnabled?: boolean; birthYearLimitYear?: number | string; birthYearLimitMessage?: string
     birthDateRangeEnabled?: boolean; birthDateRangeStart?: string; birthDateRangeEnd?: string; birthDateRangeMessage?: string
+    scaleMin?: number; scaleMax?: number; scaleMinLabel?: string; scaleMaxLabel?: string
 }
 type FormAdConfig = {
     enabled: boolean; adMode: AdMode
@@ -92,7 +96,7 @@ type Cfg = {
     integrations?: { googleSheets?: { enabled: boolean; mode: "existing"|"new"; accountEmail: string; sheetUrl: string; sheetName: string; tabName?: string; createdSheetName?: string; webhookUrl: string; lastSyncStatus?: "idle"|"sent"|"error"; lastSyncAt?: string; lastSyncMessage?: string } }
     dashboard?: { isPublished?: boolean; publishedAt?: string; operationStart?: string; operationEnd?: string; operationPeriods?: OperationPeriod[]; alwaysOpen?: boolean }
     brand: string
-    formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"
+    formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"|"survey"
     kdtFields?: KdtField[]
 }
 
@@ -2334,6 +2338,39 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 </div>
             })()}
 
+            {/* Scale slider */}
+            {f.type === "scale" && (() => {
+                const sMin = scaleMinOf(f), sMax = scaleMaxOf(f)
+                const picked = String(val || "").trim() !== "" && Number.isFinite(Number(val))
+                const cur = picked ? Math.min(sMax, Math.max(sMin, Math.round(Number(val)))) : Math.round((sMin + sMax) / 2)
+                const pct = ((cur - sMin) / (sMax - sMin)) * 100
+                const barC = picked ? accentBg : FC.fieldBorder
+                const minLabel = f.scaleMinLabel ?? ""
+                const maxLabel = f.scaleMaxLabel ?? ""
+                const ticks = sMax - sMin <= 10 ? Array.from({ length: sMax - sMin + 1 }, (_, i) => sMin + i) : []
+                const commit = (next: number) => { trackFieldTouch(f); setVal(f.id, String(next)); clearErr(f.id) }
+                return <div>
+                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 3, marginBottom: 10, minHeight: fs(28) }}>
+                        {picked
+                            ? <><span style={{ fontSize: fs(26), fontWeight: 700, color: accentBg, lineHeight: 1.1 }}>{cur}</span>
+                                <span style={{ fontSize: fs(13), fontWeight: 600, color: accentBg }}>점</span></>
+                            : <span style={{ fontSize: fs(13), color: fieldErr ? FC.red : FC.t3 }}>막대를 끌어서 점수를 선택해주세요.</span>}
+                    </div>
+                    {/* 손잡이를 처음 누른 자리에서 값이 바뀌지 않는 경우(가운데를 그대로 누른 경우)에도 선택으로 인정한다. */}
+                    <input type="range" className="cf-scale" min={sMin} max={sMax} step={1} value={cur}
+                        onPointerDown={() => { if (!picked) commit(cur) }}
+                        onChange={e => commit(Number(e.target.value))}
+                        style={{ "--cf-fill": `linear-gradient(90deg, ${barC} 0%, ${barC} ${pct}%, ${FC.fieldBorder} ${pct}%, ${FC.fieldBorder} 100%)`, "--cf-thumb": picked ? accentBg : FC.t3, "--cf-ring": accentBg + "33" } as React.CSSProperties} />
+                    {!!ticks.length && <div style={{ display: "flex", justifyContent: "space-between", padding: "0 2px", marginTop: 6 }}>
+                        {ticks.map(n => <span key={n} style={{ fontSize: fs(11), fontWeight: picked && n === cur ? 700 : 500, color: picked && n === cur ? accentBg : FC.t3 }}>{n}</span>)}
+                    </div>}
+                    {(minLabel || maxLabel) && <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 6 }}>
+                        <span style={{ fontSize: fs(11.5), color: FC.t3 }}>{minLabel}</span>
+                        <span style={{ fontSize: fs(11.5), color: FC.t3, textAlign: "right" }}>{maxLabel}</span>
+                    </div>}
+                </div>
+            })()}
+
             {/* Checkbox */}
             {f.type === "checkbox" && (() => {
                 const checkedVals = checked[f.id] || []
@@ -2467,7 +2504,15 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
     return (
         <div style={{ width: "100%", minHeight: "100vh", background: FC.bg, color: FC.t1, "--link-color": accentBg } as React.CSSProperties}>
-            <style>{`@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css'); body,html{background:${FC.bg}!important;margin:0;}`}</style>
+            <style>{`@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css'); body,html{background:${FC.bg}!important;margin:0;}
+.cf-scale{-webkit-appearance:none;appearance:none;width:100%;height:24px;margin:0;background:transparent;outline:none;cursor:pointer;display:block;touch-action:none}
+.cf-scale::-webkit-slider-runnable-track{height:8px;border-radius:999px;background:var(--cf-fill)}
+.cf-scale::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:24px;height:24px;margin-top:-8px;border-radius:50%;background:#fff;border:3px solid var(--cf-thumb);box-shadow:0 2px 8px rgba(0,0,0,.18);transition:transform .12s}
+.cf-scale:active::-webkit-slider-thumb{transform:scale(1.12)}
+.cf-scale::-moz-range-track{height:8px;border-radius:999px;background:var(--cf-fill)}
+.cf-scale::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:#fff;border:3px solid var(--cf-thumb);box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.cf-scale:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px var(--cf-ring)}
+.cf-scale:focus-visible::-moz-range-thumb{box-shadow:0 0 0 4px var(--cf-ring)}`}</style>
             <button onClick={() => setShareMenuOpen(v => !v)} title="폼 공유하기"
                 style={{ position: "fixed", right: 20, bottom: 20, zIndex: 900, height: seniorMode ? 50 : 44, padding: "0 15px", borderRadius: 999, border: `1px solid ${accentBg}33`, background: accentBg, color: cfg.cta.color || "#fff", boxShadow: "0 10px 28px rgba(0,0,0,0.18)", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontFamily: FONT, fontSize: fs(13.5), fontWeight:600 }}>
                 <svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M8 10V2.8M5.3 5.5 8 2.8l2.7 2.7M3 7.5v4.8c0 .7.5 1.2 1.2 1.2h7.6c.7 0 1.2-.5 1.2-1.2V7.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
