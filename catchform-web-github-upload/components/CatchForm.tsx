@@ -1098,15 +1098,30 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 }
             }
             : basePayload
+        // 임시저장·이탈은 한 세션당 한 줄을 계속 덮어쓰는(upsert) 기록이다.
+        // 덮어쓰기 문장은 마지막에 결과를 다시 읽는데, 이 표의 읽기 정책이 "로그인한 사람만"이라
+        // 로그인이 꺼진 폼에서는 브라우저가 직접 쓰면 항상 거부됐다(42501).
+        // 읽기 정책을 열면 작성 중이던 이름·연락처가 아무에게나 보이므로, 서버가 대신 쓰게 한다.
+        if (statusMode) {
+            try {
+                fetch("/api/form-status-event", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify(payload),
+                    keepalive: !!extra?.keepalive,
+                }).catch(() => {})
+            } catch {}
+            return
+        }
         if (extra?.keepalive && supabaseUrl && supabaseAnonKey) {
             try {
-                fetch(`${supabaseUrl.replace(/\/+$/, "")}/rest/v1/form_response_events${statusMode ? "?on_conflict=id" : ""}`, {
+                fetch(`${supabaseUrl.replace(/\/+$/, "")}/rest/v1/form_response_events`, {
                     method: "POST",
                     headers: {
                         apikey: supabaseAnonKey,
                         authorization: `Bearer ${supabaseAnonKey}`,
                         "content-type": "application/json",
-                        prefer: statusMode ? "resolution=merge-duplicates,return=minimal" : "return=minimal"
+                        prefer: "return=minimal"
                     },
                     body: JSON.stringify(payload),
                     keepalive: true
@@ -1115,14 +1130,6 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             return
         }
         if (!supa) return
-        if (statusMode) {
-            // 임시저장·이탈은 한 세션당 한 줄을 계속 덮어쓰는 기록이다.
-            // 예전에는 덮어쓰기가 실패하면 새 줄을 넣어 되살렸는데,
-            // 권한 문제로 덮어쓰기가 계속 실패하자 0.9초마다 새 줄이 쌓여 10만 건이 됐고 DB가 멈췄다.
-            // 실패하면 그냥 넘긴다. 이 기록 하나가 빠지는 것보다 DB가 버티는 게 중요하다.
-            supa.from("form_response_events").upsert(payload as any, { onConflict: "id" }).then(() => {})
-            return
-        }
         supa.from("form_response_events").insert(payload).then(() => {})
     }
 
