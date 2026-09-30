@@ -147,6 +147,18 @@ const referrerPath = (value: string) => {
         return ""
     }
 }
+// "어느 페이지를 보다가 폼에 왔는지"를 남기는 값이다.
+// 예전에는 referrer의 경로만 떼어 썼는데, 인스타그램(https://instagram.com/)이나
+// 프레이머 iframe처럼 경로가 "/" 하나뿐인 곳에서 오면 전부 "/"로만 저장돼 아무 정보가 없었다.
+// 경로가 쓸모없으면 referrer 주소 전체를 남기고, 그것도 없으면 폼 자신의 경로라도 남긴다.
+const resolveLandingPage = (explicit: string, referrer: string) => {
+    if (explicit && explicit !== "/") return explicit
+    const path = referrerPath(referrer)
+    if (path && path !== "/") return path
+    if (referrer) return referrer
+    if (typeof window !== "undefined") return window.location.pathname || ""
+    return ""
+}
 const getSubmissionAttribution = (): AttributionData => {
     if (typeof window === "undefined") return emptyAttribution()
     const params = new URLSearchParams(window.location.search || "")
@@ -161,7 +173,10 @@ const getSubmissionAttribution = (): AttributionData => {
         utm_campaign: cleanAttributionValue(params.get("utm_campaign")),
         utm_content: cleanAttributionValue(params.get("utm_content")),
         utm_term: cleanAttributionValue(params.get("utm_term")),
-        landing_page: cleanAttributionValue(params.get("landing_page")) || cleanAttributionValue(params.get("lp")) || referrerPath(referrer),
+        landing_page: resolveLandingPage(
+            cleanAttributionValue(params.get("landing_page")) || cleanAttributionValue(params.get("lp")),
+            referrer
+        ),
         referrer,
         fbclid,
         gclid,

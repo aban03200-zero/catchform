@@ -268,7 +268,8 @@ function dateBirthYearLimitError(field:any,value:any){
 }
 const CATCHFORM_DIRECT_FORM_BASE_URL = "https://catchform.vercel.app/form"
 const FORM_SUMMARY_SELECT = "id,name,slug,updated_at,brand,config_brand:config->>brand,header_title:config->header->>title,program_id:config->header->>programId,recruitment_period_mode:config->header->>recruitmentPeriodMode,form_type:config->>formType,dashboard_meta:config->dashboard"
-const FULL_FORM_PREFETCH_LIMIT = 8
+// 미리 받아두면 폼을 열 때 빠르지만, 한 건이 설정값 1MB를 통째로 끌어온다. 개수를 줄인다.
+const FULL_FORM_PREFETCH_LIMIT = 3
 const FULL_FORM_PREFETCH_CONCURRENCY = 2
 const DEFAULT_GOOGLE_SHEETS = {enabled:false,mode:"existing" as const,accountEmail:"",sheetUrl:"",sheetName:"",tabName:"",tabGid:"",createdSheetName:"",webhookUrl:"",lastSyncStatus:"idle" as const,lastSyncAt:"",lastSyncMessage:""}
 const DEFAULT_MODAL_SHARE_BUTTONS:ModalShareButtons = {kakao:true,instagram:true,threads:true,x:true,link:true}
@@ -920,6 +921,15 @@ const CONSENT_TYPES = [
   {key:"terms",             label:"서비스 이용약관",          answerKey:"terms_consent",              isPrivacy:false},
   {key:"marketing_consent", label:"마케팅 정보 수신 동의",    answerKey:"marketing_consent",          isPrivacy:false},
 ]
+// 광고 도구는 링크에 `{{campaign.name}}` 같은 자리표시자를 넣어 두고, 클릭이 일어날 때
+// 실제 캠페인 이름으로 바꿔서 보낸다. 이 치환이 실패하면 자리표시자가 글자 그대로 저장된다.
+// 그냥 두면 평범한 값처럼 보여서 몇 주가 지나도 아무도 모른다. 눈에 띄게 표시한다.
+// (Meta는 `{{...}}`, 구글은 `{...}` 형태를 쓴다.)
+function isUnresolvedAdMacro(value:any){
+  const v=String(value??"").trim()
+  if(!v)return false
+  return /^\{\{.+\}\}$/.test(v)||/^\{[a-z_.]+\}$/i.test(v)
+}
 const ATTRIBUTION_RESPONSE_FIELDS = [
   {id:"__attr_utm_source",answerKey:"utm_source",label:"utm_source"},
   {id:"__attr_utm_medium",answerKey:"utm_medium",label:"utm_medium"},
@@ -3140,7 +3150,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       .channel(`form-configs-dashboard-${authUser.id||Date.now()}`)
       .on("postgres_changes",{event:"*",schema:"public",table:"form_configs"},refresh)
       .subscribe()
-    const poll=window.setInterval(refresh,30000)
+    // 폼 목록 조회는 각 폼의 설정값(config)을 통째로 읽어야 해서 비용이 크다.
+    // 30초마다 전체를 다시 읽다가 디스크 처리량을 다 써서 DB가 주기적으로 주저앉았다(2026-09).
+    // 누가 폼을 저장하면 아래 realtime 구독이 즉시 알려주므로, 이 주기적 조회는 보조 수단이다.
+    const poll=window.setInterval(refresh,180000)
     const onFocus=()=>refresh()
     const onVisibility=()=>{if(document.visibilityState==="visible")refresh()}
     window.addEventListener("focus",onFocus)
@@ -3239,7 +3252,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       // 그래서 남은 페이지까지 이어서 받은 뒤에 로딩을 끝낸다.
       const refreshLimit=silent?Math.max(DASHBOARD_PAGE_SIZE,dashNextOffset||0):DASHBOARD_PAGE_SIZE
       const all=await fetchFormSummaries(sb,refreshLimit,0)
-      if(all.length===refreshLimit){
+      // 조용한 새로고침(주기·포커스·realtime)은 이미 화면에 띄운 만큼만 다시 받는다.
+      // 여기서 뒷페이지까지 이어 받으면 새로고침 한 번에 전체 폼을 다시 읽게 된다.
+      // 뒷페이지는 사용자가 "더 보기"로 내려갈 때 받으면 된다.
+      if(!silent&&all.length===refreshLimit){
         // 페이지를 다 돌 때까지 이어붙인다. 무한 루프를 막기 위해 상한을 둔다.
         for(let offset=all.length,guard=0;guard<40;guard++){
           const next=await fetchFormSummaries(sb,DASHBOARD_PAGE_SIZE,offset)
@@ -9866,12 +9882,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       {analyticsUtmOpen&&<div style={{display:"flex",flexDirection:"column" as const,gap:1,padding:"6px 0 0"}}>
                         {attributionFields.map((f:any)=>{
                           const val=analyticsAnswer(openRow,f)
+                          const broken=isUnresolvedAdMacro(val)
                           return <div key={f.id} style={{display:"flex",alignItems:"center",gap:10,minHeight:32,padding:"0 10px",borderRadius:8}}
                             onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=panelFieldBg(A)}}
                             onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
                             <span style={{fontSize:12,color:A.t3,flexShrink:0,width:104,fontFamily:"ui-monospace,SFMono-Regular,Menlo,monospace"}}>{f.answerKey||f.id}</span>
-                            <span title={val||undefined} style={{minWidth:0,flex:1,fontSize:12.5,color:val?A.t1:A.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,
+                            <span title={val||undefined} style={{minWidth:0,flex:broken?"0 1 auto":1,fontSize:12.5,color:broken?A.red:val?A.t1:A.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,
                               fontFamily:val?"ui-monospace,SFMono-Regular,Menlo,monospace":FONT}}>{val||"없음"}</span>
+                            {broken&&<span title="광고 링크의 자리표시자가 실제 값으로 바뀌지 않았습니다. 광고 도구의 URL 매개변수 설정을 확인해주세요."
+                              style={{flexShrink:0,fontSize:11,fontWeight:700,color:A.red,background:A===ALT?"#FDECEC":"rgba(232,92,92,0.14)",
+                                borderRadius:6,padding:"2px 6px",fontFamily:FONT,whiteSpace:"nowrap" as const,cursor:"help"}}>⚠️ 치환 실패</span>}
                           </div>
                         })}
                       </div>}
