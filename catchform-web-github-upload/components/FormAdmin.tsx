@@ -921,6 +921,15 @@ const CONSENT_TYPES = [
   {key:"terms",             label:"서비스 이용약관",          answerKey:"terms_consent",              isPrivacy:false},
   {key:"marketing_consent", label:"마케팅 정보 수신 동의",    answerKey:"marketing_consent",          isPrivacy:false},
 ]
+// 광고 도구는 링크에 `{{campaign.name}}` 같은 자리표시자를 넣어 두고, 클릭이 일어날 때
+// 실제 캠페인 이름으로 바꿔서 보낸다. 이 치환이 실패하면 자리표시자가 글자 그대로 저장된다.
+// 그냥 두면 평범한 값처럼 보여서 몇 주가 지나도 아무도 모른다. 눈에 띄게 표시한다.
+// (Meta는 `{{...}}`, 구글은 `{...}` 형태를 쓴다.)
+function isUnresolvedAdMacro(value:any){
+  const v=String(value??"").trim()
+  if(!v)return false
+  return /^\{\{.+\}\}$/.test(v)||/^\{[a-z_.]+\}$/i.test(v)
+}
 const ATTRIBUTION_RESPONSE_FIELDS = [
   {id:"__attr_utm_source",answerKey:"utm_source",label:"utm_source"},
   {id:"__attr_utm_medium",answerKey:"utm_medium",label:"utm_medium"},
@@ -9873,12 +9882,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                       {analyticsUtmOpen&&<div style={{display:"flex",flexDirection:"column" as const,gap:1,padding:"6px 0 0"}}>
                         {attributionFields.map((f:any)=>{
                           const val=analyticsAnswer(openRow,f)
+                          const broken=isUnresolvedAdMacro(val)
                           return <div key={f.id} style={{display:"flex",alignItems:"center",gap:10,minHeight:32,padding:"0 10px",borderRadius:8}}
                             onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=panelFieldBg(A)}}
                             onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent"}}>
                             <span style={{fontSize:12,color:A.t3,flexShrink:0,width:104,fontFamily:"ui-monospace,SFMono-Regular,Menlo,monospace"}}>{f.answerKey||f.id}</span>
-                            <span title={val||undefined} style={{minWidth:0,flex:1,fontSize:12.5,color:val?A.t1:A.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,
+                            <span title={val||undefined} style={{minWidth:0,flex:broken?"0 1 auto":1,fontSize:12.5,color:broken?A.red:val?A.t1:A.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,
                               fontFamily:val?"ui-monospace,SFMono-Regular,Menlo,monospace":FONT}}>{val||"없음"}</span>
+                            {broken&&<span title="광고 링크의 자리표시자가 실제 값으로 바뀌지 않았습니다. 광고 도구의 URL 매개변수 설정을 확인해주세요."
+                              style={{flexShrink:0,fontSize:11,fontWeight:700,color:A.red,background:A===ALT?"#FDECEC":"rgba(232,92,92,0.14)",
+                                borderRadius:6,padding:"2px 6px",fontFamily:FONT,whiteSpace:"nowrap" as const,cursor:"help"}}>⚠️ 치환 실패</span>}
                           </div>
                         })}
                       </div>}
