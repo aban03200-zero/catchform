@@ -11049,7 +11049,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       )}
       {showUpdateModal&&(
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setShowUpdateModal(false)}>
-          <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:cfg.header.programUnlinked?500:320,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
+          <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:cfg.header.programUnlinked?500:400,maxWidth:"calc(100% - 32px)",boxSizing:"border-box" as const,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
             <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:8}}>수정 사항 저장</div>
             <div style={{fontSize:13.5,color:A.t2,marginBottom:6}}><span style={{fontWeight:600,color:A.t1}}>"{loadedName}"</span>에 변경 사항을 덮어쓰시겠어요?</div>
             <div style={{fontSize:12,color:A.t3,marginBottom:22,lineHeight:1.5}}>기존 설정이 수정된 내용으로 교체됩니다.</div>
@@ -11065,9 +11065,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <OperationPeriodsEditor periods={operationPeriodsFromDashboard(cfg.dashboard)} disabled={!!cfg.dashboard?.alwaysOpen} onChange={setOperationPeriods} A={A}/>
             </div>}
             <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-              <button onClick={()=>{setShowUpdateModal(false);setShowSave(true)}} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>새 이름으로 저장</button>
-              <button onClick={()=>setShowUpdateModal(false)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
-              <button onClick={()=>updateCfg()} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>수정 저장</button>
+              <button onClick={()=>{setShowUpdateModal(false);setShowSave(true)}} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer",whiteSpace:"nowrap" as const,flexShrink:0}}>새 이름으로 저장</button>
+              <button onClick={()=>setShowUpdateModal(false)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer",whiteSpace:"nowrap" as const,flexShrink:0}}>취소</button>
+              <button onClick={()=>updateCfg()} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const,flexShrink:0}}>수정 저장</button>
             </div>
           </div>
         </div>
