@@ -2162,15 +2162,39 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
     const range=sel.getRangeAt(0)
     if(editorContainsRange(el,range))savedRangeRef.current=range.cloneRange()
   }
+  // 글자 하나 칠 때마다 상위 설정값을 고치면 편집 화면 전체(미리보기 포함)가 다시 그려져서
+  // 타이핑이 한 박자씩 밀렸다. 입력 중에는 이 editable 영역이 이미 글자를 보여주고 있으므로,
+  // 상위로 올리는 건 잠깐 멈춘 뒤에 한 번만 한다. 포커스가 빠질 때는 즉시 올린다.
+  const COMMIT_DELAY=250
+  const commitTimerRef=React.useRef<number|null>(null)
+  const onChangeRef=React.useRef(onChange)
+  onChangeRef.current=onChange
+  const cancelPendingCommit=()=>{
+    if(commitTimerRef.current!==null){window.clearTimeout(commitTimerRef.current);commitTimerRef.current=null}
+  }
+  const flushCommit=()=>{
+    cancelPendingCommit()
+    const el=edRef.current;if(!el)return
+    onChangeRef.current(htmlToMd(el.innerHTML))
+  }
+  // 입력 도중 화면을 벗어나도 마지막 글자가 사라지지 않게 한다.
+  React.useEffect(()=>()=>{
+    if(commitTimerRef.current===null)return
+    window.clearTimeout(commitTimerRef.current)
+    const el=edRef.current
+    if(el)onChangeRef.current(htmlToMd(el.innerHTML))
+  },[])
   const commitHtml=()=>{
     const el=edRef.current;if(!el)return
     const nextValue=htmlToMd(el.innerHTML)
-    onChange(nextValue)
+    cancelPendingCommit()
+    commitTimerRef.current=window.setTimeout(()=>{commitTimerRef.current=null;onChangeRef.current(nextValue)},COMMIT_DELAY)
     return nextValue
   }
 
   const applyFormat=(cmd:"bold"|"underline")=>{
     const el=edRef.current;if(!el)return
+    cancelPendingCommit()
     const sel=window.getSelection()
     const currentRange=sel&&sel.rangeCount>0?sel.getRangeAt(0):null
     const range=editorContainsRange(el,currentRange)?currentRange:(editorContainsRange(el,savedRangeRef.current)?savedRangeRef.current:null)
@@ -2201,6 +2225,7 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
   }
   const insertLink=()=>{
     const el=edRef.current;if(!el||!linkUrl.trim())return
+    cancelPendingCommit()
     el.focus()
     // Restore saved selection
     if(savedRangeRef.current){
@@ -2263,9 +2288,9 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
       }}
       onMouseUp={saveSelection}
       onKeyUp={saveSelection}
-      onBlur={e=>{setIsFocused(false);onChange(htmlToMd((e.currentTarget as HTMLDivElement).innerHTML))}}
+      onBlur={e=>{setIsFocused(false);cancelPendingCommit();onChange(htmlToMd((e.currentTarget as HTMLDivElement).innerHTML))}}
       onInput={()=>{commitHtml();saveSelection()}}
-      onKeyDown={e=>{const el=edRef.current;if(el)handleEditorKey(e,el,onChange)}}
+      onKeyDown={e=>{const el=edRef.current;if(!el)return;cancelPendingCommit();handleEditorKey(e,el,onChange)}}
       style={{width:"100%",minHeight:132,background:panelFieldBg(A),border:"none",borderRadius:10,color:A.t1,fontFamily:FONT2,fontSize:13.5,padding:"13px 14px",outline:"none",lineHeight:1.7,boxSizing:"border-box" as const,wordBreak:"break-word" as const,cursor:"text",boxShadow:isFocused?`inset 0 0 0 1.5px ${A.blue}`:"none",transition:"box-shadow .15s"}}
     />
   </div>
@@ -11049,7 +11074,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       )}
       {showUpdateModal&&(
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setShowUpdateModal(false)}>
-          <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:cfg.header.programUnlinked?500:320,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
+          <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:cfg.header.programUnlinked?500:400,maxWidth:"calc(100% - 32px)",boxSizing:"border-box" as const,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
             <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:8}}>수정 사항 저장</div>
             <div style={{fontSize:13.5,color:A.t2,marginBottom:6}}><span style={{fontWeight:600,color:A.t1}}>"{loadedName}"</span>에 변경 사항을 덮어쓰시겠어요?</div>
             <div style={{fontSize:12,color:A.t3,marginBottom:22,lineHeight:1.5}}>기존 설정이 수정된 내용으로 교체됩니다.</div>
@@ -11065,9 +11090,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               <OperationPeriodsEditor periods={operationPeriodsFromDashboard(cfg.dashboard)} disabled={!!cfg.dashboard?.alwaysOpen} onChange={setOperationPeriods} A={A}/>
             </div>}
             <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-              <button onClick={()=>{setShowUpdateModal(false);setShowSave(true)}} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>새 이름으로 저장</button>
-              <button onClick={()=>setShowUpdateModal(false)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer"}}>취소</button>
-              <button onClick={()=>updateCfg()} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer"}}>수정 저장</button>
+              <button onClick={()=>{setShowUpdateModal(false);setShowSave(true)}} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer",whiteSpace:"nowrap" as const,flexShrink:0}}>새 이름으로 저장</button>
+              <button onClick={()=>setShowUpdateModal(false)} style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer",whiteSpace:"nowrap" as const,flexShrink:0}}>취소</button>
+              <button onClick={()=>updateCfg()} style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const,flexShrink:0}}>수정 저장</button>
             </div>
           </div>
         </div>
