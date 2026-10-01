@@ -2162,15 +2162,39 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
     const range=sel.getRangeAt(0)
     if(editorContainsRange(el,range))savedRangeRef.current=range.cloneRange()
   }
+  // 글자 하나 칠 때마다 상위 설정값을 고치면 편집 화면 전체(미리보기 포함)가 다시 그려져서
+  // 타이핑이 한 박자씩 밀렸다. 입력 중에는 이 editable 영역이 이미 글자를 보여주고 있으므로,
+  // 상위로 올리는 건 잠깐 멈춘 뒤에 한 번만 한다. 포커스가 빠질 때는 즉시 올린다.
+  const COMMIT_DELAY=250
+  const commitTimerRef=React.useRef<number|null>(null)
+  const onChangeRef=React.useRef(onChange)
+  onChangeRef.current=onChange
+  const cancelPendingCommit=()=>{
+    if(commitTimerRef.current!==null){window.clearTimeout(commitTimerRef.current);commitTimerRef.current=null}
+  }
+  const flushCommit=()=>{
+    cancelPendingCommit()
+    const el=edRef.current;if(!el)return
+    onChangeRef.current(htmlToMd(el.innerHTML))
+  }
+  // 입력 도중 화면을 벗어나도 마지막 글자가 사라지지 않게 한다.
+  React.useEffect(()=>()=>{
+    if(commitTimerRef.current===null)return
+    window.clearTimeout(commitTimerRef.current)
+    const el=edRef.current
+    if(el)onChangeRef.current(htmlToMd(el.innerHTML))
+  },[])
   const commitHtml=()=>{
     const el=edRef.current;if(!el)return
     const nextValue=htmlToMd(el.innerHTML)
-    onChange(nextValue)
+    cancelPendingCommit()
+    commitTimerRef.current=window.setTimeout(()=>{commitTimerRef.current=null;onChangeRef.current(nextValue)},COMMIT_DELAY)
     return nextValue
   }
 
   const applyFormat=(cmd:"bold"|"underline")=>{
     const el=edRef.current;if(!el)return
+    cancelPendingCommit()
     const sel=window.getSelection()
     const currentRange=sel&&sel.rangeCount>0?sel.getRangeAt(0):null
     const range=editorContainsRange(el,currentRange)?currentRange:(editorContainsRange(el,savedRangeRef.current)?savedRangeRef.current:null)
@@ -2201,6 +2225,7 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
   }
   const insertLink=()=>{
     const el=edRef.current;if(!el||!linkUrl.trim())return
+    cancelPendingCommit()
     el.focus()
     // Restore saved selection
     if(savedRangeRef.current){
@@ -2263,9 +2288,9 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
       }}
       onMouseUp={saveSelection}
       onKeyUp={saveSelection}
-      onBlur={e=>{setIsFocused(false);onChange(htmlToMd((e.currentTarget as HTMLDivElement).innerHTML))}}
+      onBlur={e=>{setIsFocused(false);cancelPendingCommit();onChange(htmlToMd((e.currentTarget as HTMLDivElement).innerHTML))}}
       onInput={()=>{commitHtml();saveSelection()}}
-      onKeyDown={e=>{const el=edRef.current;if(el)handleEditorKey(e,el,onChange)}}
+      onKeyDown={e=>{const el=edRef.current;if(!el)return;cancelPendingCommit();handleEditorKey(e,el,onChange)}}
       style={{width:"100%",minHeight:132,background:panelFieldBg(A),border:"none",borderRadius:10,color:A.t1,fontFamily:FONT2,fontSize:13.5,padding:"13px 14px",outline:"none",lineHeight:1.7,boxSizing:"border-box" as const,wordBreak:"break-word" as const,cursor:"text",boxShadow:isFocused?`inset 0 0 0 1.5px ${A.blue}`:"none",transition:"box-shadow .15s"}}
     />
   </div>
