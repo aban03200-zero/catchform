@@ -9630,7 +9630,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const detailQrLinks=(cfg.integrations?.qrLinks||[]).filter(link=>link.type==="detail")
     const detailQrUrls=new Set(detailQrLinks.map(link=>normalizeQrUrl(link.url)).filter(Boolean))
     const detailQrCodes=new Set(detailQrLinks.map(link=>String(link.code||"")).filter(Boolean))
-    const qrEventSource=activeAnalyticsTab==="qr"?(rawEvents.length?rawEvents:events).filter((event:any)=>!analyticsTrashTypes.includes(event.event_type)):[]
+    // QR 탭만 원본 기록(rawEvents)을 바로 읽어서, 응답 데이터를 전체 삭제해도 QR 숫자가 그대로 남았다.
+    // 다른 탭과 같게 "삭제된 구간을 가린" 목록(events)을 쓴다. 휴지통에서 복구하면 함께 돌아온다.
+    // (events에는 휴지통 관리용 기록과 봇 접속이 이미 빠져 있다.)
+    const qrEventSource=activeAnalyticsTab==="qr"?events:[]
     const qrEventScope=(e:any):"form"|"detail"|"unknown"=>{
       const m=eventMeta(e)
       const explicitType=String(m.qr_type||m.type||"").toLowerCase()
