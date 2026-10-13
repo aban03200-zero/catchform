@@ -2140,6 +2140,54 @@ function syncEditorHtmlView(el:HTMLDivElement,nextValue:string,placeAtEnd=false)
   if(el.innerHTML!==rendered)el.innerHTML=rendered
   if(placeAtEnd)placeCaretAtEditorEnd(el)
 }
+// 대시보드 상단에 최근 응답 추이를 작게 보여준다.
+// 숫자만 있으면 "많은 건지 적은 건지"를 알 수 없어서, 14일치 막대를 옆에 둔다.
+type TrendDay={date:string;count:number}
+// 보는 사람의 시간대 기준 YYYY-MM-DD. toISOString()을 쓰면 UTC라 밤 시간대 응답이 전날로 밀린다.
+function localDateKey(d:Date){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`
+}
+const WEEKDAY_LABELS=["일","월","화","수","목","금","토"]
+function SubmissionTrend({days,loading,width,A}:{days:TrendDay[];loading:boolean;width:number;A:AT}){
+  const [hover,setHover]=React.useState<number|null>(null)
+  const today=days.length?days[days.length-1].count:0
+  const week=days.slice(-7).reduce((sum,d)=>sum+d.count,0)
+  const max=Math.max(1,...days.map(d=>d.count))
+  // 제목 아래 보조 줄이라 숫자는 작게 두고, 막대는 "요즘 많은지 적은지"만 보이면 된다.
+  const BAR_W=5, BAR_GAP=2.5, BAR_H=16
+  const showChart=width>=980&&!loading
+  const stat=(label:string,value:number)=><span style={{whiteSpace:"nowrap" as const}}>
+    <span style={{color:A.t3}}>{label} </span>
+    <span style={{color:A.t2,fontWeight:700,fontVariantNumeric:"tabular-nums" as const}}>{loading?"—":value}</span>
+  </span>
+  return <div style={{display:"flex",alignItems:"center",gap:9,marginTop:5,fontSize:12,fontFamily:FONT}}>
+    {stat("오늘",today)}
+    <span style={{color:A.t4}}>·</span>
+    {stat("최근 7일",week)}
+    {showChart&&<div style={{position:"relative" as const,display:"flex",alignItems:"flex-end",gap:BAR_GAP,height:BAR_H,marginLeft:3}}
+      onMouseLeave={()=>setHover(null)}>
+      {days.map((d,i)=>{
+        const isToday=i===days.length-1
+        const h=Math.max(2,Math.round((d.count/max)*BAR_H))
+        const on=hover===i
+        return <div key={d.date} onMouseEnter={()=>setHover(i)}
+          style={{width:BAR_W,height:BAR_H,display:"flex",alignItems:"flex-end",cursor:"default"}}>
+          <div style={{width:"100%",height:h,borderRadius:1.5,background:(on||isToday)?A.blue:A.t4,transition:"background .12s"}}/>
+        </div>
+      })}
+      {hover!==null&&days[hover]&&(()=>{
+        const d=days[hover]
+        const dt=new Date(d.date+"T00:00:00")
+        return <div style={{position:"absolute" as const,bottom:BAR_H+7,left:hover*(BAR_W+BAR_GAP)-26,zIndex:50,
+          padding:"5px 8px",borderRadius:6,background:A.t1,color:A.card,fontFamily:FONT,fontSize:11,fontWeight:600,
+          whiteSpace:"nowrap" as const,boxShadow:"0 4px 12px rgba(16,24,40,.18)",pointerEvents:"none" as const}}>
+          {dt.getMonth()+1}월 {dt.getDate()}일({WEEKDAY_LABELS[dt.getDay()]}) · {d.count}건
+        </div>
+      })()}
+    </div>}
+  </div>
+}
+
 function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=>void;A:AT}){
   const edRef=React.useRef<HTMLDivElement>(null)
   const savedRangeRef=React.useRef<Range|null>(null)
@@ -2541,6 +2589,43 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [dashTopTypeFilter,setDashTopTypeFilter]=React.useState<DashboardFormType|"" >("")
   const [dashTopStatusFilter,setDashTopStatusFilter]=React.useState<DashboardManualStatus|"" >("")
   const [dashQuery,setDashQuery]=React.useState("")
+  // 상단 응답 추이 — 최근 14일치 제출 건수를 하루 단위로 센다.
+  // 응답 표는 2주에 300건 남짓이라 가볍지만, 대시보드를 열 때마다 부르지 않도록 5분은 들고 있는다.
+  const TREND_DAYS=14
+  const TREND_CACHE_MS=5*60*1000
+  const [trendDays,setTrendDays]=React.useState<TrendDay[]>([])
+  const [trendLoading,setTrendLoading]=React.useState(true)
+  const trendFetchedAt=React.useRef(0)
+  React.useEffect(()=>{
+    if(!supa||!authUser||view!=="dashboard")return
+    if(Date.now()-trendFetchedAt.current<TREND_CACHE_MS)return
+    trendFetchedAt.current=Date.now()
+    let cancelled=false
+    ;(async()=>{
+      const start=new Date()
+      start.setHours(0,0,0,0)
+      start.setDate(start.getDate()-(TREND_DAYS-1))
+      const sinceIso=start.toISOString()
+      const pull=(table:string)=>Promise.resolve(
+        supa.from(table).select("created_at").gte("created_at",sinceIso).limit(5000)
+      ).then((res:any)=>res?.data||[]).catch(()=>[])
+      const [a,b]=await Promise.all([pull("applications"),pull("company_applications")])
+      if(cancelled)return
+      // 날짜 구분은 보는 사람의 시간대 기준이어야 "오늘"이 맞는다. (서버 시간은 UTC다)
+      const bucket:Record<string,number>={}
+      for(let i=0;i<TREND_DAYS;i++){
+        const d=new Date(start);d.setDate(start.getDate()+i)
+        bucket[localDateKey(d)]=0
+      }
+      ;[...a,...b].forEach((row:any)=>{
+        const key=localDateKey(new Date(row.created_at))
+        if(key in bucket)bucket[key]++
+      })
+      setTrendDays(Object.entries(bucket).map(([date,count])=>({date,count})))
+      setTrendLoading(false)
+    })().catch(()=>{trendFetchedAt.current=0;setTrendLoading(false)})
+    return()=>{cancelled=true}
+  },[supa,authUser,view])
   const [dashResponseCounts,setDashResponseCounts]=React.useState<Record<string,number>>({})
   const [dashboardSettings,setDashboardSettings]=React.useState<DashboardSettingsState|null>(null)
   const [dashboardSettingsSaving,setDashboardSettingsSaving]=React.useState(false)
@@ -6260,7 +6345,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     <span style={{fontSize:17,fontWeight:700,letterSpacing:"-.2px",color:A.t1}}>{dashBrandFilter?brandDisplayName(dashBrandFilter):"전체"} 폼</span>
                     <span style={{fontSize:13,fontWeight:600,color:A.t3}}>{filtered.length}</span>
                   </div>
-                  <div style={{fontSize:12,color:A.t3,marginTop:3}}>필요한 폼을 빠르게 찾고 응답 현황을 확인할 수 있어요.</div>
+                  <SubmissionTrend days={trendDays} loading={trendLoading} width={width} A={A}/>
                 </div>
                 <div style={{flex:1}}/>
                 <div style={{position:"relative" as const,flexShrink:0}}>
