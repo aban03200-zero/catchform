@@ -2142,19 +2142,20 @@ function syncEditorHtmlView(el:HTMLDivElement,nextValue:string,placeAtEnd=false)
 }
 // 대시보드 상단에 최근 응답 추이를 작게 보여준다.
 // 숫자만 있으면 "많은 건지 적은 건지"를 알 수 없어서, 14일치 막대를 옆에 둔다.
-type TrendDay={date:string;count:number}
+type TrendDay={date:string;count:number;forms:{id:string;count:number}[]}
 // 보는 사람의 시간대 기준 YYYY-MM-DD. toISOString()을 쓰면 UTC라 밤 시간대 응답이 전날로 밀린다.
 function localDateKey(d:Date){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`
 }
 const WEEKDAY_LABELS=["일","월","화","수","목","금","토"]
-function SubmissionTrend({days,loading,width,A}:{days:TrendDay[];loading:boolean;width:number;A:AT}){
+function SubmissionTrend({days,loading,width,formNames,A}:{days:TrendDay[];loading:boolean;width:number;formNames:Record<string,string>;A:AT}){
   const [hover,setHover]=React.useState<number|null>(null)
   const today=days.length?days[days.length-1].count:0
   const week=days.slice(-7).reduce((sum,d)=>sum+d.count,0)
   const max=Math.max(1,...days.map(d=>d.count))
   // 제목 아래 보조 줄이라 숫자는 작게 두고, 막대는 "요즘 많은지 적은지"만 보이면 된다.
   const BAR_W=5, BAR_GAP=2.5, BAR_H=16
+  const TOP_FORMS=4
   const showChart=width>=980&&!loading
   const stat=(label:string,value:number)=><span style={{whiteSpace:"nowrap" as const}}>
     <span style={{color:A.t3}}>{label} </span>
@@ -2178,10 +2179,24 @@ function SubmissionTrend({days,loading,width,A}:{days:TrendDay[];loading:boolean
       {hover!==null&&days[hover]&&(()=>{
         const d=days[hover]
         const dt=new Date(d.date+"T00:00:00")
-        return <div style={{position:"absolute" as const,bottom:BAR_H+7,left:hover*(BAR_W+BAR_GAP)-26,zIndex:50,
-          padding:"5px 8px",borderRadius:6,background:A.t1,color:A.card,fontFamily:FONT,fontSize:11,fontWeight:600,
-          whiteSpace:"nowrap" as const,boxShadow:"0 4px 12px rgba(16,24,40,.18)",pointerEvents:"none" as const}}>
-          {dt.getMonth()+1}월 {dt.getDate()}일({WEEKDAY_LABELS[dt.getDay()]}) · {d.count}건
+        const top=d.forms.slice(0,TOP_FORMS)
+        const restForms=d.forms.length-top.length
+        const restCount=d.forms.slice(TOP_FORMS).reduce((sum,f)=>sum+f.count,0)
+        const row=(label:string,count:number,dim?:boolean)=><div key={label} style={{display:"flex",alignItems:"baseline",gap:10,marginTop:3}}>
+          <span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,fontWeight:500,opacity:dim?0.65:1}}>{label}</span>
+          <span style={{flexShrink:0,fontWeight:700,fontVariantNumeric:"tabular-nums" as const,opacity:dim?0.65:1}}>{count}</span>
+        </div>
+        // 말풍선이 여러 줄이 되면서 위로 띄우면 상단 탭에 가려 잘릴 수 있다. 막대 아래로 편다.
+        return <div style={{position:"absolute" as const,top:BAR_H+7,left:Math.max(0,hover*(BAR_W+BAR_GAP)-30),zIndex:50,
+          minWidth:200,maxWidth:280,padding:"8px 10px",borderRadius:7,background:A.t1,color:A.card,
+          fontFamily:FONT,fontSize:11.5,boxShadow:"0 6px 18px rgba(16,24,40,.22)",pointerEvents:"none" as const}}>
+          <div style={{fontWeight:700,whiteSpace:"nowrap" as const}}>
+            {dt.getMonth()+1}월 {dt.getDate()}일({WEEKDAY_LABELS[dt.getDay()]}) · {d.count}건
+          </div>
+          {d.count>0&&<div style={{marginTop:5,paddingTop:5,borderTop:"1px solid rgba(255,255,255,.18)"}}>
+            {top.map(f=>row(formNames[f.id]||"(삭제된 폼)",f.count))}
+            {restForms>0&&row(`외 ${restForms}개 폼`,restCount,true)}
+          </div>}
         </div>
       })()}
     </div>}
@@ -2606,22 +2621,31 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       start.setHours(0,0,0,0)
       start.setDate(start.getDate()-(TREND_DAYS-1))
       const sinceIso=start.toISOString()
+      // 숫자만 있으면 어느 폼에서 들어왔는지 몰라서, form_id도 같이 받아 폼별로 센다.
       const pull=(table:string)=>Promise.resolve(
-        supa.from(table).select("created_at").gte("created_at",sinceIso).limit(5000)
+        supa.from(table).select("created_at,form_id").gte("created_at",sinceIso).limit(5000)
       ).then((res:any)=>res?.data||[]).catch(()=>[])
       const [a,b]=await Promise.all([pull("applications"),pull("company_applications")])
       if(cancelled)return
       // 날짜 구분은 보는 사람의 시간대 기준이어야 "오늘"이 맞는다. (서버 시간은 UTC다)
-      const bucket:Record<string,number>={}
+      const bucket:Record<string,{count:number;forms:Record<string,number>}>={}
       for(let i=0;i<TREND_DAYS;i++){
         const d=new Date(start);d.setDate(start.getDate()+i)
-        bucket[localDateKey(d)]=0
+        bucket[localDateKey(d)]={count:0,forms:{}}
       }
       ;[...a,...b].forEach((row:any)=>{
         const key=localDateKey(new Date(row.created_at))
-        if(key in bucket)bucket[key]++
+        const slot=bucket[key]
+        if(!slot)return
+        slot.count++
+        const fid=String(row.form_id||"")
+        slot.forms[fid]=(slot.forms[fid]||0)+1
       })
-      setTrendDays(Object.entries(bucket).map(([date,count])=>({date,count})))
+      setTrendDays(Object.entries(bucket).map(([date,slot])=>({
+        date,
+        count:slot.count,
+        forms:Object.entries(slot.forms).map(([id,count])=>({id,count})).sort((x,y)=>y.count-x.count),
+      })))
       setTrendLoading(false)
     })().catch(()=>{trendFetchedAt.current=0;setTrendLoading(false)})
     return()=>{cancelled=true}
@@ -2675,6 +2699,20 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   React.useEffect(()=>{if(sec==="consent")setOpenConsentIdx({})},[sec])
   const [pvTab,setPvTab]=React.useState<"form"|"link">("form")
   const [saved,setSaved]=React.useState<any[]>([])
+  // 폼 목록에서 "오늘 몇 건 들어왔는지"를 바로 보여주기 위한 사전.
+  // 추이 데이터의 마지막 날이 오늘이라, 이미 받아온 값을 그대로 쓴다. 추가 조회가 없다.
+  const todayCountByForm=React.useMemo(()=>{
+    const last=trendDays[trendDays.length-1]
+    const map:Record<string,number>={}
+    if(last)last.forms.forEach(f=>{if(f.id)map[f.id]=f.count})
+    return map
+  },[trendDays])
+  // 말풍선에 폼 이름을 띄우려면 id를 이름으로 바꿔야 한다. 목록은 이미 받아둔 걸 쓴다.
+  const trendFormNames=React.useMemo(()=>{
+    const map:Record<string,string>={}
+    saved.forEach((item:any)=>{if(item?.id)map[String(item.id)]=String(item.name||"이름 없는 폼")})
+    return map
+  },[saved])
   // 최근 구간 기준 폼별 참여/전환. 대시보드 콜아웃에서만 쓴다.
   const [conversionByForm,setConversionByForm]=React.useState<Record<string,{sessions:number;completed:number}>>(readConversionCache)
   React.useEffect(()=>{
@@ -6345,7 +6383,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     <span style={{fontSize:17,fontWeight:700,letterSpacing:"-.2px",color:A.t1}}>{dashBrandFilter?brandDisplayName(dashBrandFilter):"전체"} 폼</span>
                     <span style={{fontSize:13,fontWeight:600,color:A.t3}}>{filtered.length}</span>
                   </div>
-                  <SubmissionTrend days={trendDays} loading={trendLoading} width={width} A={A}/>
+                  <SubmissionTrend days={trendDays} loading={trendLoading} width={width} formNames={trendFormNames} A={A}/>
                 </div>
                 <div style={{flex:1}}/>
                 <div style={{position:"relative" as const,flexShrink:0}}>
@@ -6391,6 +6429,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     const program=programOf(item)
                     const locked=!!item.config?.dashboard?.editPasswordHash
                     const responseCount=dashResponseCounts[item.id]||0
+                    const todayCount=todayCountByForm[String(item.id)]||0
                     const responsePct=responseCount?Math.max(8,Math.round((responseCount/maxResponseCount)*100)):0
                     return <div key={item.id} onMouseEnter={e=>{prefetchFullFormRow(item);(e.currentTarget as HTMLElement).style.background=adminDark?A.card2:"#F7F9FC"}} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background=A.card} onContextMenu={e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,item,source:"dashboard"})}}
                       style={{display:"grid",gridTemplateColumns:tableColumns,alignItems:"center",gap:12,minHeight:48,padding:"0 24px",fontSize:12.5,color:A.t2,transition:"background .12s"}}>
@@ -6417,7 +6456,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                         {status.label}
                       </span></span>
                       <div style={{display:"flex",flexDirection:"column" as const,alignItems:"flex-start",gap:4,minWidth:0}}>
-                        <span style={{fontSize:13,fontWeight:responseCount?700:500,color:responseCount?A.t1:A.t4,fontVariantNumeric:"tabular-nums" as const}}>{responseCount}</span>
+                        <span style={{display:"flex",alignItems:"center",gap:4}}>
+                          <span style={{fontSize:13,fontWeight:responseCount?700:500,color:responseCount?A.t1:A.t4,fontVariantNumeric:"tabular-nums" as const}}>{responseCount}</span>
+                          {todayCount>0&&<span className="cf-tip" data-tip={`오늘 ${todayCount}건 접수`}
+                            style={{display:"inline-flex",alignItems:"center",gap:2.5,padding:"1.5px 5px",borderRadius:5,
+                              background:A.blue2,color:A.blue,fontSize:10.5,fontWeight:700,
+                              fontVariantNumeric:"tabular-nums" as const,whiteSpace:"nowrap" as const}}>
+                            <svg width="7" height="7" viewBox="0 0 10 10" aria-hidden><path d="M5 1.6 9.1 8.4H.9z" fill="currentColor"/></svg>
+                            {todayCount}
+                          </span>}
+                        </span>
                         <span style={{width:48,height:3,borderRadius:2,background:adminDark?A.card2:"#EFF1F4",overflow:"hidden",display:"block"}}>
                           <span style={{display:"block",width:`${responsePct}%`,height:"100%",borderRadius:999,background:A.blue}}/>
                         </span>
