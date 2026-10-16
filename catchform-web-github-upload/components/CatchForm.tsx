@@ -62,6 +62,16 @@ type FormField = {
     birthYearLimitEnabled?: boolean; birthYearLimitYear?: number | string; birthYearLimitMessage?: string
     birthDateRangeEnabled?: boolean; birthDateRangeStart?: string; birthDateRangeEnd?: string; birthDateRangeMessage?: string
     scaleMin?: number; scaleMax?: number; scaleMinLabel?: string; scaleMaxLabel?: string
+    // 복수 선택에서 고른 항목마다 한 줄 답변을 받는다. 값은 `<질문id>_opt_<선택지값>`에 담긴다.
+    optionAnswer?: boolean
+    optionAnswerPlaceholder?: string
+    // 고를 수 있는 개수 범위. 0이거나 비어 있으면 제한 없음.
+    minSelect?: number
+    maxSelect?: number
+    // 폼에서는 감추지만 설정에는 남겨두는 질문.
+    // 질문을 지우면 응답 목록의 열까지 사라져서 이미 받아둔 답(특히 첨부파일)을 볼 수 없게 된다.
+    // 숨김으로 두면 새 응답자에게는 안 보이고, 기존 응답은 그대로 열람·내려받기가 된다.
+    hidden?: boolean
 }
 type FormAdConfig = {
     enabled: boolean; adMode: AdMode
@@ -139,6 +149,33 @@ const emptyAttribution = (): AttributionData => ({
     gclid: "",
 })
 const cleanAttributionValue = (value: any) => String(value ?? "").trim().slice(0, 1000)
+const getFieldOpts = (field: any): Opt[] => {
+    const rawOpts = (field.opts && field.opts.length) ? field.opts : (field.options || [])
+    return rawOpts.map((o: any) => {
+        const label = String(o?.label ?? o?.value ?? o)
+        const value = String(o?.value ?? o?.label ?? o)
+        const key = value.trim().toLowerCase()
+        const isEtc = !!o?.isEtc || label.trim() === "기타" || value.trim() === "기타" || key === "etc" || key === "other"
+        return { ...(typeof o === "object" ? o : {}), label, value, isEtc }
+    })
+}
+const optionAnswerKey = (fieldId: string, optValue: string) => `${fieldId}_opt_${optValue}`
+// 복수 선택의 개수 제한과 항목별 답변을 한 곳에서 검사한다. 통과하면 빈 문자열.
+const checkboxSelectionError = (field: any, picked: string[], opts: any[], vals: Record<string, string>) => {
+    const min = selectLimitOf(field, "minSelect")
+    const max = selectLimitOf(field, "maxSelect")
+    if (min > 0 && picked.length < min) return min === max ? `${min}개를 골라주세요.` : `${min}개 이상 골라주세요.`
+    if (max > 0 && picked.length > max) return `최대 ${max}개까지 고를 수 있어요.`
+    if (field?.optionAnswer && field?.required) {
+        const missing = opts.some(opt => picked.includes(opt.value) && !opt.isEtc && !String(vals[optionAnswerKey(field.id, opt.value)] || "").trim())
+        if (missing) return "고른 항목에 답변을 입력해주세요."
+    }
+    return ""
+}
+const selectLimitOf = (field: any, key: "minSelect" | "maxSelect") => {
+    const n = Number(field?.[key])
+    return Number.isFinite(n) && n > 0 ? Math.round(n) : 0
+}
 const referrerPath = (value: string) => {
     try {
         const url = new URL(value)
@@ -1272,11 +1309,12 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         return (cfg.form.pageLabels || [])[p - 1] || `섹션${p}`
     }
 
-    const currentFields: FormField[] = isKdt
+    const currentFields: FormField[] = (isKdt
         ? (cfg.kdtFields || []).filter(f => (f as any).page === page) as any
         : isMultiPage
             ? cfg.form.fields.filter(f => (f.page || 1) === page)
             : cfg.form.fields
+    ).filter((f: any) => !f.hidden)
 
     const isLastPage = page === formPages
     const currentPageShowsConsents = consentPosition === "start" ? (!isMultiPage || page === 1) : (!isMultiPage || isLastPage)
@@ -1549,7 +1587,9 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             const f = field as FormField
             if (isDisplayOnlyFieldType(f.type)) continue
             if (f.type === "checkbox") {
-                if (f.required && !(checked[f.id] || []).length) return false
+                const picked = checked[f.id] || []
+                if (f.required && !picked.length) return false
+                if (checkboxSelectionError(f, picked, getFieldOpts(f), vals)) return false
             } else if (f.type === "file") {
                 const fs:any = fileObjects[f.id] || []
                 if (f.required && !(Array.isArray(fs) ? fs : [fs]).filter(Boolean).length) return false
@@ -1586,16 +1626,6 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         return ""
     }
 
-    const getFieldOpts = (field: any): Opt[] => {
-        const rawOpts = (field.opts && field.opts.length) ? field.opts : (field.options || [])
-        return rawOpts.map((o: any) => {
-            const label = String(o?.label ?? o?.value ?? o)
-            const value = String(o?.value ?? o?.label ?? o)
-            const key = value.trim().toLowerCase()
-            const isEtc = !!o?.isEtc || label.trim() === "기타" || value.trim() === "기타" || key === "etc" || key === "other"
-            return { ...(typeof o === "object" ? o : {}), label, value, isEtc }
-        })
-    }
     const selectedBranchTarget = () => {
         for (const field of currentFields as any[]) {
             if (field.type !== "button_select" && field.type !== "dropdown") continue
@@ -1643,6 +1673,12 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             return selected.map(v => {
                 const opt = fieldOpts.find(o => o.value === v)
                 if (opt?.isEtc && etcValue) return `${opt.label}: ${etcValue}`
+                // 항목별 답변도 '기타'와 같은 "라벨: 값" 형태로 둔다.
+                // 응답 목록·CSV·구글 시트가 기존 방식 그대로 읽는다.
+                if (field.optionAnswer) {
+                    const answer = String(vals[optionAnswerKey(fid, v)] || "").trim()
+                    if (answer) return `${opt?.label || v}: ${answer}`
+                }
                 return opt?.label || v
             })
         }
@@ -1656,6 +1692,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const getDraftAnswers = () => {
         const allFields: any[] = isKdt ? (cfg.kdtFields || []) as any[] : cfg.form.fields as any[]
         return allFields
+            .filter(field => !field.hidden)
             .filter(field => !isDisplayOnlyFieldType(field.type))
             .map(field => {
                 const answer = field.type === "file" ? (fileNames[field.id] || []) : getFieldAnswer(field)
@@ -1710,7 +1747,12 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             if (isDisplayOnlyFieldType(f.type)) continue
             const val = vals[f.id] || ""
             if (f.type === "checkbox") {
-                if (f.required && !(checked[f.id] || []).length) { newErrors[f.id] = "필수 입력 항목이에요."; hasErr = true }
+                const picked = checked[f.id] || []
+                if (f.required && !picked.length) { newErrors[f.id] = "필수 입력 항목이에요."; hasErr = true }
+                else {
+                    const selectErr = checkboxSelectionError(f, picked, getFieldOpts(f), vals)
+                    if (selectErr) { newErrors[f.id] = selectErr; hasErr = true }
+                }
             } else if (f.type === "file") {
                 const fs:any = fileObjects[f.id] || []
                 if (f.required && !(Array.isArray(fs) ? fs : [fs]).filter(Boolean).length) { newErrors[f.id] = "필수 입력 항목이에요."; hasErr = true }
@@ -1981,6 +2023,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             const allFields = isKdt ? (cfg.kdtFields || []) as any[] : cfg.form.fields
 
             for (const field of allFields) {
+                if ((field as any).hidden) continue
                 if (isDisplayOnlyFieldType(field.type)) continue
                 const fid = field.id as string
                 const label = field.label as string
@@ -2415,11 +2458,24 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
             {f.type === "checkbox" && (() => {
                 const checkedVals = checked[f.id] || []
                 const etcOpt = opts.find(opt => opt.isEtc && checkedVals.includes(opt.value))
+                const minSelect = selectLimitOf(f, "minSelect")
+                const maxSelect = selectLimitOf(f, "maxSelect")
+                // 고른 항목마다 답을 받는 질문은, 고른 순서대로 아래에 입력칸을 펼친다.
+                const answerOpts = f.optionAnswer ? opts.filter(opt => checkedVals.includes(opt.value) && !opt.isEtc) : []
+                const limitText = maxSelect > 0 && minSelect > 0
+                    ? (minSelect === maxSelect ? `${minSelect}개를 골라주세요.` : `${minSelect}~${maxSelect}개를 골라주세요.`)
+                    : maxSelect > 0 ? `최대 ${maxSelect}개까지 고를 수 있어요.`
+                    : minSelect > 0 ? `${minSelect}개 이상 골라주세요.` : ""
                 return <div>
+                    {!!limitText && <div style={{ fontSize: fs(12), color: FC.t3, fontFamily: FONT, marginBottom: 8 }}>
+                        {limitText}{maxSelect > 0 ? ` (${checkedVals.length}/${maxSelect})` : ""}
+                    </div>}
                     <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: checkboxGridGap }}>
                         {opts.map(opt => {
                             const isChk = checkedVals.includes(opt.value)
-                            return <div key={opt.value} onClick={() => { trackFieldTouch(f); setChecked(p => { const cur = p[f.id] || []; return { ...p, [f.id]: isChk ? cur.filter(v => v !== opt.value) : [...cur, opt.value] } }); clearErr(f.id) }} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                            // 최대 개수까지 골랐으면 나머지는 더 못 고르게 한다. 이미 고른 건 풀 수 있어야 한다.
+                            const blocked = !isChk && maxSelect > 0 && checkedVals.length >= maxSelect
+                            return <div key={opt.value} onClick={() => { if (blocked) return; trackFieldTouch(f); setChecked(p => { const cur = p[f.id] || []; return { ...p, [f.id]: isChk ? cur.filter(v => v !== opt.value) : [...cur, opt.value] } }); clearErr(f.id) }} style={{ display: "flex", alignItems: "center", gap: 10, cursor: blocked ? "not-allowed" : "pointer", opacity: blocked ? 0.45 : 1 }}>
                                 <div style={{ width: 18, height: 18, borderRadius: 4, border: `1px solid ${isChk ? accentBg : FC.fieldBorder}`, background: isChk ? accentBg : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .15s" }}>
                                     {isChk && <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                                 </div>
@@ -2427,6 +2483,14 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                             </div>
                         })}
                     </div>
+                    {answerOpts.map(opt => <div key={"ans_" + opt.value} style={{ marginTop: 8 }}>
+                        <div style={{ fontSize: fs(12), color: FC.t2, fontFamily: FONT, fontWeight: 600, marginBottom: 5 }}>{opt.label}</div>
+                        <input value={vals[optionAnswerKey(f.id, opt.value)] || ""}
+                            onChange={e => { setVal(optionAnswerKey(f.id, opt.value), e.target.value); clearErr(f.id) }}
+                            placeholder={f.optionAnswerPlaceholder || "답변을 입력해주세요."} style={inp}
+                            onFocus={e => { trackFieldTouch(f); e.target.style.borderColor = accentBg }}
+                            onBlur={e => e.target.style.borderColor = fieldErr ? FC.red : FC.fieldBorder} />
+                    </div>)}
                     {etcOpt && <div style={{ marginTop: 8 }}>
                         <input value={vals[f.id + "_etc"] || ""} onChange={e => { setVal(f.id + "_etc", e.target.value); clearErr(f.id) }} placeholder={f.etcPh || "직접 입력해주세요."} style={inp} onFocus={e => e.target.style.borderColor = accentBg} onBlur={e => e.target.style.borderColor = FC.fieldBorder} />
                     </div>}

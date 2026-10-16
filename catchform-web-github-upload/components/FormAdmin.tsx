@@ -32,7 +32,7 @@ type ModalShareKey = "kakao"|"instagram"|"threads"|"x"|"link"
 type ModalShareButtons = Record<ModalShareKey,boolean>
 type FieldType = "text"|"name"|"phone"|"email"|"referral"|"date"|"time"|"dropdown"|"button_select"|"checkbox"|"textarea"|"info"|"file"|"ad"|"scale"
 type HelperItem = { text:string; callout?:boolean }
-type FormField = { id:string; type:FieldType; label:string; placeholder?:string; helper?:string; helpers?:HelperItem[]; required?:boolean; opts?:Opt[]; etcPh?:string; dupCheck?:boolean; page?:number; cols?:number; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMode?:AdMode; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string; birthYearLimitEnabled?:boolean; birthYearLimitYear?:number|string; birthYearLimitMessage?:string; birthDateRangeEnabled?:boolean; birthDateRangeStart?:string; birthDateRangeEnd?:string; birthDateRangeMessage?:string; scaleMin?:number; scaleMax?:number; scaleMinLabel?:string; scaleMaxLabel?:string }
+type FormField = { id:string; type:FieldType; label:string; placeholder?:string; helper?:string; helpers?:HelperItem[]; required?:boolean; opts?:Opt[]; etcPh?:string; dupCheck?:boolean; page?:number; cols?:number; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMode?:AdMode; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string; birthYearLimitEnabled?:boolean; birthYearLimitYear?:number|string; birthYearLimitMessage?:string; birthDateRangeEnabled?:boolean; birthDateRangeStart?:string; birthDateRangeEnd?:string; birthDateRangeMessage?:string; scaleMin?:number; scaleMax?:number; scaleMinLabel?:string; scaleMaxLabel?:string; hidden?:boolean; optionAnswer?:boolean; optionAnswerPlaceholder?:string; minSelect?:number; maxSelect?:number }
 type FormAdConfig = { enabled:boolean; adMode:AdMode; imageUrl?:string; imageCaption?:string; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number; adMainText?:string; adSubText?:string; adElementText?:string; adElementImageUrl?:string; adHref?:string; adBg?:string; adTextColor?:string }
 type QrLink = { code:string; url:string; label?:string; type?:string; createdAt?:string }
 type Cfg = {
@@ -2603,6 +2603,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   }
   const [dashTopTypeFilter,setDashTopTypeFilter]=React.useState<DashboardFormType|"" >("")
   const [dashTopStatusFilter,setDashTopStatusFilter]=React.useState<DashboardManualStatus|"" >("")
+  // 질문을 숨겨서 섹션이 비었을 때 띄우는 확인 창
+  const [emptySectionPage,setEmptySectionPage]=React.useState<number|null>(null)
+  const [emptySectionTarget,setEmptySectionTarget]=React.useState(1)
   const [dashQuery,setDashQuery]=React.useState("")
   // 상단 응답 추이 — 최근 14일치 제출 건수를 하루 단위로 센다.
   // 응답 표는 2주에 300건 남짓이라 가볍지만, 대시보드를 열 때마다 부르지 않도록 5분은 들고 있는다.
@@ -3820,6 +3823,24 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       return{...p,form:{...p.form,pages:Math.max(1,(p.form.pages||1)-1),fields:newFields}}
     })
     if(pvPage>=pageNum)setPvPage(Math.max(1,pageNum-1))
+  }
+  // 섹션의 보이는 질문이 전부 사라졌을 때, 섹션을 지우면서 남은(숨긴) 질문을 고른 섹션으로 옮긴다.
+  // removePage는 무조건 앞 섹션으로 보내서, 어디로 옮길지 고를 수 없다.
+  function removePageMovingFieldsTo(pageNum:number,targetPage:number){
+    if((cfg.form.pages||1)<=1)return
+    setCfg(p=>{
+      // 섹션을 지우면 뒤 번호가 하나씩 당겨진다. 옮길 섹션이 뒤쪽이면 그 번호도 같이 당겨야 한다.
+      const finalTarget=targetPage>pageNum?targetPage-1:targetPage
+      const newFields=p.form.fields.map(f=>{
+        const fp=f.page||1
+        if(fp===pageNum)return{...f,page:finalTarget}
+        if(fp>pageNum)return{...f,page:fp-1}
+        return f
+      })
+      return{...p,form:{...p.form,pages:Math.max(1,(p.form.pages||1)-1),fields:newFields}}
+    })
+    if(pvPage>=pageNum)setPvPage(Math.max(1,pageNum-1))
+    setEditIdx(null)
   }
   function moveFieldToPage(fieldIdx:number,targetPage:number){
     setCfg(p=>({...p,form:{...p.form,fields:p.form.fields.map((f,i)=>i===fieldIdx?{...f,page:targetPage}:f)}}))
@@ -7548,8 +7569,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     <div style={{width:34,height:34,borderRadius:9,background:panelFieldBg(A),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:"none",color:A.t2}}>
                       {FTYPE_ICONS[(field as any).type as string]||FTYPE_ICONS.text}
                     </div>
-                    <span style={{flex:1,fontSize:12.5,fontWeight:500,color:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{(field as any).label||"(라벨 없음)"}</span>
-                    {(field as any).required&&<span style={{fontSize:11.5,color:accentBg,fontWeight:700,flexShrink:0}}>필수</span>}
+                    <span style={{flex:1,fontSize:12.5,fontWeight:500,color:(field as any).hidden?A.t3:A.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,textDecoration:(field as any).hidden?"line-through":"none"}}>{(field as any).label||"(라벨 없음)"}</span>
+                    {(field as any).hidden&&<span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"1.5px 6px",borderRadius:5,background:panelFieldBg(A),color:A.t3,fontSize:10.5,fontWeight:700,flexShrink:0}}>
+                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden><path d="M2 2l12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M6.5 6.6a2 2 0 002.9 2.8M4.2 4.4C2.7 5.4 1.6 6.9 1.3 8c.6 1.9 3.3 4 6.7 4 1 0 2-.2 2.8-.5M11.4 11.3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/><path d="M6.4 4.2A6.9 6.9 0 018 4c3.4 0 6.1 2.1 6.7 4-.2.7-.7 1.5-1.5 2.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                      숨김
+                    </span>}
+                    {(field as any).required&&!(field as any).hidden&&<span style={{fontSize:11.5,color:accentBg,fontWeight:700,flexShrink:0}}>필수</span>}
                   </div>
                   {!isKdt&&<button
                     onClick={e=>{e.stopPropagation();duplicateField(cfg.form.fields.indexOf(pageFields[idx] as FormField))}}
@@ -7574,7 +7599,45 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                         options={FTYPES.filter(ft=>!ft.divider).map(ft=>({value:ft.type,label:ft.label}))}/>
                     </F>
                   </div>}
+                  {(field as any).type==="checkbox"&&<div style={{padding:"0 12px 14px"}}>
+                    {/* 고른 항목마다 한 줄 답을 받는다. 저장 형태는 '기타' 입력과 같은 "라벨: 값"이라
+                        응답 목록·CSV·구글 시트가 기존 방식 그대로 읽는다. */}
+                    <PanelCheckRow label="선택한 항목마다 답변 입력" on={!!(field as any).optionAnswer} toggle={()=>patchActiveField(idx,{optionAnswer:!(field as any).optionAnswer})} A={A}/>
+                    {!!(field as any).optionAnswer&&<div style={{marginTop:10}}>
+                      <F label="입력칸 안내 문구" hint="입력 칸 안에 흐리게 표시됩니다" A={A}>
+                        <TIn value={(field as any).optionAnswerPlaceholder||""} onChange={v=>patchActiveField(idx,{optionAnswerPlaceholder:v})} placeholder="답변을 입력해주세요." A={A}/>
+                      </F>
+                    </div>}
+                    <div style={{marginTop:12}}>
+                      <F label="고를 수 있는 개수" hint="비워두면 제한이 없습니다. 최소와 최대를 같게 두면 '2개를 골라주세요'처럼 안내합니다." A={A}>
+                        <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto minmax(0,1fr)",gap:8,alignItems:"center"}}>
+                          <TIn type="number" value={(field as any).minSelect?String((field as any).minSelect):""} placeholder="최소" onChange={v=>patchActiveField(idx,{minSelect:Math.max(0,Math.round(Number(v)||0))})} A={A}/>
+                          <span style={{fontSize:12.5,fontWeight:700,color:A.t3,fontFamily:FONT}}>~</span>
+                          <TIn type="number" value={(field as any).maxSelect?String((field as any).maxSelect):""} placeholder="최대" onChange={v=>patchActiveField(idx,{maxSelect:Math.max(0,Math.round(Number(v)||0))})} A={A}/>
+                        </div>
+                      </F>
+                    </div>
+                  </div>}
                   {!isDisplayOnlyFieldType((field as any).type)&&<div style={{padding:"0 12px 14px"}}><PanelCheckRow label="필수 입력" on={!!(field as any).required} toggle={()=>patchActiveField(idx,{required:!(field as any).required})} A={A}/></div>}
+                  {/* 질문을 지우면 응답 목록의 열까지 사라져서 이미 받아둔 답(특히 첨부파일)을 볼 수 없게 된다.
+                      숨김으로 두면 새 응답자에게는 안 보이고, 기존 응답은 그대로 남는다. */}
+                  <div style={{padding:"0 12px 14px"}}>
+                    <PanelCheckRow label="폼에서 숨기기" on={!!(field as any).hidden} toggle={()=>{
+                      const next=!(field as any).hidden
+                      patchActiveField(idx,{hidden:next})
+                      // 이 질문을 숨기면 그 섹션에 보이는 게 하나도 안 남는지 본다.
+                      // (안내문 같은 표시용 질문도 응답자에게는 보이므로 함께 센다)
+                      if(!next||isKdt||(cfg.form.pages||1)<=1)return
+                      const fieldPage=Number((field as any).page||1)
+                      const stillVisible=cfg.form.fields.filter(f=>Number(f.page||1)===fieldPage&&f.id!==(field as any).id&&!(f as any).hidden).length
+                      if(stillVisible>0)return
+                      setEmptySectionTarget(fieldPage>1?fieldPage-1:(cfg.form.pages||1)>1?2:1)
+                      setEmptySectionPage(fieldPage)
+                    }} A={A}/>
+                    <div style={{fontSize:11,color:A.t3,lineHeight:1.5,marginTop:6}}>
+                      새로 들어오는 응답자에게는 보이지 않습니다. 이미 받은 답과 첨부파일은 응답 목록에 그대로 남습니다.
+                    </div>
+                  </div>
                   {!isDisplayOnlyFieldType((field as any).type)&&<div style={{padding:"10px 12px"}}><F label="질문 텍스트" A={A}><TArea value={(field as any).label||""} onChange={v=>patchActiveField(idx,{label:v})} minH={36} A={A}/></F></div>}
                   {/* 단답형·장문형으로 전화번호·이메일 같은 걸 받으면 형식 검사도, 전용 열 저장도 안 된다. 제목으로 알아채고 바꾸기를 권한다. */}
                   {!isKdt&&((field as any).type==="text"||(field as any).type==="textarea")&&(()=>{
@@ -8585,7 +8648,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               }
             }}
             onDragLeave={()=>{setDragOver(null);setDragInsertAt(null)}}
-            style={{position:"relative" as const,marginBottom:qg,opacity:dragIdx===i?0.4:1,outline:isSelected?"2px solid "+accentC:"none",outlineOffset:4,borderRadius:fr2,cursor:"pointer"}}>
+            // 숨김 질문은 응답자에게 안 보인다. 편집 화면에서는 남겨두되 흐리게 해서 구분한다.
+            style={{position:"relative" as const,marginBottom:qg,opacity:dragIdx===i?0.4:(field as any).hidden?0.45:1,outline:isSelected?"2px solid "+accentC:"none",outlineOffset:4,borderRadius:fr2,cursor:"pointer"}}>
+            {(field as any).hidden&&<div style={{position:"absolute" as const,top:-9,right:0,zIndex:6,display:"inline-flex",alignItems:"center",gap:3,
+              padding:"2px 7px",borderRadius:5,background:A.t2,color:A.card,fontFamily:FONT,fontSize:10,fontWeight:700,pointerEvents:"none" as const}}>
+              숨김 · 응답자에게 보이지 않음
+            </div>}
             {/* Drop line — above */}
             {dragInsertAt===i&&dragIdx!==i&&<div style={{position:"absolute" as const,top:-qg/2-1,left:0,right:0,height:2,borderRadius:1,background:accentC,zIndex:10,pointerEvents:"none" as const}}/>}
             {/* Drop line — below (last item) */}
@@ -8922,12 +8990,23 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               })
               const checkedVals=pvFieldChecked[id]||[]
               const etcOpt=cbOpts.find((opt:any)=>opt.isEtc&&checkedVals.includes(opt.value))
+              const minSel=Math.max(0,Math.round(Number((field as any).minSelect)||0))
+              const maxSel=Math.max(0,Math.round(Number((field as any).maxSelect)||0))
+              const answerOpts=(field as any).optionAnswer?cbOpts.filter((opt:any)=>checkedVals.includes(opt.value)&&!opt.isEtc):[]
+              const limitText=maxSel>0&&minSel>0
+                ?(minSel===maxSel?`${minSel}개를 골라주세요.`:`${minSel}~${maxSel}개를 골라주세요.`)
+                :maxSel>0?`최대 ${maxSel}개까지 고를 수 있어요.`
+                :minSel>0?`${minSel}개 이상 골라주세요.`:""
               return <div>
+                {!!limitText&&<div style={{fontSize:fs(12),color:FC.t3,fontFamily:FONT,marginBottom:8}}>
+                  {limitText}{maxSel>0?` (${checkedVals.length}/${maxSel})`:""}
+                </div>}
                 <div style={{display:"grid",gridTemplateColumns:`repeat(${cbCols},1fr)`,gap:checkboxGridGap}}>
                   {cbOpts.map(opt=>{
                     const checked=checkedVals.includes(opt.value)
-                    const toggle=()=>setPvFieldChecked(p=>{const cur=p[id]||[];return{...p,[id]:checked?cur.filter(v=>v!==opt.value):[...cur,opt.value]}})
-                    return <div key={opt.value} onClick={toggle} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
+                    const blocked=!checked&&maxSel>0&&checkedVals.length>=maxSel
+                    const toggle=()=>{if(blocked)return;setPvFieldChecked(p=>{const cur=p[id]||[];return{...p,[id]:checked?cur.filter(v=>v!==opt.value):[...cur,opt.value]}})}
+                    return <div key={opt.value} onClick={toggle} style={{display:"flex",alignItems:"center",gap:10,cursor:blocked?"not-allowed":"pointer",opacity:blocked?0.45:1}}>
                       <div style={{width:18,height:18,borderRadius:4,border:`1px solid ${checked?accentC:FC.fieldBorder}`,background:checked?accentC:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s"}}>
                         {checked&&<svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                       </div>
@@ -8935,6 +9014,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     </div>
                   })}
                 </div>
+                {answerOpts.map((opt:any)=><div key={"ans_"+opt.value} style={{marginTop:8}}>
+                  <div style={{fontSize:fs(12),color:FC.t2,fontFamily:FONT,fontWeight:600,marginBottom:5}}>{opt.label}</div>
+                  <input value={pvFieldVals[id+"_opt_"+opt.value]||""} onChange={e=>setPvFieldVals(p=>({...p,[id+"_opt_"+opt.value]:e.target.value}))}
+                    placeholder={(field as any).optionAnswerPlaceholder||"답변을 입력해주세요."} style={inp}
+                    onFocus={e=>e.target.style.borderColor=accentC} onBlur={e=>e.target.style.borderColor=FC.fieldBorder}/>
+                </div>)}
                 {etcOpt&&<div style={{marginTop:8}}>
                   <input value={pvFieldVals[id+"_etc"]||""} onChange={e=>setPvFieldVals(p=>({...p,[id+"_etc"]:e.target.value}))}
                     placeholder={field.etcPh||"직접 입력해주세요."} style={inp}
@@ -11208,6 +11293,39 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
         </div>
       )}
+      {emptySectionPage!==null&&(()=>{
+        const pageNum=emptySectionPage
+        const hiddenOnPage=cfg.form.fields.filter(f=>Number(f.page||1)===pageNum)
+        const others=Array.from({length:cfg.form.pages||1},(_,i)=>i+1).filter(p=>p!==pageNum)
+        const close=()=>setEmptySectionPage(null)
+        return <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={close}>
+          <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:420,maxWidth:"calc(100% - 32px)",boxSizing:"border-box" as const,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:8}}>빈 섹션이 됐어요</div>
+            <div style={{fontSize:13.5,color:A.t2,marginBottom:6,lineHeight:1.55}}>
+              <span style={{fontWeight:600,color:A.t1}}>{getPageLabel(pageNum)}</span>에 응답자에게 보이는 질문이 하나도 없습니다.
+              <br/>
+              이 섹션을 지울까요?
+            </div>
+            <div style={{fontSize:12,color:A.t3,marginBottom:20,lineHeight:1.5}}>
+              그대로 두면 응답자에게 빈 화면이 한 단계 더 나옵니다.
+            </div>
+            {hiddenOnPage.length>0&&others.length>0&&<div style={{marginBottom:22}}>
+              <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>숨긴 질문 {hiddenOnPage.length}개를 어느 섹션으로 옮길까요?</div>
+              <PanelSelect value={String(emptySectionTarget)} onChange={v=>setEmptySectionTarget(Number(v)||1)} A={A} height={38} fontSize={13} radius={8} padX={12} width="100%"
+                options={others.map(p=>({value:String(p),label:getPageLabel(p)}))}/>
+              <div style={{fontSize:11.5,color:A.t3,lineHeight:1.5,marginTop:8}}>
+                숨긴 질문은 옮겨도 응답자에게 보이지 않습니다. 기존 응답과 첨부파일을 계속 보기 위해 설정에만 남겨두는 것입니다.
+              </div>
+            </div>}
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button onClick={close}
+                style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer",whiteSpace:"nowrap" as const}}>그대로 두기</button>
+              <button onClick={()=>{removePageMovingFieldsTo(pageNum,emptySectionTarget);close()}}
+                style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.blue,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const}}>섹션 지우기</button>
+            </div>
+          </div>
+        </div>
+      })()}
       {showUpdateModal&&(
         <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={()=>setShowUpdateModal(false)}>
           <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:cfg.header.programUnlinked?500:400,maxWidth:"calc(100% - 32px)",boxSizing:"border-box" as const,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
