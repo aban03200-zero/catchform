@@ -7626,7 +7626,9 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </button>
                 </div>
-                {editIdx===idx&&<div style={{borderRadius:10,background:A.card,boxShadow:`inset 0 0 0 1px ${A.border}`,marginBottom:6,overflow:"hidden"}}>
+                {/* overflow:hidden을 두면 맨 아래 "섹션 변경" 같은 드롭다운이 패널에 잘려서 안 보인다.
+                    안쪽 내용은 모두 padding으로 띄워 놔서 모서리를 넘지 않으므로 잘라낼 필요가 없다. */}
+                {editIdx===idx&&<div style={{borderRadius:10,background:A.card,boxShadow:`inset 0 0 0 1px ${A.border}`,marginBottom:6}}>
                   {!isKdt&&<div style={{padding:"12px 12px 0"}}>
                     <F label="유형" A={A}>
                       <PanelSelect value={(field as any).type||"text"} onChange={v=>patchActiveField(idx,{type:v as FieldType})} A={A} height={40} fontSize={12.5} radius={9} padX={12}
@@ -7980,7 +7982,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     </div>
                   })()}
                   {!isKdt&&isMultiPage&&<div style={{padding:"0 12px 12px"}}>
-                    <F label="섹션 지정" A={A}>
+                    <F label="섹션 변경" A={A}>
                       <PanelSelect value={String((field as any).page||1)} onChange={v=>patchActiveField(idx,{page:Number(v)})} A={A} height={40} fontSize={12.5} radius={9} padX={12}
                         options={Array.from({length:formPages},(_,i)=>i+1).map(p=>({value:String(p),label:getPageLabel(p)}))}/>
                     </F>
