@@ -2605,6 +2605,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [dashTopStatusFilter,setDashTopStatusFilter]=React.useState<DashboardManualStatus|"" >("")
   // 질문을 숨겨서 섹션이 비었을 때 띄우는 확인 창
   const [emptySectionPage,setEmptySectionPage]=React.useState<number|null>(null)
+  // 이동할 섹션으로 지정된 섹션을 지우려 할 때 띄우는 확인 창
+  const [confirmDeletePage,setConfirmDeletePage]=React.useState<number|null>(null)
   const [emptySectionTarget,setEmptySectionTarget]=React.useState(1)
   const [dashQuery,setDashQuery]=React.useState("")
   // 상단 응답 추이 — 최근 14일치 제출 건수를 하루 단위로 센다.
@@ -3814,11 +3816,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         })
         return{...p,kdtFields:newKdt}
       }
+      // 지우는 섹션을 가리키던 지정은 비운다. 위 섹션으로 돌리면 엉뚱한 곳으로 보내게 된다.
+      const mapBranch=(target:number)=>target===pageNum?null:target>pageNum?target-1:target
       const newFields=p.form.fields.map(f=>{
         const fp=f.page||1
-        if(fp===pageNum)return{...f,page:Math.max(1,pageNum-1)}
-        if(fp>pageNum)return{...f,page:fp-1}
-        return f
+        const moved=fp===pageNum?{...f,page:Math.max(1,pageNum-1)}:fp>pageNum?{...f,page:fp-1}:f
+        return remapFieldBranchTargets(moved,mapBranch)
       })
       return{...p,form:{...p.form,pages:Math.max(1,(p.form.pages||1)-1),fields:newFields}}
     })
@@ -3831,11 +3834,12 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setCfg(p=>{
       // 섹션을 지우면 뒤 번호가 하나씩 당겨진다. 옮길 섹션이 뒤쪽이면 그 번호도 같이 당겨야 한다.
       const finalTarget=targetPage>pageNum?targetPage-1:targetPage
+      // 질문은 고른 섹션으로 옮기지만, 그 섹션을 "가리키던" 지정은 비운다.
+      const mapBranch=(target:number)=>target===pageNum?null:target>pageNum?target-1:target
       const newFields=p.form.fields.map(f=>{
         const fp=f.page||1
-        if(fp===pageNum)return{...f,page:finalTarget}
-        if(fp>pageNum)return{...f,page:fp-1}
-        return f
+        const moved=fp===pageNum?{...f,page:finalTarget}:fp>pageNum?{...f,page:fp-1}:f
+        return remapFieldBranchTargets(moved,mapBranch)
       })
       return{...p,form:{...p.form,pages:Math.max(1,(p.form.pages||1)-1),fields:newFields}}
     })
@@ -3926,6 +3930,36 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(kdt){const kdtDef=["기본 정보","상세 정보","자격 요건 및 동의"];return(source.form.pageLabels||[])[p-1]||kdtDef[p-1]||`섹션${p}`}
     return(source.form.pageLabels||[])[p-1]||`섹션${p}`
   }
+  // 선택지에 지정해둔 "이동할 섹션"은 번호로 저장된다.
+  // 섹션 순서를 바꾸거나 섹션을 지우면 그 번호가 가리키는 섹션이 달라지므로 같이 옮겨야 한다.
+  // 9999는 '설문지 제출'이라는 고정 값이라 건드리지 않는다.
+  function remapFieldBranchTargets(field:any,mapPage:(page:number)=>number|null):any{
+    const opts=field?.opts
+    if(!Array.isArray(opts)||!opts.length)return field
+    let changed=false
+    const nextOpts=opts.map((o:any)=>{
+      const target=Number(o?.nextPage)
+      if(!Number.isFinite(target)||target<=0||target===9999)return o
+      const mapped=mapPage(target)
+      if(mapped===target)return o
+      changed=true
+      // 가리키던 섹션이 사라졌으면 지정을 비운다. 엉뚱한 섹션으로 보내는 것보다 낫다.
+      return (mapped&&mapped>0)?{...o,nextPage:mapped}:{...o,nextPage:undefined}
+    })
+    return changed?{...field,opts:nextOpts}:field
+  }
+  // 이 섹션으로 보내도록 지정된 선택지를 모은다. 섹션을 지우기 전에 알려주기 위한 것.
+  function optionsTargetingPage(pageNum:number){
+    const fields:any[]=isKdt?(cfg.kdtFields||[]):(cfg.form.fields||[])
+    const out:{fieldLabel:string;optLabel:string}[]=[]
+    fields.forEach((f:any)=>{
+      if(!Array.isArray(f?.opts))return
+      f.opts.forEach((o:any)=>{
+        if(Number(o?.nextPage)===pageNum)out.push({fieldLabel:f.label||"이름 없는 질문",optLabel:o?.label||o?.value||"이름 없는 선택지"})
+      })
+    })
+    return out
+  }
   function setPageLabel(p:number,label:string){
     setCfg(prev=>{const arr=[...(prev.form.pageLabels||Array.from({length:formPages},(_,i)=>""))];arr[p-1]=label;return{...prev,form:{...prev.form,pageLabels:arr}}})
   }
@@ -3950,7 +3984,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           const oldPage=Number(item.page||1)
           const nextPage=pageMap.get(oldPage)
           if(!nextPage){outside.push(item);return}
-          const nextItem={...item,page:nextPage}
+          const nextItem=remapFieldBranchTargets({...item,page:nextPage},target=>pageMap.get(target)??null)
           grouped.set(oldPage,[...(grouped.get(oldPage)||[]),nextItem])
         })
         return [...order.flatMap(oldPage=>grouped.get(oldPage)||[]),...outside]
@@ -7521,7 +7555,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                     {isKdt?(cfg.kdtFields||[]).filter(f=>f.page===p).length:cfg.form.fields.filter(f=>(f.page||1)===p).length}개
                   </span>
                   {/* 삭제 버튼 */}
-                  {p>1&&<button onClick={e=>{e.stopPropagation();removePage(p)}}
+                  {p>1&&<button onClick={e=>{e.stopPropagation();if(optionsTargetingPage(p).length){setConfirmDeletePage(p);return}removePage(p)}}
                     style={{width:18,height:18,borderRadius:"50%",border:"none",background:"transparent",cursor:"pointer",color:A.t3,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,lineHeight:1,flexShrink:0,padding:0}}
                     onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.color=A.red}}
                     onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.color=A.t3}}>×</button>}
@@ -11293,6 +11327,37 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
         </div>
       )}
+      {confirmDeletePage!==null&&(()=>{
+        const pageNum=confirmDeletePage
+        const refs=optionsTargetingPage(pageNum)
+        const close=()=>setConfirmDeletePage(null)
+        return <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={close}>
+          <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:430,maxWidth:"calc(100% - 32px)",boxSizing:"border-box" as const,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:8}}>이 섹션으로 보내는 선택지가 있어요</div>
+            <div style={{fontSize:13.5,color:A.t2,marginBottom:6,lineHeight:1.55}}>
+              <span style={{fontWeight:600,color:A.t1}}>{getPageLabel(pageNum)}</span>(으)로 이동하도록 지정된 선택지가 {refs.length}개 있습니다.
+              <br/>
+              그래도 이 섹션을 지울까요?
+            </div>
+            <div style={{fontSize:12,color:A.t3,marginBottom:16,lineHeight:1.5}}>
+              지우면 해당 지정은 <span style={{fontWeight:600,color:A.t2}}>섹션 없음</span>으로 비워집니다. 그 선택지를 고른 응답자는 다음 섹션으로 순서대로 넘어갑니다.
+            </div>
+            <div style={{maxHeight:148,overflowY:"auto" as const,borderRadius:8,background:panelFieldBg(A),padding:"8px 10px",marginBottom:22}}>
+              {refs.map((r,i)=><div key={i} style={{display:"flex",alignItems:"baseline",gap:6,padding:"3px 0",fontSize:12,lineHeight:1.5}}>
+                <span style={{color:A.t3,flexShrink:0,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{r.fieldLabel}</span>
+                <span style={{color:A.t4,flexShrink:0}}>›</span>
+                <span style={{color:A.t1,fontWeight:600,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{r.optLabel}</span>
+              </div>)}
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button onClick={close}
+                style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer",whiteSpace:"nowrap" as const}}>취소</button>
+              <button onClick={()=>{removePage(pageNum);close()}}
+                style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.red,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const}}>섹션 지우기</button>
+            </div>
+          </div>
+        </div>
+      })()}
       {emptySectionPage!==null&&(()=>{
         const pageNum=emptySectionPage
         const hiddenOnPage=cfg.form.fields.filter(f=>Number(f.page||1)===pageNum)
@@ -11309,6 +11374,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             <div style={{fontSize:12,color:A.t3,marginBottom:20,lineHeight:1.5}}>
               그대로 두면 응답자에게 빈 화면이 한 단계 더 나옵니다.
             </div>
+            {optionsTargetingPage(pageNum).length>0&&<div style={{marginBottom:16,padding:"10px 12px",borderRadius:8,background:A===ALT?"#FDECEC":"rgba(232,92,92,0.10)",fontSize:12,color:A.t2,lineHeight:1.55}}>
+              이 섹션으로 이동하도록 지정된 선택지가 <span style={{fontWeight:700,color:A.red}}>{optionsTargetingPage(pageNum).length}개</span> 있습니다.
+              지우면 그 지정은 <span style={{fontWeight:600}}>섹션 없음</span>으로 비워집니다.
+            </div>}
             {hiddenOnPage.length>0&&others.length>0&&<div style={{marginBottom:22}}>
               <div style={{fontSize:12.5,fontWeight:700,color:A.t2,marginBottom:8}}>숨긴 질문 {hiddenOnPage.length}개를 어느 섹션으로 옮길까요?</div>
               <PanelSelect value={String(emptySectionTarget)} onChange={v=>setEmptySectionTarget(Number(v)||1)} A={A} height={38} fontSize={13} radius={8} padX={12} width="100%"
