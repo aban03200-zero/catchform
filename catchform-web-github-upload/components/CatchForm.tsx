@@ -107,6 +107,8 @@ type Cfg = {
     dashboard?: { isPublished?: boolean; publishedAt?: string; operationStart?: string; operationEnd?: string; operationPeriods?: OperationPeriod[]; alwaysOpen?: boolean }
     brand: string
     formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"|"survey"
+    // 제출 시 신청자에게 보내는 접수 안내 문자 설정
+    notify?: { enabled?: boolean; message?: string; title?: string; phoneQuestion?: string }
     kdtFields?: KdtField[]
 }
 
@@ -2109,11 +2111,25 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 : form_data
             if (storedFormData.length > 0) payload.form_data = storedFormData
 
-            const { error: insertErr } = await supa.from(tableName).insert(payload)
+            // 접수 안내 문자를 보내려면 방금 저장된 응답의 id가 필요하다.
+            const { data: insertedRows, error: insertErr } = await supa.from(tableName).insert(payload).select("id")
             if (insertErr) {
                 setDupErr("제출 중 오류가 발생했어요. (" + insertErr.message + ")")
                 setSubmitting(false)
                 return
+            }
+
+            // 접수 안내 문자. 보낼 문구와 받을 번호는 서버가 폼 설정과 저장된 응답에서 직접 읽는다.
+            // 문자가 안 가도 접수는 이미 끝났으므로 완료 화면을 막지 않는다. 결과는 응답 상세에 남는다.
+            const insertedId = insertedRows?.[0]?.id
+            if (insertedId && (cfg as any).notify?.enabled) {
+                try {
+                    fetch("/api/notify-applicant", {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({ table: tableName, responseId: insertedId }),
+                    }).catch(() => {})
+                } catch {}
             }
 
             trackEvent("completed", { page: formPages })
