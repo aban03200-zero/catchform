@@ -48,6 +48,8 @@ type Cfg = {
   dashboard?: DashboardMeta
   brand: string
   formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"|"survey"
+  // 제출 시 신청자에게 보내는 접수 안내 문자 설정
+  notify?: { enabled?:boolean; message?:string; title?:string; phoneQuestion?:string }
   kdtFields?: KdtField[]
 }
 type EditorTab = { key:string; id:string; name:string; slug:string; brand:string; cfg:Cfg; isDraft?:boolean }
@@ -7030,6 +7032,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     ]},
     {group:"설정",items:[
       {id:"integrations",label:"응답 연동",badge:cfg.integrations?.googleSheets?.enabled?"ON":"OFF"},
+      {id:"notify",label:"접수 안내 문자",badge:cfg.notify?.enabled?"ON":"OFF"},
       {id:"slug",label:"슬러그"},
       {id:"qr",label:"QR"},
     ]},
@@ -8289,6 +8292,74 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         </div>
       }
 
+      case "notify": {
+        const notify=cfg.notify||{}
+        const setNotify=(patch:any)=>setCfg(p=>({...p,notify:{...(p.notify||{}),...patch}}))
+        // 문구에 끼워 넣을 수 있는 값은 질문 제목이다. 응답에 그 제목으로 저장되기 때문이다.
+        const questionNames=((isKdt?(cfg.kdtFields||[]):(cfg.form.fields||[])) as any[])
+          .filter(f=>!isDisplayOnlyFieldType(f.type)&&!f.hidden)
+          .map(f=>String(f.label||"").trim()).filter(Boolean)
+        const phoneQuestions=((isKdt?(cfg.kdtFields||[]):(cfg.form.fields||[])) as any[])
+          .filter(f=>f.type==="phone"&&!f.hidden).map(f=>String(f.label||"").trim()).filter(Boolean)
+        // 이름·연락처는 응답 표에 따로 저장돼서, 질문 제목이 '성함'이어도 쓸 수 있다.
+        const knownKeys=new Set([...questionNames,"이름","연락처"])
+        const usedKeys=Array.from(String(notify.message||"").matchAll(/\{([^{}]{1,40})\}/g)).map(m=>String(m[1]).trim())
+        const unknownKeys=Array.from(new Set(usedKeys.filter(k=>!knownKeys.has(k))))
+        const previewParts=String(notify.message||"").split(/(\{[^{}]{1,40}\})/g)
+        const bytes=[...String(notify.message||"")].reduce((sum,ch)=>sum+(ch.charCodeAt(0)>0x7f?2:1),0)
+        return <div style={pd}>
+          <PanelCheckRow label="제출하면 신청자에게 문자 보내기" on={!!notify.enabled} toggle={()=>setNotify({enabled:!notify.enabled})} A={A}/>
+          <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginTop:8,marginBottom:notify.enabled?18:0}}>
+            응답이 저장된 뒤 신청자 연락처로 접수 안내를 보냅니다. 접수 확인은 정보성 안내라
+            마케팅 수신동의가 없어도 보낼 수 있지만, 광고 문구를 넣으면 동의가 필요해집니다.
+          </div>
+          {notify.enabled&&<>
+            <F label="연락처로 쓸 질문" hint="비워두면 응답에 저장된 연락처를 씁니다." A={A}>
+              <PanelSelect value={notify.phoneQuestion||""} onChange={v=>setNotify({phoneQuestion:v})} A={A} height={40} fontSize={12.5} radius={9} padX={12}
+                options={[{value:"",label:"자동 (저장된 연락처)"},...phoneQuestions.map(q=>({value:q,label:q}))]}/>
+            </F>
+            <F label="보낼 문구" hint="{질문 제목}을 넣으면 응답 값으로 바뀝니다." A={A}>
+              <TArea value={notify.message||""} onChange={v=>setNotify({message:v})} minH={110}
+                placeholder={"{이름}님, 신청이 접수되었습니다.\n담당자 확인 후 개별 안내드리겠습니다."} A={A}/>
+            </F>
+            <div style={{fontSize:11.5,color:bytes>90?A.t2:A.t3,lineHeight:1.55,marginTop:-6,marginBottom:14}}>
+              {bytes}바이트 · {bytes>90?"90바이트를 넘어 장문(LMS)으로 나갑니다. 요금이 더 듭니다.":"90바이트 이내라 단문(SMS)으로 나갑니다."}
+            </div>
+            {bytes>90&&<F label="장문 제목" hint="장문일 때만 쓰입니다. 비워두면 '접수 안내'로 나갑니다." A={A}>
+              <TIn value={notify.title||""} onChange={v=>setNotify({title:v})} placeholder="접수 안내" A={A}/>
+            </F>}
+            {!!questionNames.length&&<div style={{marginBottom:16}}>
+              <div style={{fontSize:12,fontWeight:700,color:A.t2,marginBottom:7}}>넣을 수 있는 값</div>
+              <div style={{display:"flex",flexWrap:"wrap" as const,gap:5}}>
+                {questionNames.slice(0,12).map(q=><button key={q} onClick={()=>setNotify({message:(notify.message||"")+"{"+q+"}"})}
+                  style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:11.5,cursor:"pointer",whiteSpace:"nowrap" as const}}>
+                  {"{"+q+"}"}
+                </button>)}
+              </div>
+            </div>}
+            {!!unknownKeys.length&&<div style={{padding:"10px 12px",borderRadius:9,marginBottom:12,
+              background:A===ALT?"#FDECEC":"rgba(232,92,92,0.10)",fontSize:11.5,color:A.t2,lineHeight:1.55}}>
+              <span style={{fontWeight:700,color:A.red}}>{unknownKeys.map(k=>"{"+k+"}").join(", ")}</span>
+              {" "}는 질문 제목과 맞지 않아 <span style={{fontWeight:600}}>빈칸으로 나갑니다.</span> 아래 버튼으로 넣어주세요.
+            </div>}
+            {!!String(notify.message||"").trim()&&<div style={{padding:"12px 14px",borderRadius:10,background:panelFieldBg(A)}}>
+              <div style={{fontSize:11.5,fontWeight:700,color:A.t3,marginBottom:7}}>미리보기</div>
+              <div style={{fontSize:12.5,color:A.t1,lineHeight:1.6,whiteSpace:"pre-wrap" as const}}>
+                {previewParts.map((part,i)=>{
+                  const m=part.match(/^\{([^{}]{1,40})\}$/)
+                  if(!m)return <span key={i}>{part}</span>
+                  const key=String(m[1]).trim()
+                  const ok=knownKeys.has(key)
+                  return <span key={i} style={{padding:"0 3px",borderRadius:4,fontWeight:600,
+                    background:ok?A.blue2:(A===ALT?"#FDECEC":"rgba(232,92,92,0.14)"),color:ok?A.blue:A.red}}>
+                    {ok?"["+key+"]":"(빈칸)"}
+                  </span>
+                })}
+              </div>
+            </div>}
+          </>}
+        </div>
+      }
       case "slug": {
         const slugHasInvalidChars=hasInvalidSlugChars(slugDraft)
         const preview=slugDraft&&!slugHasInvalidChars?buildPublicFormUrl(normalizeSlug(slugDraft)):""
@@ -10152,6 +10223,30 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
                           : <div style={{fontSize:13,color:A.t1,lineHeight:1.65,whiteSpace:"pre-line" as const,wordBreak:"break-word" as const}}>{analyticsAnswer(openRow,f)||"—"}</div>}
                       </div>
                     })}
+                    {/* 접수 안내 문자 결과. 보냈는지, 실패했다면 왜인지를 응답을 열자마자 알 수 있어야 한다. */}
+                    {(()=>{
+                      const sentAt=(openRow as any)?.notified_at
+                      const result=String((openRow as any)?.notify_result||"")
+                      if(!sentAt&&!result)return null
+                      const failed=!sentAt&&!!result
+                      return <div style={{display:"flex",alignItems:"flex-start",gap:9,padding:"10px 12px",borderRadius:9,marginTop:4,
+                        background:failed?(A===ALT?"#FDECEC":"rgba(232,92,92,0.10)"):(A===ALT?"#E7F6EE":"rgba(47,191,113,0.12)")}}>
+                        <span style={{flexShrink:0,marginTop:1,color:failed?A.red:A.green,display:"flex"}}>
+                          {failed
+                            ?<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4.8v3.6M8 10.9v.1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                            :<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.5"/><path d="M5.2 8.2l2 2 3.6-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                        </span>
+                        <div style={{minWidth:0,flex:1}}>
+                          <div style={{fontSize:12.5,fontWeight:700,color:failed?A.red:A.t1}}>
+                            {failed?"접수 안내 문자 발송 실패":"접수 안내 문자 발송 완료"}
+                          </div>
+                          <div style={{fontSize:11.5,color:A.t2,lineHeight:1.5,marginTop:2,wordBreak:"break-word" as const}}>
+                            {result||"-"}
+                            {sentAt&&<span style={{color:A.t3}}>{" · "}{new Date(sentAt).toLocaleString("ko-KR",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    })()}
                     {attributionFields.length>0&&<div style={{paddingTop:4}}>
                       <button onClick={()=>setAnalyticsUtmOpen(v=>!v)}
                         style={{width:"100%",height:44,display:"flex",alignItems:"center",gap:8,padding:"0 14px",border:"none",borderRadius:10,
