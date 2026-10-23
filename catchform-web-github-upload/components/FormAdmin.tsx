@@ -1161,6 +1161,7 @@ const DEF: Cfg = {
   brand:"",
   formType:"alert" as const,
   kdtFields:undefined,
+  notify:{enabled:false,message:"",title:"",phoneQuestion:""},
 }
 
 const KDTOPTS: Opt[] = [
@@ -1534,6 +1535,9 @@ function mergeCfg(raw:any):Cfg {
     brand:raw.brand||d.brand,
     formType:isLegacyKdt?"blank" as const:(raw.formType||d.formType),
     kdtFields:isLegacyKdt?undefined:(raw.kdtFields||d.kdtFields),
+    // mergeCfg는 쓸 항목을 하나씩 적어 만든다. 여기 빠진 항목은 폼을 열 때 사라지고,
+    // 그 상태로 저장하면 DB에서도 지워진다. 새 설정을 더하면 이 목록에도 꼭 넣어야 한다.
+    notify:{...(d.notify||{}),...(raw.notify||{})},
   }
 }
 function applyBrandDefaults(config:Cfg,brand:string):Cfg{
