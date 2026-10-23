@@ -2111,8 +2111,22 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 : form_data
             if (storedFormData.length > 0) payload.form_data = storedFormData
 
-            // 접수 안내 문자를 보내려면 방금 저장된 응답의 id가 필요하다.
-            const { data: insertedRows, error: insertErr } = await supa.from(tableName).insert(payload).select("id")
+            // 접수 안내 문자를 보내려면 저장된 응답의 id가 필요하다.
+            // 저장하면서 .select()로 돌려받으면 안 된다. 그건 저장한 줄을 "다시 읽는" 동작이라
+            // 읽기 권한이 필요한데, 이 표는 관리자·본인만 읽을 수 있다.
+            // 로그인하지 않은 신청자는 읽을 수 없어서 저장 자체가 거부된다(2026-10-23 장애).
+            // 그래서 id를 미리 만들어 함께 저장한다. 되읽지 않으므로 권한 문제가 없다.
+            const insertedId = (() => {
+                try {
+                    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID()
+                } catch {}
+                return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+                    const r = Math.random() * 16 | 0
+                    return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16)
+                })
+            })()
+            payload.id = insertedId
+            const { error: insertErr } = await supa.from(tableName).insert(payload)
             if (insertErr) {
                 setDupErr("제출 중 오류가 발생했어요. (" + insertErr.message + ")")
                 setSubmitting(false)
@@ -2121,7 +2135,6 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
 
             // 접수 안내 문자. 보낼 문구와 받을 번호는 서버가 폼 설정과 저장된 응답에서 직접 읽는다.
             // 문자가 안 가도 접수는 이미 끝났으므로 완료 화면을 막지 않는다. 결과는 응답 상세에 남는다.
-            const insertedId = insertedRows?.[0]?.id
             if (insertedId && (cfg as any).notify?.enabled) {
                 try {
                     fetch("/api/notify-applicant", {
