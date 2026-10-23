@@ -1733,3 +1733,51 @@ PR 미리보기에서 테스트하다 실제 사람에게 문자가 가는 사�
 
 저장 경로만 확인하고 불러오기를 확인하지 않아 생긴 문제다.
 설정을 새로 추가할 때는 저장·불러오기 양쪽을 모두 확인한다.
+
+## 로그인하지 않은 신청자가 폼을 제출하지 못하던 장애 (2026-10-23)
+
+신청자 두 명에게서 제출이 안 된다는 연락이 왔다.
+
+  제출 중 오류가 발생했어요.
+  (new row violates row-level security policy for table "applications")
+
+### 원인 — 되읽기(RETURNING)
+
+접수 안내 문자를 붙이면서 저장 코드를 바꾼 것이 원인이다.
+
+  전   .insert(payload)
+  후   .insert(payload).select("id")      ← 문자 보낼 응답 id가 필요해서
+
+`.select()`는 저장한 줄을 **다시 읽는** 동작이라 읽기 권한이 필요하다.
+`applications`·`company_applications`의 SELECT 정책은 관리자와 본인에게만
+열려 있어서, 로그인하지 않은 신청자는 되읽기에서 막히고 저장 전체가 거부됐다.
+
+로그인이 꺼진 폼에서 드러났다. 브라우저에 세션이 남아 있던 사람은 통과하고
+아닌 사람만 막혀서, 전부가 아니라 일부만 오류를 겪었다. 그래서 늦게 발견됐다.
+
+`form_response_events`의 upsert가 `RETURNING` 때문에 거부됐던 것과
+완전히 같은 함정이다(2026-09-30). 같은 실수를 반복했다.
+
+### 조치
+
+id를 브라우저에서 미리 만들어 `payload`에 담아 저장한다.
+되읽지 않으므로 읽기 권한이 필요 없다.
+
+  payload.id = crypto.randomUUID()
+  await supa.from(tableName).insert(payload)
+
+### 진단 과정에서 잘못 짚은 것
+
+처음에 RLS 정책 문제로 보고 `anon`에게 INSERT 정책과 권한을 추가하는
+SQL을 실행하게 했다. 그러나 `anon can insert applications` 정책이 이미
+존재했고, SQL Editor에서 `set local role anon`으로 넣으면 성공했다.
+DB는 처음부터 허용하고 있었다. 추가한 정책은 중복이고 무해하지만 불필요했다.
+
+판단이 갈린 지점은 상태 코드였다. REST는 거부를 401로 돌려주는데,
+`set local role anon` 직접 실행은 성공했다. 두 결과가 갈린 이유가
+되읽기 유무라는 걸 더 빨리 봤어야 했다.
+
+### 교훈
+
+되읽는 동작(`.select()`, `RETURNING`, `upsert`)을 추가할 때는
+그 표의 **읽기 정책**을 먼저 확인한다. 쓰기 권한만 보면 놓친다.
