@@ -49,7 +49,7 @@ type Cfg = {
   brand: string
   formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"|"survey"
   // 제출 시 신청자에게 보내는 접수 안내 문자 설정
-  notify?: { enabled?:boolean; message?:string; title?:string; phoneQuestion?:string }
+  notify?: { enabled?:boolean; message?:string; title?:string; phoneQuestion?:string; sender?:string }
   kdtFields?: KdtField[]
 }
 type EditorTab = { key:string; id:string; name:string; slug:string; brand:string; cfg:Cfg; isDraft?:boolean }
@@ -1559,6 +1559,24 @@ function applyBrandDefaults(config:Cfg,brand:string):Cfg{
 
 // ─── UI Atoms ─────────────────────────────────────────────────────────────
 // 시안 우측 패널은 테두리 없는 채움형 컨트롤을 쓴다. 라이트는 #F6F7F9, 다크는 card2.
+// 폼 설정에서 고를 수 있는 발신번호. 알리고에 등록된 번호만 환경 변수로 관리한다.
+// 형식: 01012345678:표시이름|0212345678:표시이름 (이름에 쉼표가 들어가서 구분자는 | 를 쓴다)
+function smsSenderOptions(){
+  return String(process.env.NEXT_PUBLIC_SMS_SENDERS||"")
+    .split("|")
+    .map(entry=>{
+      const i=entry.indexOf(":")
+      const value=(i>=0?entry.slice(0,i):entry).replace(/[^\d]/g,"")
+      const label=(i>=0?entry.slice(i+1):"").trim()
+      return {value,label:label||value}
+    })
+    .filter(o=>o.value)
+}
+function formatPhoneLabel(num:string){
+  if(/^01\d{8,9}$/.test(num))return num.replace(/^(\d{3})(\d{3,4})(\d{4})$/,"$1-$2-$3")
+  if(/^02\d{7,8}$/.test(num))return num.replace(/^(\d{2})(\d{3,4})(\d{4})$/,"$1-$2-$3")
+  return num
+}
 const panelFieldBg=(A:AT)=>A===ALT?"#F6F7F9":A.card2
 const panelFieldRing=(A:AT)=>`inset 0 0 0 1.5px ${A.blue}`
 function PanelSegment({value,options,onChange,A,height=38,fontSize=12.5,trackBg,inline=false}:{
@@ -1677,6 +1695,17 @@ const AnalyticsResponseRows=React.memo(function AnalyticsResponseRows(p:Analytic
             style={{flexShrink:0,padding:"1px 6px",borderRadius:5,border:"none",background:A===ALT?"#F1F3F6":A.card2,color:A.t3,fontSize:11,fontWeight:700,cursor:"pointer"}}>
             +{duplicateCount}
           </button>}
+          {/* 접수 안내 문자 결과. 상세를 열지 않아도 목록에서 바로 보이게 한다.
+              발송 기록이 없는 응답(기능 적용 전)에는 아무것도 띄우지 않는다. */}
+          {(()=>{
+            const sentAt=(row as any)?.notified_at
+            const result=String((row as any)?.notify_result||"")
+            if(!sentAt&&!result)return null
+            const failed=!sentAt&&!!result
+            return <span title={result||"접수 안내 문자 발송 완료"}
+              style={{flexShrink:0,width:6,height:6,borderRadius:"50%",cursor:"help",
+                background:failed?A.red:(A===ALT?"#0F8A47":A.green)}}/>
+          })()}
         </span>
         {showSource&&(()=>{
           const source=sourceOf(row)
@@ -8318,6 +8347,18 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             마케팅 수신동의가 없어도 보낼 수 있지만, 광고 문구를 넣으면 동의가 필요해집니다.
           </div>
           {notify.enabled&&<>
+            {(()=>{
+              const senders=smsSenderOptions()
+              if(!senders.length)return <div style={{padding:"10px 12px",borderRadius:9,marginBottom:14,
+                background:A===ALT?"#FDECEC":"rgba(232,92,92,0.10)",fontSize:11.5,color:A.t2,lineHeight:1.55}}>
+                쓸 수 있는 발신번호가 등록되어 있지 않습니다. 관리자에게 문의해주세요.
+              </div>
+              const current=notify.sender&&senders.some(o=>o.value===notify.sender)?notify.sender:senders[0].value
+              return <F label="발신번호" hint="알리고에 등록된 번호만 고를 수 있어요." A={A}>
+                <PanelSelect value={current} onChange={v=>setNotify({sender:v})} A={A} height={40} fontSize={12.5} radius={9} padX={12}
+                  options={senders.map(o=>({value:o.value,label:`${o.label} (${formatPhoneLabel(o.value)})`}))}/>
+              </F>
+            })()}
             <F label="연락처로 쓸 질문" hint="비워두면 응답에 저장된 연락처를 씁니다." A={A}>
               <PanelSelect value={notify.phoneQuestion||""} onChange={v=>setNotify({phoneQuestion:v})} A={A} height={40} fontSize={12.5} radius={9} padX={12}
                 options={[{value:"",label:"자동 (저장된 연락처)"},...phoneQuestions.map(q=>({value:q,label:q}))]}/>
