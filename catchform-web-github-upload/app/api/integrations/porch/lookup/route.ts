@@ -22,8 +22,14 @@ function json(status: number, body: Record<string, unknown>) {
 
 function authorized(req: NextRequest) {
   const secret = process.env.PORCH_LOOKUP_SECRET || ""
+  if (!secret) return false
   const given = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "")
-  return !!secret && given.length === secret.length && timingSafeEqual(Buffer.from(given), Buffer.from(secret))
+  // timingSafeEqual은 길이가 다르면 예외를 던진다. 글자 수가 아니라 바이트 수로 먼저 맞춰야 한다.
+  // 한글처럼 한 글자가 여러 바이트인 값이 오면 글자 수가 같아도 바이트 수가 달라서,
+  // 글자 수만 보고 넘기면 거부(401) 대신 서버 오류(500)가 난다.
+  const given_ = Buffer.from(given)
+  const secret_ = Buffer.from(secret)
+  return given_.length === secret_.length && timingSafeEqual(given_, secret_)
 }
 
 // 01012345678 → [01012345678, 010-1234-5678]  (10자리면 010-123-4567)
