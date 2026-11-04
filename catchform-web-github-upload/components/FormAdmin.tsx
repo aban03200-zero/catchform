@@ -3624,7 +3624,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const brand=canonicalBrand(cfgCopy.brand||full.brand||item.brand||currentBrand)
       const copiedDashboard:DashboardMeta={...(cfgCopy.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft"}
       delete (copiedDashboard as any).formTrashedAt
-      const brandedCopy=applyBrandDefaults({...cfgCopy,dashboard:copiedDashboard},brand)
+      // QR은 복사하지 않는다. QR 하나에 붙은 코드는 "어느 폼의 어느 주소로 보낼지"를 가리키는데,
+      // 복사본이 같은 코드를 들고 있으면 원본과 복사본의 스캔 기록이 한 이름으로 섞여 버린다.
+      // 복사본에서 QR이 필요하면 새로 만든다.
+      const copiedIntegrations={...(cfgCopy.integrations||{}),qrLinks:[]}
+      const brandedCopy=applyBrandDefaults({...cfgCopy,dashboard:copiedDashboard,integrations:copiedIntegrations},brand)
       const newName=item.name+" 복사본"
       const newSlug=makeAutoSlug("copy")
       const{error}=await supa.from("form_configs").insert({name:newName,slug:newSlug,config:brandedCopy,brand:dbBrandValue(brand)})
