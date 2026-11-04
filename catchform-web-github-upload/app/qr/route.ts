@@ -75,7 +75,7 @@ type FormConfigRow = {
   id?: string
   slug?: string
   brand?: string
-  config?: { brand?: string; integrations?: { qrLinks?: Array<{ code?: string; url?: string }> } }
+  config?: { brand?: string; integrations?: { qrLinks?: Array<{ code?: string; url?: string; label?: string }> } }
 }
 
 function normalizeQrTarget(value: string) {
@@ -94,6 +94,14 @@ function qrTargetFromConfig(row: FormConfigRow | null, code: string) {
   const links = row?.config?.integrations?.qrLinks || []
   const target = links.find((item) => item?.code === code)?.url || ""
   return /^https?:\/\//i.test(target) ? target : ""
+}
+
+// QR 하나하나에 붙은 이름. 한 폼에 상세페이지 QR을 여러 개 만들 수 있어서,
+// 어느 QR로 들어왔는지는 이 이름으로 구분한다.
+function qrLabelFromConfig(row: FormConfigRow | null, code: string) {
+  if (!code) return ""
+  const links = row?.config?.integrations?.qrLinks || []
+  return String(links.find((item) => item?.code === code)?.label || "").trim()
 }
 
 function isStoredQrTarget(row: FormConfigRow | null, target: string) {
@@ -199,7 +207,7 @@ async function findQrTargetBySlug(slug: string, code: string) {
   }
 }
 
-async function recordQrScan(req: NextRequest, targetUrl: string, resolved: { formId?: string; formSlug?: string; qrLabel?: string } = {}) {
+async function recordQrScan(req: NextRequest, targetUrl: string, resolved: { formId?: string; formSlug?: string; qrLabel?: string; qrCode?: string } = {}) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
   if (!supabaseUrl || !supabaseAnonKey) return
@@ -216,8 +224,11 @@ async function recordQrScan(req: NextRequest, targetUrl: string, resolved: { for
   const formId = search.get("fid") || search.get("f") || compactFormId || resolved.formId || (await findFormIdBySlug(formSlug))
   const qrType = search.get("type") || (search.get("d") ? "detail" : "form")
   const qrLabel = search.get("label") || search.get("l") || resolved.qrLabel || ""
+  // 상세페이지 QR은 한 폼에 여러 개를 만들 수 있고, 링크가 서로 같을 수도 있다.
+  // 그래서 이동 주소만으로는 구분이 안 된다. QR마다 붙는 코드를 같이 남긴다.
+  const qrCode = search.get("q") || resolved.qrCode || ""
   const fingerprint = createHash("sha256")
-    .update([formId || "", formSlug, qrType, targetUrl, ip, userAgent].join("|"))
+    .update([formId || "", formSlug, qrType, qrCode, targetUrl, ip, userAgent].join("|"))
     .digest("hex")
     .slice(0, 24)
 
@@ -231,6 +242,7 @@ async function recordQrScan(req: NextRequest, targetUrl: string, resolved: { for
       cf_qr: "1",
       cf_form_id: formId,
       qr_type: qrType,
+      qr_code: qrCode,
       qr_label: qrLabel,
       qr_target: targetUrl,
       source: "QR",
@@ -284,7 +296,9 @@ export async function GET(req: NextRequest) {
   }
 
   const qrType = req.nextUrl.searchParams.get("type") || (req.nextUrl.searchParams.get("d") ? "detail" : "form")
-  const qrLabel = req.nextUrl.searchParams.get("label") || req.nextUrl.searchParams.get("l") || resolvedSlug || qrType
+  // QR에 이름을 적어 두면 그 이름을 쓴다. 스캔 통계와 utm_campaign 이 QR별로 갈라진다.
+  const storedQrLabel = qrLabelFromConfig(formRow, qrCode)
+  const qrLabel = req.nextUrl.searchParams.get("label") || req.nextUrl.searchParams.get("l") || storedQrLabel || resolvedSlug || qrType
   const redirectUrl = appendQrParams(targetUrl.toString(), {
     cf_qr: "1",
     cf_qr_redirected: "1",
@@ -297,6 +311,6 @@ export async function GET(req: NextRequest) {
     utm_campaign: qrLabel,
   })
 
-  await recordQrScan(req, targetUrl.toString(), { formId: resolvedFormId, formSlug: resolvedSlug, qrLabel })
+  await recordQrScan(req, targetUrl.toString(), { formId: resolvedFormId, formSlug: resolvedSlug, qrLabel, qrCode })
   return NextResponse.redirect(redirectUrl, 302)
 }
