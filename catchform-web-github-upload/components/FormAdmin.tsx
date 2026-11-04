@@ -2786,10 +2786,67 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [newVal,setNewVal]=React.useState("")
   const [slugDraft,setSlugDraft]=React.useState("")
   const [qrMode,setQrMode]=React.useState<"form"|"custom">("form")
-  const [qrCustomUrl,setQrCustomUrl]=React.useState("")
   const [qrGeneratedUrl,setQrGeneratedUrl]=React.useState("")
   const [qrGeneratedMatrix,setQrGeneratedMatrix]=React.useState<boolean[][]|null>(null)
   const [qrGeneratedError,setQrGeneratedError]=React.useState("")
+  // 상세페이지 QR은 한 폼에 여러 개를 만들 수 있다(채널마다 따로 뿌릴 때).
+  // 저장된 목록은 cfg.integrations.qrLinks 에 있고, 여기 있는 건 입력 중인 화면 값이다.
+  // 입력할 때마다 cfg를 건드리면 글자마다 폼 전체가 다시 그려져서 타이핑이 밀린다.
+  const [detailQrDrafts,setDetailQrDrafts]=React.useState<{code:string;label:string;url:string}[]>([])
+  const [detailQrPreview,setDetailQrPreview]=React.useState<{[code:string]:boolean[][]}>({})
+  const [detailQrErr,setDetailQrErr]=React.useState<{[code:string]:string}>({})
+  const [detailQrBusy,setDetailQrBusy]=React.useState("")
+  const [detailQrDeleting,setDetailQrDeleting]=React.useState("")
+  const [openDetailQrCode,setOpenDetailQrCode]=React.useState<Record<string,boolean>>({})
+  const detailQrSyncRef=React.useRef("")
+  // 저장된 QR 목록이 바뀌면 화면 값도 맞춘다. 줄 순서는 흔들리지 않게 그대로 두고 값만 갈아끼운다.
+  // 폼을 바꿔서 들어오면 전부 새로 채운다.
+  React.useEffect(()=>{
+    const links=(cfg.integrations?.qrLinks||[]).filter(l=>l.type==="detail"&&l.code)
+    const key=`${loadedId}|${links.map(l=>`${l.code}~${l.url}~${l.label||""}`).join(",")}`
+    if(detailQrSyncRef.current===key)return
+    const formChanged=!detailQrSyncRef.current.startsWith(`${loadedId}|`)
+    detailQrSyncRef.current=key
+    // qrLinks 는 새로 만든 것을 맨 앞에 붙여서 쌓인다. 화면에는 만든 순서대로 보여준다.
+    const saved=links.slice().reverse().map(l=>({code:String(l.code),label:String(l.label||""),url:String(l.url||"")}))
+    setDetailQrDrafts(prev=>{
+      if(formChanged)return saved
+      const byCode=new Map(saved.map(r=>[r.code,r]))
+      const kept=prev.map(r=>byCode.get(r.code)||r)
+      const seen=new Set(kept.map(r=>r.code))
+      return [...kept,...saved.filter(r=>!seen.has(r.code))]
+    })
+    if(formChanged){setDetailQrPreview({});setDetailQrErr({});setOpenDetailQrCode({})}
+  },[cfg,loadedId])
+  // QR을 지우면 이미 인쇄해서 뿌린 QR은 이동할 주소를 못 찾는다. 확인 창을 거쳐서만 부른다.
+  // 확인 창은 편집 패널 밖(화면 전체)에 띄워야 패널 안에서 잘리지 않기 때문에 여기에 둔다.
+  async function removeDetailQrLink(code:string){
+    const saved=(cfg.integrations?.qrLinks||[]).some(link=>link.type==="detail"&&link.code===code)
+    setDetailQrDrafts(prev=>prev.filter(row=>row.code!==code))
+    setDetailQrPreview(prev=>{const next={...prev};delete next[code];return next})
+    setDetailQrErr(prev=>{const next={...prev};delete next[code];return next})
+    setOpenDetailQrCode(prev=>{const next={...prev};delete next[code];return next})
+    setDetailQrDeleting("")
+    if(!saved||!loadedId||!supa)return
+    try{
+      const existing=Array.isArray(cfg.integrations?.qrLinks)?cfg.integrations!.qrLinks!:[]
+      const nextCfg:Cfg=applyBrandDefaults({
+        ...cfg,
+        brand:currentBrand,
+        integrations:{
+          ...(cfg.integrations||{}),
+          googleSheets:{...DEFAULT_GOOGLE_SHEETS,...(cfg.integrations?.googleSheets||{})},
+          qrLinks:existing.filter(item=>!(item.code===code&&item.type==="detail")),
+        },
+      },currentBrand)
+      setCfg(nextCfg)
+      const updatedAt=new Date().toISOString()
+      fullFormCache.current[loadedId]={updatedAt,data:{config:nextCfg,slug:savedSlug,name:loadedName,brand:currentBrand}}
+      const {error}=await supa.from("form_configs").update({config:nextCfg,brand:dbBrandValue(currentBrand),updated_at:updatedAt}).eq("id",loadedId)
+      if(error)throw error
+      showToast("QR을 삭제했어요")
+    }catch(e){showToast((e as Error).message||"QR 삭제에 실패했어요",false)}
+  }
   const [actionLoading,setActionLoading]=React.useState("")
   const [analyticsTopTip,setAnalyticsTopTip]=React.useState("")
   const [showDeleteAllAnalytics,setShowDeleteAllAnalytics]=React.useState(false)
@@ -3006,8 +3063,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(opts.notify)showToast(isUnlinked?"기존 응답의 교육과정 연결을 해제했어요.":"기존 응답도 연결된 교육과정으로 업데이트했어요.")
   }
   function resetQrEditorState(nextCfg?:Cfg){
-    const savedDetailQr=(nextCfg?.integrations?.qrLinks||[]).find(link=>link.type==="detail"&&link.url)
-    setQrCustomUrl(savedDetailQr?.url||"")
+    const detailLinks=(nextCfg?.integrations?.qrLinks||[]).filter(link=>link.type==="detail"&&link.code)
+    // 상세페이지 QR 목록은 아래 동기화 effect가 cfg를 보고 다시 채운다.
+    // 여기서는 "다시 채워라"는 표시만 남기고, 화면에 남아 있던 미리보기·오류를 비운다.
+    detailQrSyncRef.current=""
+    setDetailQrDrafts(detailLinks.slice().reverse().map(link=>({code:String(link.code),label:String(link.label||""),url:String(link.url||"")})))
+    setDetailQrPreview({})
+    setDetailQrErr({})
+    setDetailQrBusy("")
+    setDetailQrDeleting("")
+    setOpenDetailQrCode({})
     setQrGeneratedUrl("")
     setQrGeneratedMatrix(null)
     setQrGeneratedError("")
@@ -3559,7 +3624,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const brand=canonicalBrand(cfgCopy.brand||full.brand||item.brand||currentBrand)
       const copiedDashboard:DashboardMeta={...(cfgCopy.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft"}
       delete (copiedDashboard as any).formTrashedAt
-      const brandedCopy=applyBrandDefaults({...cfgCopy,dashboard:copiedDashboard},brand)
+      // QR은 복사하지 않는다. QR 하나에 붙은 코드는 "어느 폼의 어느 주소로 보낼지"를 가리키는데,
+      // 복사본이 같은 코드를 들고 있으면 원본과 복사본의 스캔 기록이 한 이름으로 섞여 버린다.
+      // 복사본에서 QR이 필요하면 새로 만든다.
+      const copiedIntegrations={...(cfgCopy.integrations||{}),qrLinks:[]}
+      const brandedCopy=applyBrandDefaults({...cfgCopy,dashboard:copiedDashboard,integrations:copiedIntegrations},brand)
       const newName=item.name+" 복사본"
       const newSlug=makeAutoSlug("copy")
       const{error}=await supa.from("form_configs").insert({name:newName,slug:newSlug,config:brandedCopy,brand:dbBrandValue(brand)})
@@ -8443,147 +8512,265 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         const hasBase=base.length>0
         const hasSaved=savedSlug.length>0
         const formUrl=hasSaved?buildPublicFormUrl(savedSlug):""
-        const activeQrUrl=qrMode==="form"?formUrl:qrCustomUrl.trim()
-        const qrName=qrMode==="form"?`${loadedName||savedSlug||"catchform"}-form-qr`:"detail-page-qr"
         const trackerBase=typeof window!=="undefined"?window.location.origin:""
-        const qrLabel=loadedName||savedSlug||(qrMode==="form"?"폼 QR":"상세페이지 QR")
         const qrBrand=currentBrand==="SNIPERFACTORY"?"sf":currentBrand==="INSIDEOUT"?"io":currentBrand==="SFACSPACE"?"sp":""
         const compactLoadedId=compactFormId(loadedId)
         const qrFormRef=compactLoadedId?`i=${encodeURIComponent(compactLoadedId)}`:`s=${encodeURIComponent(savedSlug||"")}`
         const existingQrLinks=Array.isArray(cfg.integrations?.qrLinks)?cfg.integrations!.qrLinks!:[]
-        const savedDetailQrLink=existingQrLinks.find(link=>link.type==="detail"&&link.code)
-        const customQrCode=qrMode==="custom"&&activeQrUrl
-          ? savedDetailQrLink?.code||compactQrCode(`${loadedId||savedSlug||"detail"}|detail`)
-          :""
-        const canUseShortCustomQr=!!(loadedId&&supa&&customQrCode)
-        const trackedQrUrl=activeQrUrl&&trackerBase
-          ? qrMode==="form"
-            ? `${trackerBase}/qr?${qrFormRef}${qrBrand?`&b=${qrBrand}`:""}`
-            : canUseShortCustomQr
-              ? `${trackerBase}/qr?${qrFormRef}&q=${encodeURIComponent(customQrCode)}${qrBrand?`&b=${qrBrand}`:""}&d=1`
-              : `${trackerBase}/qr?u=${encodeURIComponent(activeQrUrl)}${savedSlug?`&s=${encodeURIComponent(savedSlug)}`:""}${qrBrand?`&b=${qrBrand}`:""}&d=1`
-          : activeQrUrl
-        const formQrCode=savedSlug||loadedId?compactQrCode(`${savedSlug||loadedId}|form`):""
-        const persistedQrLink=qrMode==="form"
-          ? existingQrLinks.find(link=>link.type==="form"&&link.code===formQrCode&&link.url===activeQrUrl)
-          : existingQrLinks.find(link=>link.type==="detail"&&link.code===customQrCode)
-        const detailQrTargetChanged=qrMode==="custom"&&!!savedDetailQrLink&&savedDetailQrLink.url!==activeQrUrl
-        const qrMatrix=qrGeneratedUrl===trackedQrUrl?qrGeneratedMatrix:(persistedQrLink?safeMakeQrMatrix(trackedQrUrl):null)
-        const qrError=qrGeneratedUrl===trackedQrUrl?qrGeneratedError:""
-        const ensureQrLinkSaved=async()=>{
-          if(!loadedId||!supa||!activeQrUrl)return
-          if(qrMode==="custom"&&(!canUseShortCustomQr||!customQrCode))return
-          const code=qrMode==="form"?formQrCode:customQrCode
-          if(!code)return
-          const type=qrMode==="form"?"form":"detail"
+        const canPersistQr=!!(loadedId&&supa)
+
+        // QR 하나를 폼 설정에 적어 두고 바로 DB에 저장한다.
+        // QR 이미지에는 짧은 코드만 들어가고, 실제로 이동할 주소는 설정에서 찾는다.
+        // 그래서 저장이 안 되면 스캔했을 때 어디로 갈지 알 수 없다. 폼 저장 버튼을 따로 누르지 않아도 되게 바로 쓴다.
+        const saveQrLink=async(link:{code:string;url:string;label:string;type:"form"|"detail"})=>{
+          if(!canPersistQr||!link.code||!link.url)return
           const existing=Array.isArray(cfg.integrations?.qrLinks)?cfg.integrations!.qrLinks!:[]
-          const current=existing.find(link=>link.code===code&&link.type===type)
-          if(current?.url===activeQrUrl)return
-          const link:QrLink={code,url:activeQrUrl,label:qrLabel,type,createdAt:new Date().toISOString()}
+          const current=existing.find(item=>item.code===link.code&&item.type===link.type)
+          if(current&&current.url===link.url&&String(current.label||"")===link.label)return
+          const next:QrLink={code:link.code,url:link.url,label:link.label,type:link.type,createdAt:current?.createdAt||new Date().toISOString()}
           const nextCfg:Cfg=applyBrandDefaults({
             ...cfg,
             brand:currentBrand,
             integrations:{
               ...(cfg.integrations||{}),
               googleSheets:{...DEFAULT_GOOGLE_SHEETS,...(cfg.integrations?.googleSheets||{})},
-              qrLinks:[link,...existing.filter(item=>!(item.code===code&&item.type===type))].slice(0,80),
+              // 이미 있는 QR은 제자리에서 바꾸고, 새 QR만 앞에 붙인다. 목록 순서가 흔들리지 않게.
+              qrLinks:(current
+                ? existing.map(item=>item.code===link.code&&item.type===link.type?next:item)
+                : [next,...existing]).slice(0,80),
             },
           },currentBrand)
           setCfg(nextCfg)
-          if(loadedId){
-            const updatedAt=new Date().toISOString()
-            fullFormCache.current[loadedId]={updatedAt,data:{config:nextCfg,slug:savedSlug,name:loadedName,brand:currentBrand}}
-            const {error}=await supa!.from("form_configs").update({config:nextCfg,brand:dbBrandValue(currentBrand),updated_at:updatedAt}).eq("id",loadedId)
-            if(error)throw error
-          }
+          const updatedAt=new Date().toISOString()
+          fullFormCache.current[loadedId]={updatedAt,data:{config:nextCfg,slug:savedSlug,name:loadedName,brand:currentBrand}}
+          const {error}=await supa!.from("form_configs").update({config:nextCfg,brand:dbBrandValue(currentBrand),updated_at:updatedAt}).eq("id",loadedId)
+          if(error)throw error
         }
-        const onQrGenerate=async()=>{
+
+        // ── 폼 QR (폼 하나에 하나) ──
+        const formQrCode=savedSlug||loadedId?compactQrCode(`${savedSlug||loadedId}|form`):""
+        const formQrLabel=loadedName||savedSlug||"폼 QR"
+        const formQrName=`${loadedName||savedSlug||"catchform"}-form-qr`
+        const formTrackedUrl=formUrl&&trackerBase?`${trackerBase}/qr?${qrFormRef}${qrBrand?`&b=${qrBrand}`:""}`:formUrl
+        const formQrPersisted=existingQrLinks.some(link=>link.type==="form"&&link.code===formQrCode&&link.url===formUrl)
+        const formQrMatrix=qrGeneratedUrl===formTrackedUrl?qrGeneratedMatrix:(formQrPersisted?safeMakeQrMatrix(formTrackedUrl):null)
+        const formQrError=qrGeneratedUrl===formTrackedUrl?qrGeneratedError:""
+        const onFormQrGenerate=async()=>{
           try{
-            if(!activeQrUrl){showToast(qrMode==="form"?"폼 링크가 먼저 필요해요":"상세페이지 URL을 입력해주세요",false);return}
-            await ensureQrLinkSaved()
-            setQrGeneratedMatrix(makeQrMatrix(trackedQrUrl))
-            setQrGeneratedUrl(trackedQrUrl)
+            if(!formUrl){showToast("폼 링크가 먼저 필요해요",false);return}
+            await saveQrLink({code:formQrCode,url:formUrl,label:formQrLabel,type:"form"})
+            setQrGeneratedMatrix(makeQrMatrix(formTrackedUrl))
+            setQrGeneratedUrl(formTrackedUrl)
             setQrGeneratedError("")
-            showToast(detailQrTargetChanged?"기존 QR의 이동 링크를 변경했어요":"QR 미리보기를 생성했어요")
+            showToast("QR 미리보기를 생성했어요")
           }catch(e){
             setQrGeneratedMatrix(null)
-            setQrGeneratedUrl(trackedQrUrl)
+            setQrGeneratedUrl(formTrackedUrl)
             setQrGeneratedError((e as Error).message||"QR을 만들 수 없어요.")
             showToast((e as Error).message||"QR 생성에 실패했어요",false)
           }
         }
-        const onQrDownload=async(format:QrFileFormat)=>{
+        const onFormQrDownload=async(format:QrFileFormat)=>{
           try{
-            if(!activeQrUrl){showToast(qrMode==="form"?"폼 링크가 먼저 필요해요":"상세페이지 URL을 입력해주세요",false);return}
-            if(!qrMatrix){showToast("먼저 QR 생성 버튼을 눌러주세요.",false);return}
-            await ensureQrLinkSaved()
-            downloadQrFile(trackedQrUrl,qrName,format)
+            if(!formUrl){showToast("폼 링크가 먼저 필요해요",false);return}
+            if(!formQrMatrix){showToast("먼저 QR 생성 버튼을 눌러주세요.",false);return}
+            await saveQrLink({code:formQrCode,url:formUrl,label:formQrLabel,type:"form"})
+            downloadQrFile(formTrackedUrl,formQrName,format)
             showToast(`${format.toUpperCase()} QR 다운로드를 시작했어요`)
           }catch(e){showToast((e as Error).message||"QR 다운로드에 실패했어요",false)}
         }
+
+        // ── 상세페이지 QR (여러 개) ──
+        // 채널마다 다른 QR이 필요할 때가 있어서 폼 하나에 여러 개를 만들 수 있다.
+        // 이동할 주소는 QR마다 따로 두고, 스캔 기록도 QR 코드로 구분된다.
+        const detailTrackedUrl=(row:{code:string;url:string})=>{
+          const url=row.url.trim()
+          if(!url||!trackerBase)return url
+          // 저장할 수 있으면 짧은 코드만 QR에 넣는다. 그러면 이미지를 그대로 두고 이동 주소만 바꿀 수 있다.
+          if(canPersistQr&&row.code)return `${trackerBase}/qr?${qrFormRef}&q=${encodeURIComponent(row.code)}${qrBrand?`&b=${qrBrand}`:""}&d=1`
+          return `${trackerBase}/qr?u=${encodeURIComponent(url)}${savedSlug?`&s=${encodeURIComponent(savedSlug)}`:""}${qrBrand?`&b=${qrBrand}`:""}&d=1`
+        }
+        const nextDetailQrCode=()=>{
+          const used=new Set<string>([...existingQrLinks.map(link=>String(link.code||"")),...detailQrDrafts.map(row=>row.code)])
+          const seed=`${loadedId||savedSlug||"detail"}|detail`
+          // 첫 QR은 예전부터 쓰던 코드를 그대로 쓴다. 이미 인쇄해서 뿌린 QR이 계속 동작해야 한다.
+          const legacy=compactQrCode(seed)
+          if(!used.has(legacy))return legacy
+          for(let i=0;i<60;i++){
+            const code=compactQrCode(`${seed}|${Date.now()}|${i}|${Math.random()}`)
+            if(!used.has(code))return code
+          }
+          return ""
+        }
+        const patchDetailQrDraft=(code:string,patch:{label?:string;url?:string})=>
+          setDetailQrDrafts(prev=>prev.map(row=>row.code===code?{...row,...patch}:row))
+        const addDetailQr=()=>{
+          const code=nextDetailQrCode()
+          if(!code){showToast("QR 코드를 만들 수 없어요",false);return}
+          setDetailQrDrafts(prev=>[...prev,{code,label:"",url:""}])
+          setOpenDetailQrCode(prev=>({...prev,[code]:true}))
+        }
+        const saveDetailQr=async(row:{code:string;label:string;url:string})=>{
+          const url=row.url.trim()
+          const label=row.label.trim()
+          if(!url){setDetailQrErr(prev=>({...prev,[row.code]:"이동할 URL을 입력해주세요."}));return}
+          if(!/^https?:\/\//i.test(url)){setDetailQrErr(prev=>({...prev,[row.code]:"`https://`를 포함한 전체 URL을 입력해주세요."}));return}
+          if(!canPersistQr){showToast("폼을 먼저 저장하면 QR을 만들 수 있어요",false);return}
+          setDetailQrBusy(row.code)
+          try{
+            await saveQrLink({code:row.code,url,label,type:"detail"})
+            setDetailQrPreview(prev=>({...prev,[row.code]:makeQrMatrix(detailTrackedUrl({code:row.code,url}))}))
+            setDetailQrErr(prev=>({...prev,[row.code]:""}))
+            showToast("QR을 저장했어요")
+          }catch(e){
+            setDetailQrErr(prev=>({...prev,[row.code]:(e as Error).message||"QR을 만들 수 없어요."}))
+            showToast((e as Error).message||"QR 저장에 실패했어요",false)
+          }finally{setDetailQrBusy("")}
+        }
+        const downloadDetailQr=(row:{code:string;label:string;url:string},format:QrFileFormat)=>{
+          try{
+            const tracked=detailTrackedUrl(row)
+            if(!tracked){showToast("이동할 URL을 입력해주세요",false);return}
+            downloadQrFile(tracked,`${row.label.trim()||loadedName||savedSlug||"detail"}-qr`,format)
+            showToast(`${format.toUpperCase()} QR 다운로드를 시작했어요`)
+          }catch(e){showToast((e as Error).message||"QR 다운로드에 실패했어요",false)}
+        }
+        const qrPreviewBox=(matrix:boolean[][]|null,message:React.ReactNode,size=212)=>
+          <div style={{width:"100%",aspectRatio:"1",borderRadius:14,background:adminDark?A.card2:"#FAFBFC",border:"none",boxShadow:`inset 0 0 0 1px ${A.border}`,display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box" as const}}>
+            {matrix
+              ? <div style={{width:"100%",maxWidth:size,aspectRatio:"1"}} dangerouslySetInnerHTML={{__html:qrMatrixToSvgMarkup(matrix,size)}}/>
+              : <div style={{textAlign:"center" as const,color:A.t3,fontSize:13,lineHeight:1.6,wordBreak:"keep-all" as const}}>{message}</div>}
+          </div>
+        const qrFileButtons=(enabled:boolean,onPick:(format:QrFileFormat)=>void)=>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:9,width:"100%"}}>
+            {(["png","svg","jpg"] as QrFileFormat[]).map(format=>(
+              <button key={format} onClick={()=>onPick(format)} disabled={!enabled}
+                style={{height:44,borderRadius:10,border:"none",background:enabled?panelFieldBg(A):(A===ALT?"#F1F3F6":A.card2),color:enabled?A.t1:A.t4,fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:enabled?"pointer":"not-allowed",textTransform:"uppercase" as const}}>
+                {format}
+              </button>
+            ))}
+          </div>
+        const qrUrlButtons=(url:string)=>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,width:"100%"}}>
+            <button onClick={()=>{if(url){navigator.clipboard.writeText(url);showToast("QR URL 복사 완료!")}}} disabled={!url}
+              style={{height:44,borderRadius:10,border:`1px solid ${A===ALT?"#E3E7EC":A.border}`,background:A.card,color:url?A.t2:A.t3,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:url?"pointer":"not-allowed"}}>
+              URL 복사
+            </button>
+            <button onClick={()=>url&&window.open(url,"_blank")} disabled={!url}
+              style={{height:44,borderRadius:10,border:`1px solid ${A===ALT?"#E3E7EC":A.border}`,background:A.card,color:url?A.t2:A.t3,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:url?"pointer":"not-allowed"}}>
+              URL 열기
+            </button>
+          </div>
+
         return <div style={pd}>
           <FG title="QR 만들기" A={A}>
             <div style={{marginBottom:16}}>
               <PanelSegment value={qrMode} onChange={v=>setQrMode(v as "form"|"custom")} A={A}
                 options={[{value:"form",label:"폼 QR"},{value:"custom",label:"상세페이지 QR"}]}/>
             </div>
-            <F label={qrMode==="form"?"폼 URL":"상세페이지 URL"} A={A}>
-              {qrMode==="form"
-                ? formUrl
-                  ? <div style={{padding:"13px 14px",borderRadius:10,background:panelFieldBg(A),border:"none",fontFamily:FONT,fontSize:12.5,color:A.t3,lineHeight:1.6,wordBreak:"break-all" as const}}>{formUrl}</div>
-                  : <div style={{padding:"13px 14px",borderRadius:10,background:panelFieldBg(A),border:"none",fontSize:12.5,color:A.t3,lineHeight:1.6}}>
-                      {!hasBase&&!hasSaved?"배포 페이지 URL과 저장된 슬러그가 필요해요.":!hasBase?"브랜드별 배포 페이지 URL이 필요해요.":"폼을 먼저 저장하면 QR을 만들 수 있어요."}
-                    </div>
-                : <TIn value={qrCustomUrl} onChange={setQrCustomUrl} placeholder="https://example.com/detail" A={A}/>}
-              {qrMode==="custom"&&qrCustomUrl.trim()&&!/^https?:\/\//i.test(qrCustomUrl.trim())&&
-                <div style={{marginTop:6,fontSize:11.5,color:A.t3,lineHeight:1.5}}>
-                  `https://`를 포함한 전체 URL을 입력하면 스캔 시 바로 열립니다.
-                  </div>}
-              {activeQrUrl&&<div style={{marginTop:7,fontSize:11.5,color:A.t3,lineHeight:1.5}}>
-                {qrMode==="custom"
-                  ?"URL을 변경해도 기존 QR 이미지는 유지되고 이동할 링크만 바뀝니다."
-                  :"QR 스캔은 응답 및 분석의 QR 데이터 탭에 기록됩니다."}
-              </div>}
-            </F>
+            {qrMode==="form"
+              ? <F label="폼 URL" A={A}>
+                  {formUrl
+                    ? <div style={{padding:"13px 14px",borderRadius:10,background:panelFieldBg(A),border:"none",fontFamily:FONT,fontSize:12.5,color:A.t3,lineHeight:1.6,wordBreak:"break-all" as const}}>{formUrl}</div>
+                    : <div style={{padding:"13px 14px",borderRadius:10,background:panelFieldBg(A),border:"none",fontSize:12.5,color:A.t3,lineHeight:1.6}}>
+                        {!hasBase&&!hasSaved?"배포 페이지 URL과 저장된 슬러그가 필요해요.":!hasBase?"브랜드별 배포 페이지 URL이 필요해요.":"폼을 먼저 저장하면 QR을 만들 수 있어요."}
+                      </div>}
+                  {formUrl&&<div style={{marginTop:7,fontSize:11.5,color:A.t3,lineHeight:1.5}}>QR 스캔은 응답 및 분석의 QR 데이터 탭에 기록됩니다.</div>}
+                </F>
+              : <div style={{fontSize:11.5,color:A.t3,lineHeight:1.6,marginBottom:4}}>
+                  채널마다 다른 QR이 필요하면 여러 개를 만들 수 있어요.<br/>
+                  QR별 스캔 수는 응답 및 분석의 QR 데이터 탭에서 이름으로 구분해 볼 수 있어요.
+                </div>}
           </FG>
 
-          <FG title="미리보기 / 다운로드" A={A} last>
-            <div style={{display:"flex",flexDirection:"column" as const,alignItems:"center",gap:14}}>
-              <div style={{width:"100%",aspectRatio:"1",borderRadius:14,background:adminDark?A.card2:"#FAFBFC",border:"none",boxShadow:`inset 0 0 0 1px ${A.border}`,display:"flex",alignItems:"center",justifyContent:"center",padding:24,boxSizing:"border-box" as const}}>
-                {qrMatrix
-                  ? <div style={{width:"100%",maxWidth:212,aspectRatio:"1"}} dangerouslySetInnerHTML={{__html:qrMatrixToSvgMarkup(qrMatrix,212)}}/>
-                  : <div style={{textAlign:"center" as const,color:A.t3,fontSize:13,lineHeight:1.6,wordBreak:"keep-all" as const}}>
-                      {qrError||<>QR 생성 버튼을 누르면<br/>미리보기가 표시됩니다.</>}
-                    </div>}
-              </div>
-              <button onClick={onQrGenerate} disabled={!activeQrUrl}
-                style={{width:"100%",height:48,borderRadius:11,border:"none",background:activeQrUrl?A.blue:A.border2,color:"#fff",fontFamily:FONT,fontSize:13.5,fontWeight:700,cursor:activeQrUrl?"pointer":"not-allowed"}}>
-                {detailQrTargetChanged?"링크 변경 저장":qrMatrix?"QR 다시 생성":"QR 생성"}
-              </button>
-              {qrError&&<div style={{fontSize:12,color:A.red,lineHeight:1.5,textAlign:"center" as const}}>{qrError}</div>}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:9,width:"100%"}}>
-                {(["png","svg","jpg"] as QrFileFormat[]).map(format=>(
-                  <button key={format} onClick={()=>onQrDownload(format)} disabled={!qrMatrix}
-                    style={{height:44,borderRadius:10,border:"none",background:qrMatrix?panelFieldBg(A):(A===ALT?"#F1F3F6":A.card2),color:qrMatrix?A.t1:A.t4,fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:qrMatrix?"pointer":"not-allowed",textTransform:"uppercase" as const}}>
-                    {format}
+          {qrMode==="form"
+            ? <FG title="미리보기 / 다운로드" A={A} last>
+                <div style={{display:"flex",flexDirection:"column" as const,alignItems:"center",gap:14}}>
+                  {qrPreviewBox(formQrMatrix,formQrError||<>QR 생성 버튼을 누르면<br/>미리보기가 표시됩니다.</>)}
+                  <button onClick={onFormQrGenerate} disabled={!formUrl}
+                    style={{width:"100%",height:48,borderRadius:11,border:"none",background:formUrl?A.blue:A.border2,color:"#fff",fontFamily:FONT,fontSize:13.5,fontWeight:700,cursor:formUrl?"pointer":"not-allowed"}}>
+                    {formQrMatrix?"QR 다시 생성":"QR 생성"}
                   </button>
-                ))}
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,width:"100%"}}>
-                <button onClick={()=>{if(activeQrUrl){navigator.clipboard.writeText(activeQrUrl);showToast("QR URL 복사 완료!")}}} disabled={!activeQrUrl}
-                  style={{height:44,borderRadius:10,border:`1px solid ${A===ALT?"#E3E7EC":A.border}`,background:A.card,color:activeQrUrl?A.t2:A.t3,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:activeQrUrl?"pointer":"not-allowed"}}>
-                  URL 복사
+                  {formQrError&&<div style={{fontSize:12,color:A.red,lineHeight:1.5,textAlign:"center" as const}}>{formQrError}</div>}
+                  {qrFileButtons(!!formQrMatrix,onFormQrDownload)}
+                  {qrUrlButtons(formUrl)}
+                </div>
+              </FG>
+            : <FG title={`상세페이지 QR${detailQrDrafts.length?` · ${detailQrDrafts.length}개`:""}`} A={A} last>
+                {detailQrDrafts.length===0&&
+                  <div style={{padding:"18px 14px",borderRadius:10,background:panelFieldBg(A),fontSize:12.5,color:A.t3,lineHeight:1.6,textAlign:"center" as const,marginBottom:10}}>
+                    아직 만든 QR이 없어요.<br/>아래 버튼으로 추가해주세요.
+                  </div>}
+                {detailQrDrafts.map((row,idx)=>{
+                  const url=row.url.trim()
+                  const label=row.label.trim()
+                  const savedLink=existingQrLinks.find(link=>link.type==="detail"&&link.code===row.code)
+                  const open=openDetailQrCode[row.code]===true
+                  const tracked=detailTrackedUrl(row)
+                  // QR 이미지는 저장된 주소를 기준으로 그린다. 입력만 하고 저장하지 않은 값으로 그리면
+                  // 화면에 보이는 QR과 실제로 연결된 QR이 달라진다.
+                  const matrix=detailQrPreview[row.code]||(savedLink?safeMakeQrMatrix(detailTrackedUrl({code:row.code,url:savedLink.url||""})):null)
+                  const changed=!!savedLink&&(savedLink.url!==url||String(savedLink.label||"")!==label)
+                  const rowErr=detailQrErr[row.code]||""
+                  const busy=detailQrBusy===row.code
+                  const needsUrl=!url||!/^https?:\/\//i.test(url)
+                  const summary=label||url||"이름 없는 QR"
+                  return <div key={row.code} style={{marginTop:idx>0?18:0,paddingTop:idx>0?18:0,borderTop:idx>0?`1px solid ${A.border}`:"none"}}>
+                    <div onClick={()=>setOpenDetailQrCode(prev=>({...prev,[row.code]:!open}))}
+                      style={{display:"flex",alignItems:"center",gap:8,marginBottom:open?9:0,cursor:"pointer",userSelect:"none" as const}}>
+                      <svg width="11" height="11" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:A.t3,transform:open?"none":"rotate(-90deg)",transition:"transform .15s"}}>
+                        <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      <span style={{fontSize:12,fontWeight:600,color:A.t3,flexShrink:0}}>QR {idx+1}</span>
+                      {!open&&<span style={{minWidth:0,fontSize:12.5,fontWeight:600,color:savedLink?A.t1:A.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{summary}</span>}
+                      {!open&&!savedLink&&<span style={{flexShrink:0,padding:"2px 7px",borderRadius:6,background:panelFieldBg(A),color:A.t3,fontSize:10.5,fontWeight:700,letterSpacing:".3px"}}>저장 안 됨</span>}
+                      <div style={{flex:1}}/>
+                      <button onClick={e=>{e.stopPropagation();savedLink?setDetailQrDeleting(row.code):removeDetailQrLink(row.code)}} title="QR 삭제" aria-label="QR 삭제"
+                        style={{width:30,height:30,borderRadius:8,border:"none",background:"transparent",color:A.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,padding:0}}
+                        onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=panelFieldBg(A);(e.currentTarget as HTMLElement).style.color=A.red}}
+                        onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=A.t3}}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M4 7h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                          <path d="M9.5 4.5h5a1 1 0 0 1 1 1V7h-7V5.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+                          <path d="M6 7.5h12l-.85 11.1a1.5 1.5 0 0 1-1.5 1.4H8.35a1.5 1.5 0 0 1-1.5-1.4L6 7.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+                    </div>
+                    {open&&<>
+                      <F label="이름" hint="어디에 뿌리는 QR인지 적어주세요. 통계와 utm_campaign 에 이 이름이 쓰입니다." A={A}>
+                        <TIn value={row.label} onChange={v=>patchDetailQrDraft(row.code,{label:v})} placeholder="예) 인스타 채널" A={A}/>
+                      </F>
+                      <F label="이동할 URL" A={A}>
+                        <TIn value={row.url} onChange={v=>patchDetailQrDraft(row.code,{url:v})} placeholder="https://example.com/detail" A={A}/>
+                        {!!url&&!/^https?:\/\//i.test(url)&&
+                          <div style={{marginTop:6,fontSize:11.5,color:A.t3,lineHeight:1.5}}>`https://`를 포함한 전체 URL을 입력하면 스캔 시 바로 열립니다.</div>}
+                        {!!savedLink&&<div style={{marginTop:7,fontSize:11.5,color:A.t3,lineHeight:1.5}}>URL을 변경해도 기존 QR 이미지는 유지되고 이동할 링크만 바뀝니다.</div>}
+                      </F>
+                      <div style={{display:"flex",flexDirection:"column" as const,alignItems:"center",gap:11}}>
+                        {qrPreviewBox(matrix,rowErr||<>저장하면 미리보기가<br/>표시됩니다.</>,172)}
+                        <button onClick={()=>saveDetailQr(row)} disabled={busy||needsUrl||(!!savedLink&&!changed)}
+                          style={{width:"100%",height:44,borderRadius:11,border:"none",fontFamily:FONT,fontSize:13,fontWeight:700,
+                            background:(busy||needsUrl||(!!savedLink&&!changed))?A.border2:A.blue,color:"#fff",
+                            cursor:(busy||needsUrl||(!!savedLink&&!changed))?"not-allowed":"pointer"}}>
+                          {busy?"저장 중...":changed?"변경 저장":savedLink?"저장됨":"QR 저장"}
+                        </button>
+                        {rowErr&&<div style={{fontSize:12,color:A.red,lineHeight:1.5,textAlign:"center" as const}}>{rowErr}</div>}
+                        {qrFileButtons(!!matrix,format=>downloadDetailQr(row,format))}
+                        {qrUrlButtons(savedLink?.url||url)}
+                        {!!tracked&&<div style={{width:"100%",fontSize:10.5,color:A.t4,lineHeight:1.5,wordBreak:"break-all" as const}}>QR 주소: {tracked}</div>}
+                      </div>
+                    </>}
+                  </div>
+                })}
+                <button onClick={addDetailQr}
+                  style={{width:"100%",height:46,borderRadius:11,border:`1.5px dashed ${A.border2}`,background:"transparent",cursor:"pointer",color:A.t2,fontFamily:FONT,fontSize:13,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:6,marginTop:18}}>
+                  <span style={{fontSize:16,lineHeight:1}}>+</span> QR 추가
                 </button>
-                <button onClick={()=>activeQrUrl&&window.open(activeQrUrl,"_blank")} disabled={!activeQrUrl}
-                  style={{height:44,borderRadius:10,border:`1px solid ${A===ALT?"#E3E7EC":A.border}`,background:A.card,color:activeQrUrl?A.t2:A.t3,fontFamily:FONT,fontSize:13,fontWeight:600,cursor:activeQrUrl?"pointer":"not-allowed"}}>
-                  URL 열기
-                </button>
-              </div>
-            </div>
-          </FG>
+                {!canPersistQr&&<div style={{marginTop:8,fontSize:11.5,color:A.t3,lineHeight:1.5}}>폼을 먼저 저장하면 QR을 만들 수 있어요.</div>}
+              </FG>}
+
         </div>
       }
-
       case "cta": return <div style={pd}>
         <FG title="텍스트" A={A}><F label="버튼 라벨" A={A}><TIn value={cfg.cta.label} onChange={v=>ut("label",v)} A={A}/></F><F label="로딩 중 라벨" A={A}><TIn value={cfg.cta.loadLabel} onChange={v=>ut("loadLabel",v)} A={A}/></F></FG>
         <FG title="크기 / 색상" A={A} last>
@@ -9970,6 +10157,21 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const qrCountryEntries=qrCounterEntries(qrLocationBase,(e:any)=>countryName(eventMeta(e).country||""),qrLocationBase.length)
     const qrCityEntries=qrCounterEntries(qrLocationBase,(e:any)=>placeFromMeta(eventMeta(e)),qrLocationBase.length)
     const qrOsEntries=qrCounterEntries(qrBaseEvents,(e:any)=>qrOsName(eventMeta(e)))
+    // 상세페이지 QR은 한 폼에 여러 개를 만들 수 있다. 어느 QR로 들어왔는지는 QR 코드로 가른다.
+    // 이름은 지금 설정에 적힌 값을 쓴다. 이름을 바꾸면 지난 기록도 새 이름으로 보인다.
+    // 2026-11-04 이전 스캔 기록에는 코드가 남아 있지 않아서 이동 주소로만 맞춰 본다.
+    const detailQrNameByCode=new Map(detailQrLinks.map(link=>[String(link.code||""),String(link.label||"").trim()]))
+    const detailQrNameByUrl=new Map(detailQrLinks.map(link=>[normalizeQrUrl(link.url),String(link.label||"").trim()]))
+    const qrLinkName=(e:any)=>{
+      const m=eventMeta(e)
+      const code=String(m.qr_code||m.code||m.q||"")
+      if(code&&detailQrNameByCode.has(code))return detailQrNameByCode.get(code)||"이름 없는 QR"
+      const target=normalizeQrUrl(m.qr_target||m.target_url||m.to||m.url)
+      if(target&&detailQrNameByUrl.has(target))return detailQrNameByUrl.get(target)||"이름 없는 QR"
+      return String(m.qr_label||"").trim()||"구분 전 기록"
+    }
+    const qrLinkEntries=activeQrScope==="detail"?qrCounterEntries(qrScanEvents,qrLinkName):[]
+    const showQrLinkBreakdown=activeQrScope==="detail"&&detailQrLinks.length>1
     const qrHourLabels=Array.from({length:24},(_,i)=>`${String(i).padStart(2,"0")}시`)
     const qrDayLabels=["일","월","화","수","목","금","토"]
     const qrHeat:any={}
@@ -10929,6 +11131,21 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
               </div>)}
             </div>
 
+            {showQrLinkBreakdown&&<div style={{margin:"0 28px",paddingTop:26,boxShadow:`inset 0 1px 0 ${A===ALT?"#EDEFF3":A.border}`}}>
+              <div style={{height:34,display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                <span style={{fontSize:15,fontWeight:700,color:A.t1}}>QR별 스캔</span>
+                <div style={{flex:1}}/>
+                <span style={{fontSize:13,color:A.t3}}>스캔</span>
+              </div>
+              {qrLinkEntries.length===0?emptyState("QR별 스캔 기록이 아직 없습니다."):<div style={{display:"flex",flexDirection:"column" as const,gap:4}}>
+                {qrLinkEntries.map((item:any)=>qrStatRow(item,qrLinkEntries,A.blue))}
+              </div>}
+              {qrLinkEntries.some((item:any)=>item.label==="구분 전 기록")&&
+                <div style={{marginTop:10,padding:"0 12px",fontSize:11.5,color:A.t3,lineHeight:1.5}}>
+                  QR을 여러 개 만들기 전에 쌓인 스캔은 어느 QR인지 구분할 수 없어 따로 묶여 있습니다.
+                </div>}
+            </div>}
+
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,margin:"0 28px",paddingTop:26,boxShadow:`inset 0 1px 0 ${A===ALT?"#EDEFF3":A.border}`}}>
               <div style={{paddingRight:28,minWidth:0}}>
                 <div style={{height:34,display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
@@ -11469,6 +11686,27 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
         </div>
       )}
+      {!!detailQrDeleting&&(()=>{
+        const target=detailQrDrafts.find(row=>row.code===detailQrDeleting)
+        const close=()=>setDetailQrDeleting("")
+        return <div style={{position:"absolute" as const,inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999}} onClick={close}>
+          <div style={{background:A.card,border:`1px solid ${A.border}`,borderRadius:A.r2,padding:28,width:420,maxWidth:"calc(100% - 32px)",boxSizing:"border-box" as const,boxShadow:A.shadow}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:17,fontWeight:700,color:A.t1,letterSpacing:"-.2px",marginBottom:8}}>이 QR을 삭제할까요?</div>
+            <div style={{fontSize:13.5,color:A.t2,marginBottom:6,lineHeight:1.55,wordBreak:"keep-all" as const}}>
+              <span style={{fontWeight:600,color:A.t1}}>{target?.label.trim()||"이름 없는 QR"}</span>을 삭제하면 이미 인쇄해서 뿌린 QR은 더 이상 연결되지 않습니다.
+            </div>
+            <div style={{fontSize:12,color:A.t3,marginBottom:22,lineHeight:1.5}}>
+              되돌릴 수 없습니다. 지금까지 쌓인 스캔 기록은 그대로 남습니다.
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button onClick={close}
+                style={{height:38,padding:"0 14px",borderRadius:A.r,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:13,cursor:"pointer",whiteSpace:"nowrap" as const}}>취소</button>
+              <button onClick={()=>removeDetailQrLink(detailQrDeleting)}
+                style={{height:38,padding:"0 16px",borderRadius:A.r,border:"none",background:A.red,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const}}>QR 삭제</button>
+            </div>
+          </div>
+        </div>
+      })()}
       {confirmDeletePage!==null&&(()=>{
         const pageNum=confirmDeletePage
         const refs=optionsTargetingPage(pageNum)
