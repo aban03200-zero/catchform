@@ -224,6 +224,17 @@ const getSubmissionAttribution = (): AttributionData => {
 const hasAttributionValue = (attribution: AttributionData) => ATTRIBUTION_KEYS.some(key => !!attribution[key])
 const attributionSourceSummary = (attribution: AttributionData) => [attribution.utm_source, attribution.utm_medium, attribution.utm_campaign].filter(Boolean).join(" / ")
 
+// "이미 신청 내역이 있어요. (이메일 또는 휴대폰 번호가 동일해요)" 처럼
+// 뒤에 괄호 설명이 붙은 안내 문구는 괄호 앞에서 줄을 바꾼다.
+// 그냥 두면 좁은 팝업 안에서 괄호 안 문장이 아무 데서나 끊겨 지저분해 보인다.
+// 줄을 직접 나눠 적은 문구는 그 줄바꿈을 그대로 둔다.
+const breakBeforeParenthesis = (text: string) => {
+    const value = String(text || "")
+    if (!value || value.includes("\n")) return value
+    // 괄호 앞에 글자가 있을 때만 나눈다. 괄호로 시작하는 문구는 빈 줄이 생겨서 그대로 둔다.
+    return value.replace(/(\S)\s*(\([^()]*\))\s*$/, "$1\n$2")
+}
+
 // ─── Supabase ─────────────────────────────────────────────────────────────
 let _sb: SupabaseClient | null = null
 function getSB(url: string, key: string): SupabaseClient | null {
@@ -2896,7 +2907,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     </div>
                     <div style={{ fontSize: fs(17), fontWeight:600, color: FC.t1, marginBottom: 10, letterSpacing: seniorMode ? 0 : "-0.3px", fontFamily: FONT }}>중복 신청 안내</div>
                     <div style={{ fontSize: fs(13.5), color: FC.t2, lineHeight: 1.6, marginBottom: 24, fontFamily: FONT, whiteSpace: "pre-line" as const }}>
-                        {dupErr || "이미 신청 내역이 있어요."}
+                        {breakBeforeParenthesis(dupErr) || "이미 신청 내역이 있어요."}
                     </div>
                     <button onClick={() => window.open("https://insideout.or.kr/program", "_blank")}
                         style={{ width: "100%", height: seniorFieldHeight(seniorMode, 48), borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: fs(14), fontWeight:600, cursor: "pointer", marginBottom: 10 }}>
