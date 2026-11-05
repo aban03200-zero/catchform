@@ -5126,7 +5126,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     const name=lookup(["name","applicant_name","manager_name","full_name"],["이름","성함","성명","지원자명","담당자명"]).replace(/\s+/g,"").trim().toLowerCase()
     const phone=lookup(["phone","contact_phone","mobile","tel"],["전화번호","휴대폰번호","연락처","휴대폰"]).replace(/\D/g,"")
     const email=lookup(["email","contact_email"],["이메일","메일","이메일주소"]).trim().toLowerCase()
-    return name&&phone&&email?`${name}::${phone}::${email}`:""
+    // 이름이 있고, 번호나 이메일 중 하나라도 있으면 같은 사람으로 본다.
+    // 전에는 셋이 모두 있어야 했는데, 이메일을 받지 않는 폼에서는 이름과 번호가 똑같아도
+    // 이메일이 비었다는 이유로 중복 판정이 안 됐다. 그래서 응답 목록에서 중복이 안 접히고
+    // 인사이트의 완료 인원도 같은 사람을 여러 명으로 세고 있었다.
+    // 이름만으로는 묶지 않는다. 동명이인이 한 사람으로 합쳐진다.
+    if(!name||(!phone&&!email))return ""
+    return `${name}::${phone}::${email}`
   }
   // 같은 사람이 여러 번 제출했으면 가장 이른 제출만 남긴다.
   // 기간별 인사이트의 "완료" 숫자와 활동 그래프가 같은 기준을 쓰도록 개수가 아니라 대표 행을 보관한다.
