@@ -97,7 +97,7 @@ type Cfg = {
         imageCropX?: number; imageCropY?: number; imageCropW?: number; imageCropH?: number; imageNaturalW?: number; imageNaturalH?: number
     }
     ad?: FormAdConfig
-    form: { fields: FormField[]; showNum: boolean; dupText: string; pages: number; pageLabels?: string[]; consentPosition?: ConsentPosition }
+    form: { fields: FormField[]; showNum: boolean; dupText: string; dupBlock?: boolean; pages: number; pageLabels?: string[]; consentPosition?: ConsentPosition }
     consents: { enabled: boolean; required: boolean; title: string; consentType?: string; body: string; checkLabel: string; policyUrl: string; policyMode?: ConsentDocMode; customPolicyTitle?: string; customPolicyBody?: string }[]
     cta: { label: string; loadLabel: string; height: number; bg: string; color: string }
     modal: { title: string; body: string; btnLabel: string; btnUrl: string; btnReplace: boolean; shareButtons?: Partial<ModalShareButtons> }
@@ -224,6 +224,17 @@ const getSubmissionAttribution = (): AttributionData => {
 const hasAttributionValue = (attribution: AttributionData) => ATTRIBUTION_KEYS.some(key => !!attribution[key])
 const attributionSourceSummary = (attribution: AttributionData) => [attribution.utm_source, attribution.utm_medium, attribution.utm_campaign].filter(Boolean).join(" / ")
 
+// "이미 신청 내역이 있어요. (이메일 또는 휴대폰 번호가 동일해요)" 처럼
+// 뒤에 괄호 설명이 붙은 안내 문구는 괄호 앞에서 줄을 바꾼다.
+// 그냥 두면 좁은 팝업 안에서 괄호 안 문장이 아무 데서나 끊겨 지저분해 보인다.
+// 줄을 직접 나눠 적은 문구는 그 줄바꿈을 그대로 둔다.
+const breakBeforeParenthesis = (text: string) => {
+    const value = String(text || "")
+    if (!value || value.includes("\n")) return value
+    // 괄호 앞에 글자가 있을 때만 나눈다. 괄호로 시작하는 문구는 빈 줄이 생겨서 그대로 둔다.
+    return value.replace(/(\S)\s*(\([^()]*\))\s*$/, "$1\n$2")
+}
+
 // ─── Supabase ─────────────────────────────────────────────────────────────
 let _sb: SupabaseClient | null = null
 function getSB(url: string, key: string): SupabaseClient | null {
@@ -335,6 +346,7 @@ function normalizeRuntimeConfig(config: Cfg): Cfg {
             ...(config.form || {}),
             showNum: config.form?.showNum !== false,
             dupText: config.form?.dupText || "",
+            dupBlock: config.form?.dupBlock !== false,
             pages,
             pageLabels: config.form?.pageLabels || ["기본 정보", "상세 정보", "자격 요건 및 동의"],
             consentPosition: config.form?.consentPosition === "start" ? "start" : "end",
@@ -2142,6 +2154,38 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 : form_data
             if (storedFormData.length > 0) payload.form_data = storedFormData
 
+            // 같은 사람(이름 + 휴대폰 번호)이 이 폼에 이미 신청했는지 본다.
+            // 완료 팝업의 확인을 누르면 입력값이 그대로 남은 신청서로 돌아오기 때문에
+            // "안 된 줄 알고" 한 번 더 누르는 일이 잦다. 그렇게 들어온 중복이 절반을 넘었다.
+            //
+            // 브라우저에서 직접 조회하면 안 된다. 이 표는 anon 키로 읽을 수 없는데
+            // 막혔을 때 에러가 아니라 빈 목록이 돌아와서, 늘 "중복 없음"으로만 보인다.
+            // 그래서 서비스 키를 가진 서버에 물어본다.
+            if (cfg.form.dupBlock !== false && formConfigId && payload.name && payload.phone) {
+                try {
+                    const dupRes = await fetch("/api/check-duplicate", {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({
+                            table: tableName,
+                            formId: formConfigId,
+                            name: payload.name,
+                            phone: payload.phone,
+                        }),
+                    })
+                    const dupData = await dupRes.json().catch(() => null)
+                    if (dupData?.duplicate) {
+                        setDupErr(cfg.form.dupText || "이미 신청하셨어요.")
+                        setShowDupModal(true)
+                        setSubmitting(false)
+                        return
+                    }
+                } catch {
+                    // 확인에 실패하면 막지 않고 그대로 저장한다.
+                    // 신청 자체가 안 되는 쪽이 중복 한 줄보다 더 큰 손해다.
+                }
+            }
+
             // 접수 안내 문자를 보내려면 저장된 응답의 id가 필요하다.
             // 저장하면서 .select()로 돌려받으면 안 된다. 그건 저장한 줄을 "다시 읽는" 동작이라
             // 읽기 권한이 필요한데, 이 표는 관리자·본인만 읽을 수 있다.
@@ -2863,7 +2907,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     </div>
                     <div style={{ fontSize: fs(17), fontWeight:600, color: FC.t1, marginBottom: 10, letterSpacing: seniorMode ? 0 : "-0.3px", fontFamily: FONT }}>중복 신청 안내</div>
                     <div style={{ fontSize: fs(13.5), color: FC.t2, lineHeight: 1.6, marginBottom: 24, fontFamily: FONT, whiteSpace: "pre-line" as const }}>
-                        {dupErr || "이미 신청 내역이 있어요."}
+                        {breakBeforeParenthesis(dupErr) || "이미 신청 내역이 있어요."}
                     </div>
                     <button onClick={() => window.open("https://insideout.or.kr/program", "_blank")}
                         style={{ width: "100%", height: seniorFieldHeight(seniorMode, 48), borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: fs(14), fontWeight:600, cursor: "pointer", marginBottom: 10 }}>
