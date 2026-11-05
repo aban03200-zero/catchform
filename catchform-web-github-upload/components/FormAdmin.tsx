@@ -38,7 +38,7 @@ type QrLink = { code:string; url:string; label?:string; type?:string; createdAt?
 type Cfg = {
   header: { imageUrl:string; programId:string; programUnlinked?:boolean; recruitmentPeriodMode?:RecruitmentPeriodMode; overline:string; title:string; educationStart:string; educationEnd:string; educationSchedules?:EducationSchedule[]; tuitionFree:boolean; tuitionFreeText:string; tuitionAmount:string; stipend:string; noticeEnabled:boolean; noticeIconEnabled:boolean; noticeIconText:string; noticeText:string; noticeShape?:"pill"|"rect"; applicationType?:string; applicationTypeIsConversion?:boolean; imageFit?:"contain"|"cover"; imagePosX?:number; imagePosY?:number; imageCropX?:number; imageCropY?:number; imageCropW?:number; imageCropH?:number; imageNaturalW?:number; imageNaturalH?:number }
   ad?: FormAdConfig
-  form: { fields:FormField[]; showNum:boolean; dupText:string; pages:number; pageLabels?:string[]; consentPosition?:ConsentPosition }
+  form: { fields:FormField[]; showNum:boolean; dupText:string; dupBlock?:boolean; pages:number; pageLabels?:string[]; consentPosition?:ConsentPosition }
   consents: { enabled:boolean; required:boolean; title:string; consentType?:string; body:string; checkLabel:string; policyUrl:string; policyMode?:ConsentDocMode; customPolicyTitle?:string; customPolicyBody?:string }[]
   cta: { label:string; loadLabel:string; height:number; bg:string; color:string }
   modal: { title:string; body:string; btnLabel:string; btnUrl:string; btnReplace:boolean; shareButtons?:Partial<ModalShareButtons> }
@@ -1508,18 +1508,18 @@ function mergeCfg(raw:any):Cfg {
       const df=d.form
       const pages=rf.pages||df.pages||1
       if(legacyKdtFields){
-        return {showNum:rf.showNum!==false,dupText:rf.dupText||"이미 신청 내역이 있어요.",pages:legacyKdtPages,pageLabels:rf.pageLabels||KDT_FORM_PAGE_LABELS,consentPosition:rf.consentPosition==="start"?"start":"end",fields:legacyKdtFields.map((f:any)=>({...f,page:f.page||1}))}
+        return {showNum:rf.showNum!==false,dupBlock:rf.dupBlock!==false,dupText:rf.dupText||"이미 신청 내역이 있어요.",pages:legacyKdtPages,pageLabels:rf.pageLabels||KDT_FORM_PAGE_LABELS,consentPosition:rf.consentPosition==="start"?"start":"end",fields:legacyKdtFields.map((f:any)=>({...f,page:f.page||1}))}
       }
       // backward compat: old q1/q2/q3/q4 → fields array
       if(!rf.fields&&(rf.q1Label||rf.q2Label)){
-        return {showNum:rf.showNum!==false,dupText:rf.dupText||df.dupText,pages:pages,consentPosition:rf.consentPosition==="start"?"start":"end",fields:[
+        return {showNum:rf.showNum!==false,dupBlock:rf.dupBlock!==false,dupText:rf.dupText||df.dupText,pages:pages,consentPosition:rf.consentPosition==="start"?"start":"end",fields:[
           {id:"name",type:"text",label:rf.q1Label||"이름을 입력해주세요.",placeholder:rf.q1Ph||"예) 홍길동",required:true},
           {id:"phone",type:"phone",label:rf.q2Label||"연락 가능한 휴대폰 번호를 입력해 주세요.",placeholder:rf.q2Ph||"예) 010-1234-5678",helper:rf.q2Helper||"",required:true,dupCheck:true},
           {id:"email",type:"email",label:rf.q3Label||"이메일 주소를 입력해주세요.",placeholder:rf.q3Ph||"예) example@insideout.or.kr",helper:rf.q3Helper||"",required:true},
           {id:"referral",type:"dropdown",label:rf.q4Label||"어디서 알게 되셨나요?",placeholder:rf.q4Ph||"선택해주세요.",required:false,opts:rf.opts||DEFOPTS,etcPh:rf.etcPh||"기타 경로를 입력해주세요."},
         ]}
       }
-      return {showNum:rf.showNum!==false,dupText:rf.dupText||df.dupText,pages:rf.pages||df.pages||1,pageLabels:rf.pageLabels||df.pageLabels,consentPosition:rf.consentPosition==="start"?"start":"end",fields:(rf.fields||df.fields).map((f:any)=>({...f,page:f.page||1}))}
+      return {showNum:rf.showNum!==false,dupBlock:rf.dupBlock!==false,dupText:rf.dupText||df.dupText,pages:rf.pages||df.pages||1,pageLabels:rf.pageLabels||df.pageLabels,consentPosition:rf.consentPosition==="start"?"start":"end",fields:(rf.fields||df.fields).map((f:any)=>({...f,page:f.page||1}))}
     })(),
     consents:Array.isArray(raw.consents)&&raw.consents.length>0?raw.consents.map((c:any)=>({...d.consents[0],...c})):(raw.consent?[{...d.consents[0],...raw.consent}]:dc(d.consents)),
     cta:{...d.cta,...(raw.cta||{})},
@@ -8146,8 +8146,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
             </div>}
             </>}
           </div>
-          {!isKdt&&<FG title="오류 메시지" A={A} last>
-            <F label="중복 신청 안내" A={A}><TArea value={cfg.form.dupText} onChange={v=>uf("dupText",v)} A={A}/></F>
+          {!isKdt&&<FG title="중복 신청" A={A} last>
+            {/* 이름과 휴대폰 번호가 모두 같으면 두 번째 제출을 막는다.
+                둘 다 받는 폼에서만 동작한다. 한쪽만으로는 동명이인까지 막혀서다. */}
+            <TRow label="같은 사람 다시 신청 막기" on={cfg.form.dupBlock!==false} toggle={()=>uf("dupBlock",cfg.form.dupBlock===false)} A={A}/>
+            <F label="중복 신청 안내" hint="이미 신청한 사람이 다시 제출하면 보여줄 문구예요." A={A}><TArea value={cfg.form.dupText} onChange={v=>uf("dupText",v)} A={A}/></F>
           </FG>}
         </div>
       }

@@ -97,7 +97,7 @@ type Cfg = {
         imageCropX?: number; imageCropY?: number; imageCropW?: number; imageCropH?: number; imageNaturalW?: number; imageNaturalH?: number
     }
     ad?: FormAdConfig
-    form: { fields: FormField[]; showNum: boolean; dupText: string; pages: number; pageLabels?: string[]; consentPosition?: ConsentPosition }
+    form: { fields: FormField[]; showNum: boolean; dupText: string; dupBlock?: boolean; pages: number; pageLabels?: string[]; consentPosition?: ConsentPosition }
     consents: { enabled: boolean; required: boolean; title: string; consentType?: string; body: string; checkLabel: string; policyUrl: string; policyMode?: ConsentDocMode; customPolicyTitle?: string; customPolicyBody?: string }[]
     cta: { label: string; loadLabel: string; height: number; bg: string; color: string }
     modal: { title: string; body: string; btnLabel: string; btnUrl: string; btnReplace: boolean; shareButtons?: Partial<ModalShareButtons> }
@@ -335,6 +335,7 @@ function normalizeRuntimeConfig(config: Cfg): Cfg {
             ...(config.form || {}),
             showNum: config.form?.showNum !== false,
             dupText: config.form?.dupText || "",
+            dupBlock: config.form?.dupBlock !== false,
             pages,
             pageLabels: config.form?.pageLabels || ["기본 정보", "상세 정보", "자격 요건 및 동의"],
             consentPosition: config.form?.consentPosition === "start" ? "start" : "end",
@@ -2141,6 +2142,38 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 ? [...form_data, { question: "_attribution", answer: attribution, answerKey: "_attribution" }]
                 : form_data
             if (storedFormData.length > 0) payload.form_data = storedFormData
+
+            // 같은 사람(이름 + 휴대폰 번호)이 이 폼에 이미 신청했는지 본다.
+            // 완료 팝업의 확인을 누르면 입력값이 그대로 남은 신청서로 돌아오기 때문에
+            // "안 된 줄 알고" 한 번 더 누르는 일이 잦다. 그렇게 들어온 중복이 절반을 넘었다.
+            //
+            // 브라우저에서 직접 조회하면 안 된다. 이 표는 anon 키로 읽을 수 없는데
+            // 막혔을 때 에러가 아니라 빈 목록이 돌아와서, 늘 "중복 없음"으로만 보인다.
+            // 그래서 서비스 키를 가진 서버에 물어본다.
+            if (cfg.form.dupBlock !== false && formConfigId && payload.name && payload.phone) {
+                try {
+                    const dupRes = await fetch("/api/check-duplicate", {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({
+                            table: tableName,
+                            formId: formConfigId,
+                            name: payload.name,
+                            phone: payload.phone,
+                        }),
+                    })
+                    const dupData = await dupRes.json().catch(() => null)
+                    if (dupData?.duplicate) {
+                        setDupErr(cfg.form.dupText || "이미 신청하셨어요.")
+                        setShowDupModal(true)
+                        setSubmitting(false)
+                        return
+                    }
+                } catch {
+                    // 확인에 실패하면 막지 않고 그대로 저장한다.
+                    // 신청 자체가 안 되는 쪽이 중복 한 줄보다 더 큰 손해다.
+                }
+            }
 
             // 접수 안내 문자를 보내려면 저장된 응답의 id가 필요하다.
             // 저장하면서 .select()로 돌려받으면 안 된다. 그건 저장한 줄을 "다시 읽는" 동작이라
