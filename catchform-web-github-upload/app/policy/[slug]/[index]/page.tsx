@@ -44,7 +44,13 @@ function mdToHtml(text: string): string {
     .replace(/__\*\*([\s\S]+?)\*\*__/g, (_match, body) => tokenFor(`<strong><span style="text-decoration:underline">${richText(body)}</span></strong>`))
     .replace(/\*\*([\s\S]+?)\*\*/g, (_match, body) => tokenFor(`<strong>${richText(body)}</strong>`))
     .replace(/__([\s\S]+?)__/g, (_match, body) => tokenFor(`<span style="text-decoration:underline">${richText(body)}</span>`))
-  const restoreTokens = (html: string) => html.replace(/\uE000(\d+)\uE000/g, (_match, idx) => tokens[Number(idx)] || "")
+  // 밑줄 안에 굵게처럼 표시가 겹치면 바깥 조각 안에 안쪽 조각의 자리표가 남는다.
+  // 한 번만 되돌리면 그 자리표가 글자로 새어 나와 내용이 깨지므로, 남지 않을 때까지 되돌린다.
+  const restoreTokens = (html: string) => {
+    let out = html
+    for (let i = 0; i < 10 && /\uE000\d+\uE000/.test(out); i++) out = out.replace(/\uE000(\d+)\uE000/g, (_match, idx) => tokens[Number(idx)] || "")
+    return out
+  }
   const fmt = (s: string) => {
     const e = esc(s)
     return restoreTokens(e

@@ -2030,7 +2030,13 @@ function mdToHtml(text:string):string{
     .replace(/__\*\*([\s\S]+?)\*\*__/g,(_match,body)=>tokenFor(`<strong style="font-weight:600"><span style="text-decoration:underline">${richText(body)}</span></strong>`))
     .replace(/\*\*([\s\S]+?)\*\*/g,(_match,body)=>tokenFor(`<strong style="font-weight:600">${richText(body)}</strong>`))
     .replace(/__([\s\S]+?)__/g,(_match,body)=>tokenFor(`<span style="text-decoration:underline">${richText(body)}</span>`))
-  const restoreTokens=(html:string)=>html.replace(/\uE000(\d+)\uE000/g,(_match,idx)=>tokens[Number(idx)]||"")
+  // 밑줄 안에 굵게처럼 표시가 겹치면 바깥 조각 안에 안쪽 조각의 자리표가 남는다.
+  // 한 번만 되돌리면 그 자리표가 글자로 새어 나와 내용이 깨지므로, 남지 않을 때까지 되돌린다.
+  const restoreTokens=(html:string)=>{
+    let out=html
+    for(let i=0;i<10&&/\uE000\d+\uE000/.test(out);i++)out=out.replace(/\uE000(\d+)\uE000/g,(_match,idx)=>tokens[Number(idx)]||"")
+    return out
+  }
   const fmt=(s:string)=>{
     const e=esc(s)
     return restoreTokens(e
@@ -2056,28 +2062,50 @@ function mdToHtml(text:string):string{
   if(inList)html+="</ul>"
   return html
 }
+// 굵게(**)·밑줄(__) 표시는 한 덩어리 안에서만 쓴다.
+// 구분선이나 목록을 사이에 두고 표시가 이어지면, 다시 그릴 때 그 줄이 구분선이 아니라
+// 글자 "---"로 바뀌고 덩어리 전체가 굵어진다. 그래서 블록 경계에서 끊어 조각마다 감싼다.
+function markInline(inner:string,mark:string){
+  return inner.split(/(<hr(?:\s[^>]*)?\/?>|<\/?(?:div|p|ul|ol|li)(?:\s[^>]*)?>)/gi).map(part=>{
+    if(!part)return part
+    // 블록 태그 자체이거나 보이는 글자가 없는 조각에는 표시를 붙이지 않는다.
+    if(/^<[^>]+>$/.test(part)||!part.replace(/<[^>]+>/g,"").replace(/&nbsp;/g," ").trim())return part
+    // 조각 앞뒤의 줄바꿈은 표시 바깥에 둔다. 안에 넣으면 빈 줄까지 굵어진다.
+    const m=part.match(/^((?:<br\s*\/?>|\s)*)([\s\S]*?)((?:<br\s*\/?>|\s)*)$/i)
+    return m?`${m[1]}${mark}${m[2]}${mark}${m[3]}`:`${mark}${part}${mark}`
+  }).join("")
+}
 function htmlToMd(html:string):string{
   return html
-    .replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi,"**$1**")
-    .replace(/<b[^>]*>([\s\S]*?)<\/b>/gi,"**$1**")
-    .replace(/<span[^>]*font-weight\s*:\s*(?:bold|[5-9]00)[^>]*>([\s\S]*?)<\/span>/gi,"**$1**")
-    .replace(/<span[^>]*text-decoration:underline[^>]*>([\s\S]*?)<\/span>/gi,"__$1__")
-    .replace(/<u>([\s\S]*?)<\/u>/gi,"__$1__")
+    .replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi,(_m,inner)=>markInline(inner,"**"))
+    // <b[^>]*> 는 <br> 에도 걸린다("<b"+"r"+">"). 그래서 문서의 첫 줄바꿈을 굵게 시작으로 착각해,
+    // 거기서부터 진짜 </b> 까지 전부 굵어지고 그 줄바꿈은 태그로 먹혀 사라졌다.
+    // 태그 이름 바로 뒤에 공백이나 > 가 오는 경우만 받는다. <u> <p> <li> 도 같은 함정이 있다.
+    .replace(/<b(?:\s[^>]*)?>([\s\S]*?)<\/b\s*>/gi,(_m,inner)=>markInline(inner,"**"))
+    .replace(/<span[^>]*font-weight\s*:\s*(?:bold|[5-9]00)[^>]*>([\s\S]*?)<\/span>/gi,(_m,inner)=>markInline(inner,"**"))
+    // 브라우저는 밑줄을 "text-decoration: underline;"(콜론 뒤 공백)으로 적고, 때로는
+    // text-decoration-line 으로 풀어 쓴다. 공백 없는 형태만 찾던 탓에 U 버튼으로 넣은 밑줄이
+    // 저장하는 순간 조용히 사라졌다. 두 형태를 모두 받는다.
+    .replace(/<span[^>]*text-decoration(?:-line)?\s*:\s*[^;">]*underline[^>]*>([\s\S]*?)<\/span>/gi,(_m,inner)=>markInline(inner,"__"))
+    .replace(/<u(?:\s[^>]*)?>([\s\S]*?)<\/u\s*>/gi,(_m,inner)=>markInline(inner,"__"))
     .replace(/<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi,"[$2]($1)")
-    .replace(/<hr[^>]*>/gi,"\n---\n")
-    .replace(/<li[^>]*>([\s\S]*?)<\/li>/gi,"- $1\n")
-    .replace(/<\/?ul[^>]*>/gi,"")
-    .replace(/<\/?ol[^>]*>/gi,"")
+    .replace(/<hr(?:\s[^>]*)?\/?>/gi,"\n---\n")
+    .replace(/<li(?:\s[^>]*)?>([\s\S]*?)<\/li\s*>/gi,"- $1\n")
+    .replace(/<\/?ul(?:\s[^>]*)?>/gi,"")
+    .replace(/<\/?ol(?:\s[^>]*)?>/gi,"")
     .replace(/<br\s*\/?>/gi,"\n")
-    .replace(/<\/div>/gi,"\n")
-    .replace(/<\/p>/gi,"\n")
-    .replace(/<div[^>]*>/gi,"")
-    .replace(/<p[^>]*>/gi,"")
+    // div·p는 그 자체로 줄을 나눈다. 전에는 닫는 태그만 줄바꿈으로 바꾸고 여는 태그는 지워서,
+    // 글자 뒤에 블록이 바로 오면("운영하는<div>2026년…") 그 사이 줄바꿈이 사라졌다.
+    // 블록과 블록 사이는 줄바꿈 하나로, 나머지 여는/닫는 태그도 각각 줄바꿈으로 바꾼다.
+    .replace(/<\/(?:div|p)\s*>\s*<(?:div|p)(?:\s[^>]*)?>/gi,"\n")
+    .replace(/<(?:div|p)(?:\s[^>]*)?>/gi,"\n")
+    .replace(/<\/(?:div|p)\s*>/gi,"\n")
     .replace(/<[^>]+>/g,"")
     .replace(/&nbsp;/g," ")
     .replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
     .replace(/&quot;|&#34;/g,'"').replace(/&apos;|&#39;/g,"'")
     .replace(/\n{3,}/g,"\n\n")
+    .replace(/^\n+/,"")
     .trimEnd()
 }
 function customPolicyTitle(cs:any){
@@ -2147,6 +2175,85 @@ function handleEditorKey(e:React.KeyboardEvent<HTMLDivElement>,el:HTMLDivElement
       onChange(htmlToMd(el.innerHTML));return
     }
   }
+}
+// ─── 굵게·밑줄 켜고 끄기 ──────────────────────────────────────────────────
+// 전에는 버튼을 누를 때마다 선택한 곳을 새로 감싸기만 했다. 그래서 한 번 굵게 만든 글자는
+// 되돌릴 방법이 없었고, 다시 누르면 한 겹 더 씌워졌다. 이제 이미 걸려 있으면 벗긴다.
+const FORMAT_TAGS:Record<"bold"|"underline",string[]>={bold:["STRONG","B"],underline:["U"]}
+function isFormatEl(node:any,cmd:"bold"|"underline"){
+  if(!node||node.nodeType!==1)return false
+  if(FORMAT_TAGS[cmd].includes(node.tagName))return true
+  const style=String(node.getAttribute?.("style")||"")
+  return cmd==="bold"
+    ? /font-weight\s*:\s*(?:bold|[5-9]00)/i.test(style)
+    : /text-decoration[^;]*underline/i.test(style)
+}
+function formatAncestor(el:HTMLElement,node:Node|null,cmd:"bold"|"underline"):HTMLElement|null{
+  let cur:any=node&&node.nodeType===1?node:node?.parentNode
+  while(cur&&cur!==el){
+    if(isFormatEl(cur,cmd))return cur as HTMLElement
+    cur=cur.parentNode
+  }
+  return null
+}
+// 고른 글자가 "전부" 그 서식이면 끄고, 하나라도 아니면 켠다.
+function rangeFullyFormatted(el:HTMLElement,range:Range,cmd:"bold"|"underline"){
+  const doc=el.ownerDocument
+  if(!doc)return false
+  const walker=doc.createTreeWalker(el,4 /* SHOW_TEXT */)
+  let node:any,seen=false
+  while((node=walker.nextNode())){
+    if(!range.intersectsNode(node))continue
+    if(!String(node.data||"").trim())continue
+    seen=true
+    if(!formatAncestor(el,node,cmd))return false
+  }
+  return seen
+}
+// host 안에서 node만 남기고 앞뒤를 같은 태그로 갈라 둔다. 서식을 일부만 풀 때 쓴다.
+function splitAround(host:HTMLElement,node:Node){
+  const doc=host.ownerDocument
+  const parent=host.parentNode
+  if(!doc||!parent)return
+  const afterRange=doc.createRange()
+  afterRange.setStartAfter(node)
+  afterRange.setEnd(host,host.childNodes.length)
+  const afterFrag=afterRange.extractContents()
+  const beforeRange=doc.createRange()
+  beforeRange.setStart(host,0)
+  beforeRange.setEndBefore(node)
+  const beforeFrag=beforeRange.extractContents()
+  const beforeEl=host.cloneNode(false) as HTMLElement
+  beforeEl.appendChild(beforeFrag)
+  const afterEl=host.cloneNode(false) as HTMLElement
+  afterEl.appendChild(afterFrag)
+  if(beforeEl.textContent)parent.insertBefore(beforeEl,host)
+  // host 안에 남은 것을 통째로 꺼낸다. node만 옮기면 그 사이에 있던 다른 꾸밈(밑줄 등)이 사라진다.
+  while(host.firstChild)parent.insertBefore(host.firstChild,host)
+  if(afterEl.textContent)parent.insertBefore(afterEl,host)
+  parent.removeChild(host)
+}
+function unwrapEl(node:HTMLElement){
+  const parent=node.parentNode
+  if(!parent)return
+  while(node.firstChild)parent.insertBefore(node.firstChild,node)
+  parent.removeChild(node)
+}
+// 고른 구간에서 그 서식만 걷어낸다. 구간이 서식 태그 한가운데를 지나가면 태그를 갈라서 푼다.
+function clearFormatInRange(el:HTMLDivElement,range:Range,cmd:"bold"|"underline"){
+  const doc=el.ownerDocument
+  if(!doc)return
+  const marker=doc.createElement("span")
+  marker.appendChild(range.extractContents())
+  range.insertNode(marker)
+  let host:HTMLElement|null
+  let guard=0
+  while((host=formatAncestor(el,marker.parentNode,cmd))&&guard++<20)splitAround(host,marker)
+  Array.from(marker.querySelectorAll("strong,b,u,span")).forEach(node=>{
+    if(isFormatEl(node,cmd))unwrapEl(node as HTMLElement)
+  })
+  unwrapEl(marker)
+  el.normalize()
 }
 function editorContainsRange(el:HTMLDivElement,range:Range|null){
   if(!range)return false
@@ -2298,16 +2405,21 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
     const range=editorContainsRange(el,currentRange)?currentRange:(editorContainsRange(el,savedRangeRef.current)?savedRangeRef.current:null)
     if(range&&!range.collapsed&&el.contains(range.commonAncestorContainer)){
       restoreEditorRange(range)
-      const wrapper=cmd==="bold"?document.createElement("strong"):document.createElement("span")
-      if(cmd==="bold")wrapper.style.fontWeight="600"
-      else wrapper.style.textDecoration="underline"
-      wrapper.appendChild(range.extractContents())
-      range.insertNode(wrapper)
-      const nextRange=document.createRange()
-      nextRange.setStartAfter(wrapper)
-      nextRange.collapse(true)
-      sel.removeAllRanges()
-      sel.addRange(nextRange)
+      // 고른 글자가 이미 전부 그 서식이면 끄고, 아니면 켠다.
+      if(rangeFullyFormatted(el,range,cmd)){
+        clearFormatInRange(el,range,cmd)
+      }else{
+        const wrapper=cmd==="bold"?document.createElement("strong"):document.createElement("span")
+        if(cmd==="bold")wrapper.style.fontWeight="600"
+        else wrapper.style.textDecoration="underline"
+        wrapper.appendChild(range.extractContents())
+        range.insertNode(wrapper)
+        const nextRange=document.createRange()
+        nextRange.setStartAfter(wrapper)
+        nextRange.collapse(true)
+        sel.removeAllRanges()
+        sel.addRange(nextRange)
+      }
       setIsFocused(true)
       const nextValue=htmlToMd(el.innerHTML)
       onChange(nextValue)
