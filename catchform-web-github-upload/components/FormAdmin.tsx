@@ -2176,6 +2176,85 @@ function handleEditorKey(e:React.KeyboardEvent<HTMLDivElement>,el:HTMLDivElement
     }
   }
 }
+// ─── 굵게·밑줄 켜고 끄기 ──────────────────────────────────────────────────
+// 전에는 버튼을 누를 때마다 선택한 곳을 새로 감싸기만 했다. 그래서 한 번 굵게 만든 글자는
+// 되돌릴 방법이 없었고, 다시 누르면 한 겹 더 씌워졌다. 이제 이미 걸려 있으면 벗긴다.
+const FORMAT_TAGS:Record<"bold"|"underline",string[]>={bold:["STRONG","B"],underline:["U"]}
+function isFormatEl(node:any,cmd:"bold"|"underline"){
+  if(!node||node.nodeType!==1)return false
+  if(FORMAT_TAGS[cmd].includes(node.tagName))return true
+  const style=String(node.getAttribute?.("style")||"")
+  return cmd==="bold"
+    ? /font-weight\s*:\s*(?:bold|[5-9]00)/i.test(style)
+    : /text-decoration[^;]*underline/i.test(style)
+}
+function formatAncestor(el:HTMLElement,node:Node|null,cmd:"bold"|"underline"):HTMLElement|null{
+  let cur:any=node&&node.nodeType===1?node:node?.parentNode
+  while(cur&&cur!==el){
+    if(isFormatEl(cur,cmd))return cur as HTMLElement
+    cur=cur.parentNode
+  }
+  return null
+}
+// 고른 글자가 "전부" 그 서식이면 끄고, 하나라도 아니면 켠다.
+function rangeFullyFormatted(el:HTMLElement,range:Range,cmd:"bold"|"underline"){
+  const doc=el.ownerDocument
+  if(!doc)return false
+  const walker=doc.createTreeWalker(el,4 /* SHOW_TEXT */)
+  let node:any,seen=false
+  while((node=walker.nextNode())){
+    if(!range.intersectsNode(node))continue
+    if(!String(node.data||"").trim())continue
+    seen=true
+    if(!formatAncestor(el,node,cmd))return false
+  }
+  return seen
+}
+// host 안에서 node만 남기고 앞뒤를 같은 태그로 갈라 둔다. 서식을 일부만 풀 때 쓴다.
+function splitAround(host:HTMLElement,node:Node){
+  const doc=host.ownerDocument
+  const parent=host.parentNode
+  if(!doc||!parent)return
+  const afterRange=doc.createRange()
+  afterRange.setStartAfter(node)
+  afterRange.setEnd(host,host.childNodes.length)
+  const afterFrag=afterRange.extractContents()
+  const beforeRange=doc.createRange()
+  beforeRange.setStart(host,0)
+  beforeRange.setEndBefore(node)
+  const beforeFrag=beforeRange.extractContents()
+  const beforeEl=host.cloneNode(false) as HTMLElement
+  beforeEl.appendChild(beforeFrag)
+  const afterEl=host.cloneNode(false) as HTMLElement
+  afterEl.appendChild(afterFrag)
+  if(beforeEl.textContent)parent.insertBefore(beforeEl,host)
+  // host 안에 남은 것을 통째로 꺼낸다. node만 옮기면 그 사이에 있던 다른 꾸밈(밑줄 등)이 사라진다.
+  while(host.firstChild)parent.insertBefore(host.firstChild,host)
+  if(afterEl.textContent)parent.insertBefore(afterEl,host)
+  parent.removeChild(host)
+}
+function unwrapEl(node:HTMLElement){
+  const parent=node.parentNode
+  if(!parent)return
+  while(node.firstChild)parent.insertBefore(node.firstChild,node)
+  parent.removeChild(node)
+}
+// 고른 구간에서 그 서식만 걷어낸다. 구간이 서식 태그 한가운데를 지나가면 태그를 갈라서 푼다.
+function clearFormatInRange(el:HTMLDivElement,range:Range,cmd:"bold"|"underline"){
+  const doc=el.ownerDocument
+  if(!doc)return
+  const marker=doc.createElement("span")
+  marker.appendChild(range.extractContents())
+  range.insertNode(marker)
+  let host:HTMLElement|null
+  let guard=0
+  while((host=formatAncestor(el,marker.parentNode,cmd))&&guard++<20)splitAround(host,marker)
+  Array.from(marker.querySelectorAll("strong,b,u,span")).forEach(node=>{
+    if(isFormatEl(node,cmd))unwrapEl(node as HTMLElement)
+  })
+  unwrapEl(marker)
+  el.normalize()
+}
 function editorContainsRange(el:HTMLDivElement,range:Range|null){
   if(!range)return false
   const node=range.commonAncestorContainer
@@ -2326,16 +2405,21 @@ function ConsentBodyEditor({value,onChange,A}:{value:string;onChange:(v:string)=
     const range=editorContainsRange(el,currentRange)?currentRange:(editorContainsRange(el,savedRangeRef.current)?savedRangeRef.current:null)
     if(range&&!range.collapsed&&el.contains(range.commonAncestorContainer)){
       restoreEditorRange(range)
-      const wrapper=cmd==="bold"?document.createElement("strong"):document.createElement("span")
-      if(cmd==="bold")wrapper.style.fontWeight="600"
-      else wrapper.style.textDecoration="underline"
-      wrapper.appendChild(range.extractContents())
-      range.insertNode(wrapper)
-      const nextRange=document.createRange()
-      nextRange.setStartAfter(wrapper)
-      nextRange.collapse(true)
-      sel.removeAllRanges()
-      sel.addRange(nextRange)
+      // 고른 글자가 이미 전부 그 서식이면 끄고, 아니면 켠다.
+      if(rangeFullyFormatted(el,range,cmd)){
+        clearFormatInRange(el,range,cmd)
+      }else{
+        const wrapper=cmd==="bold"?document.createElement("strong"):document.createElement("span")
+        if(cmd==="bold")wrapper.style.fontWeight="600"
+        else wrapper.style.textDecoration="underline"
+        wrapper.appendChild(range.extractContents())
+        range.insertNode(wrapper)
+        const nextRange=document.createRange()
+        nextRange.setStartAfter(wrapper)
+        nextRange.collapse(true)
+        sel.removeAllRanges()
+        sel.addRange(nextRange)
+      }
       setIsFocused(true)
       const nextValue=htmlToMd(el.innerHTML)
       onChange(nextValue)
