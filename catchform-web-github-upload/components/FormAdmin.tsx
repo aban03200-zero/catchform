@@ -2030,7 +2030,13 @@ function mdToHtml(text:string):string{
     .replace(/__\*\*([\s\S]+?)\*\*__/g,(_match,body)=>tokenFor(`<strong style="font-weight:600"><span style="text-decoration:underline">${richText(body)}</span></strong>`))
     .replace(/\*\*([\s\S]+?)\*\*/g,(_match,body)=>tokenFor(`<strong style="font-weight:600">${richText(body)}</strong>`))
     .replace(/__([\s\S]+?)__/g,(_match,body)=>tokenFor(`<span style="text-decoration:underline">${richText(body)}</span>`))
-  const restoreTokens=(html:string)=>html.replace(/\uE000(\d+)\uE000/g,(_match,idx)=>tokens[Number(idx)]||"")
+  // 밑줄 안에 굵게처럼 표시가 겹치면 바깥 조각 안에 안쪽 조각의 자리표가 남는다.
+  // 한 번만 되돌리면 그 자리표가 글자로 새어 나와 내용이 깨지므로, 남지 않을 때까지 되돌린다.
+  const restoreTokens=(html:string)=>{
+    let out=html
+    for(let i=0;i<10&&/\uE000\d+\uE000/.test(out);i++)out=out.replace(/\uE000(\d+)\uE000/g,(_match,idx)=>tokens[Number(idx)]||"")
+    return out
+  }
   const fmt=(s:string)=>{
     const e=esc(s)
     return restoreTokens(e
@@ -2056,28 +2062,50 @@ function mdToHtml(text:string):string{
   if(inList)html+="</ul>"
   return html
 }
+// 굵게(**)·밑줄(__) 표시는 한 덩어리 안에서만 쓴다.
+// 구분선이나 목록을 사이에 두고 표시가 이어지면, 다시 그릴 때 그 줄이 구분선이 아니라
+// 글자 "---"로 바뀌고 덩어리 전체가 굵어진다. 그래서 블록 경계에서 끊어 조각마다 감싼다.
+function markInline(inner:string,mark:string){
+  return inner.split(/(<hr(?:\s[^>]*)?\/?>|<\/?(?:div|p|ul|ol|li)(?:\s[^>]*)?>)/gi).map(part=>{
+    if(!part)return part
+    // 블록 태그 자체이거나 보이는 글자가 없는 조각에는 표시를 붙이지 않는다.
+    if(/^<[^>]+>$/.test(part)||!part.replace(/<[^>]+>/g,"").replace(/&nbsp;/g," ").trim())return part
+    // 조각 앞뒤의 줄바꿈은 표시 바깥에 둔다. 안에 넣으면 빈 줄까지 굵어진다.
+    const m=part.match(/^((?:<br\s*\/?>|\s)*)([\s\S]*?)((?:<br\s*\/?>|\s)*)$/i)
+    return m?`${m[1]}${mark}${m[2]}${mark}${m[3]}`:`${mark}${part}${mark}`
+  }).join("")
+}
 function htmlToMd(html:string):string{
   return html
-    .replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi,"**$1**")
-    .replace(/<b[^>]*>([\s\S]*?)<\/b>/gi,"**$1**")
-    .replace(/<span[^>]*font-weight\s*:\s*(?:bold|[5-9]00)[^>]*>([\s\S]*?)<\/span>/gi,"**$1**")
-    .replace(/<span[^>]*text-decoration:underline[^>]*>([\s\S]*?)<\/span>/gi,"__$1__")
-    .replace(/<u>([\s\S]*?)<\/u>/gi,"__$1__")
+    .replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi,(_m,inner)=>markInline(inner,"**"))
+    // <b[^>]*> 는 <br> 에도 걸린다("<b"+"r"+">"). 그래서 문서의 첫 줄바꿈을 굵게 시작으로 착각해,
+    // 거기서부터 진짜 </b> 까지 전부 굵어지고 그 줄바꿈은 태그로 먹혀 사라졌다.
+    // 태그 이름 바로 뒤에 공백이나 > 가 오는 경우만 받는다. <u> <p> <li> 도 같은 함정이 있다.
+    .replace(/<b(?:\s[^>]*)?>([\s\S]*?)<\/b\s*>/gi,(_m,inner)=>markInline(inner,"**"))
+    .replace(/<span[^>]*font-weight\s*:\s*(?:bold|[5-9]00)[^>]*>([\s\S]*?)<\/span>/gi,(_m,inner)=>markInline(inner,"**"))
+    // 브라우저는 밑줄을 "text-decoration: underline;"(콜론 뒤 공백)으로 적고, 때로는
+    // text-decoration-line 으로 풀어 쓴다. 공백 없는 형태만 찾던 탓에 U 버튼으로 넣은 밑줄이
+    // 저장하는 순간 조용히 사라졌다. 두 형태를 모두 받는다.
+    .replace(/<span[^>]*text-decoration(?:-line)?\s*:\s*[^;">]*underline[^>]*>([\s\S]*?)<\/span>/gi,(_m,inner)=>markInline(inner,"__"))
+    .replace(/<u(?:\s[^>]*)?>([\s\S]*?)<\/u\s*>/gi,(_m,inner)=>markInline(inner,"__"))
     .replace(/<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi,"[$2]($1)")
-    .replace(/<hr[^>]*>/gi,"\n---\n")
-    .replace(/<li[^>]*>([\s\S]*?)<\/li>/gi,"- $1\n")
-    .replace(/<\/?ul[^>]*>/gi,"")
-    .replace(/<\/?ol[^>]*>/gi,"")
+    .replace(/<hr(?:\s[^>]*)?\/?>/gi,"\n---\n")
+    .replace(/<li(?:\s[^>]*)?>([\s\S]*?)<\/li\s*>/gi,"- $1\n")
+    .replace(/<\/?ul(?:\s[^>]*)?>/gi,"")
+    .replace(/<\/?ol(?:\s[^>]*)?>/gi,"")
     .replace(/<br\s*\/?>/gi,"\n")
-    .replace(/<\/div>/gi,"\n")
-    .replace(/<\/p>/gi,"\n")
-    .replace(/<div[^>]*>/gi,"")
-    .replace(/<p[^>]*>/gi,"")
+    // div·p는 그 자체로 줄을 나눈다. 전에는 닫는 태그만 줄바꿈으로 바꾸고 여는 태그는 지워서,
+    // 글자 뒤에 블록이 바로 오면("운영하는<div>2026년…") 그 사이 줄바꿈이 사라졌다.
+    // 블록과 블록 사이는 줄바꿈 하나로, 나머지 여는/닫는 태그도 각각 줄바꿈으로 바꾼다.
+    .replace(/<\/(?:div|p)\s*>\s*<(?:div|p)(?:\s[^>]*)?>/gi,"\n")
+    .replace(/<(?:div|p)(?:\s[^>]*)?>/gi,"\n")
+    .replace(/<\/(?:div|p)\s*>/gi,"\n")
     .replace(/<[^>]+>/g,"")
     .replace(/&nbsp;/g," ")
     .replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
     .replace(/&quot;|&#34;/g,'"').replace(/&apos;|&#39;/g,"'")
     .replace(/\n{3,}/g,"\n\n")
+    .replace(/^\n+/,"")
     .trimEnd()
 }
 function customPolicyTitle(cs:any){
