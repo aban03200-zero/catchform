@@ -776,6 +776,13 @@ function getOperationGate(cfg: Cfg) {
     }
 }
 
+// 신청 화면 대신 막는 화면을 띄워야 하는 상태인가.
+// 이 둘은 설정이 옛 내용일 때 잘못 뜨는 일이 잦아서, 띄우기 전에 최신 설정을 한 번 더 확인한다.
+function isBlockedByConfig(cfg: Cfg) {
+    const normalized = normalizeRuntimeConfig(cfg)
+    return normalized.dashboard?.isPublished === false || !!getOperationGate(normalized)
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────
 // 스스로 크롤러임을 밝히는 user-agent 표식 (FormAdmin의 BOT_UA_PATTERNS와 같은 목록)
 const CATCHFORM_BOT_UA_PATTERNS = [
@@ -809,8 +816,7 @@ export function CatchForm(props: {
     const [cfg, setCfg] = React.useState<Cfg | null>(null)
     const [loadErr, setLoadErr] = React.useState("")
     const [loading, setLoading] = React.useState(true)
-    // 정적 페이지가 넘겨준 설정으로 그렸는지, 그리고 닫힘 판정을 한 번 더 확인했는지
-    const [cfgFromStaticPage, setCfgFromStaticPage] = React.useState(false)
+    // 막힘 판정(공개 안 됨·모집 종료)을 최신 설정으로 한 번 더 확인했는지
     const [gateRechecked, setGateRechecked] = React.useState(false)
     const [loadedFormId, setLoadedFormId] = React.useState(propFormId)
 
@@ -819,7 +825,6 @@ export function CatchForm(props: {
             try {
                 setCfg(JSON.parse(configJson))
                 setLoadedFormId(propFormId || "")
-                setCfgFromStaticPage(true)
                 setLoading(false)
                 return
             } catch {}
@@ -883,14 +888,18 @@ export function CatchForm(props: {
         })()
     }, [supa, propSlug, propFormId, configJson])
 
-    // 공개 폼 페이지는 미리 만들어 둔 저장본(ISR)을 내보낸다. 설정을 방금 고쳤다면 저장본이
-    // 아직 옛 내용일 수 있는데, 그걸로 "모집 종료"를 띄우면 열려 있는 폼을 닫힌 것처럼 보여주게 된다.
-    // (폼을 복사하면 원본의 운영 기간까지 따라오기 때문에, 지난 기간이 걸린 채로 만들어지는 일이 잦다)
-    // 그래서 닫힘으로 판정될 때만 최신 설정을 한 번 더 확인한다.
+    // 공개 폼 페이지는 미리 만들어 둔 저장본(ISR)을 내보내고, 브라우저에도 설정을 5분간 담아 둔다.
+    // 설정을 방금 고쳤다면 둘 다 옛 내용일 수 있는데, 그걸로 막는 화면을 띄우면 열려 있는 폼을
+    // 닫힌 것처럼 보여주게 된다. 막아야 할 이유는 두 가지이고, 둘 다 같은 이유로 틀릴 수 있다.
+    //
+    //   - 모집 종료 : 폼을 복사하면 원본의 운영 기간까지 따라와, 지난 기간이 걸린 채로 만들어진다
+    //   - 공개 안 됨 : 새 폼을 만들고 공개하기 전에 주소가 한 번 열리면 그 상태로 저장본이 남는다
+    //
+    // 그래서 둘 중 하나로 막힐 때만 최신 설정을 한 번 더 확인한다.
     // 열려 있으면 확인하지 않는다. 멀쩡한 폼까지 매번 조회하면 DB에 부담만 된다.
     React.useEffect(() => {
-        if (!cfgFromStaticPage || gateRechecked || !supa || !cfg) return
-        if (!getOperationGate(normalizeRuntimeConfig(cfg))) return
+        if (gateRechecked || !supa || !cfg) return
+        if (!isBlockedByConfig(cfg)) return
         let slug = propSlug
         try {
             const urlSlug = new URLSearchParams(window.location.search).get("slug")
@@ -906,16 +915,18 @@ export function CatchForm(props: {
             if (!cancelled) setGateRechecked(true)
         })()
         return () => { cancelled = true }
-    }, [cfgFromStaticPage, gateRechecked, supa, cfg, propSlug])
+    }, [gateRechecked, supa, cfg, propSlug])
 
     if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200, fontFamily: FONT, fontSize: 14, color: "#9EA8C0" }}>불러오는 중...</div>
     if (loadErr) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200, fontFamily: FONT, fontSize: 14, color: "#FF4747" }}>{loadErr}</div>
     if (!cfg) return null
     const normalizedCfg = normalizeRuntimeConfig(cfg)
-    if (normalizedCfg.dashboard?.isPublished === false) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 240, padding: 24, fontFamily: FONT, fontSize: 14, color: "#9EA8C0", textAlign: "center" }}>아직 공개되지 않은 폼이에요.</div>
+    const notPublished = normalizedCfg.dashboard?.isPublished === false
     const operationGate = getOperationGate(normalizedCfg)
-    // 다시 확인하는 동안에는 "종료"를 띄우지 않는다. 잠깐 떴다 사라지면 신청자가 그냥 나가버린다.
-    if (operationGate && cfgFromStaticPage && !gateRechecked) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200, fontFamily: FONT, fontSize: 14, color: "#9EA8C0" }}>불러오는 중...</div>
+    // 다시 확인하는 동안에는 막는 화면을 띄우지 않는다. 잠깐 떴다 사라지면 신청자가 그냥 나가버린다.
+    // supa 가 없으면 다시 확인할 수단이 없으므로 기다리지 않고 그대로 보여준다.
+    if ((notPublished || operationGate) && supa && !gateRechecked) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200, fontFamily: FONT, fontSize: 14, color: "#9EA8C0" }}>불러오는 중...</div>
+    if (notPublished) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 240, padding: 24, fontFamily: FONT, fontSize: 14, color: "#9EA8C0", textAlign: "center" }}>아직 공개되지 않은 폼이에요.</div>
     if (operationGate) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 280, padding: 24, fontFamily: FONT, textAlign: "center", color: "#191919" }}>
         <div>
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>{operationGate.title}</div>

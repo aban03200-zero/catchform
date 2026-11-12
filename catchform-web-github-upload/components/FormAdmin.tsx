@@ -3898,7 +3898,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(!supa||!dashboardSettings?.item?.id)return
     setDashboardSettingsSaving(true)
     try{
-      const full=dashboardSettings.item.__fromBuilder?dashboardSettings.item:await getFullFormRow(dashboardSettings.item)
+      // 이 창은 폼 설정 전체를 통째로 다시 쓴다. 그래서 바탕이 되는 설정이 조금이라도 옛것이면
+      // 그 사이에 바뀐 값이 되돌아간다. 실제로 폼을 공개한 직후 이 창에서 운영 기간만 바꿔도
+      // isPublished 가 공개 전 값으로 되돌아가 "아직 공개되지 않은 폼"이 되는 일이 있었다.
+      // 목록이 들고 있는 설정이나 담아 둔 설정을 쓰지 않고, 저장 직전에 DB에서 다시 읽는다.
+      let full:any=dashboardSettings.item
+      if(!dashboardSettings.item.__fromBuilder){
+        const {data:freshRow,error:freshError}=await supa.from("form_configs").select("config,slug,name,brand").eq("id",dashboardSettings.item.id).single()
+        if(freshError||!freshRow)throw new Error("폼 정보를 다시 불러오지 못했어요. 잠시 뒤 다시 시도해주세요.")
+        full=freshRow
+      }
       const next=applyBrandDefaults(mergeCfg(full.config||{}),dashboardSettings.brand)
       const nextName=dashboardSettings.formName.trim()
       if(!nextName)throw new Error("폼 제목을 입력해주세요.")
