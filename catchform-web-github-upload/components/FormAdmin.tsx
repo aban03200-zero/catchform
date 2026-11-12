@@ -6,6 +6,18 @@
 import * as React from "react"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 import { publicEnv } from "@/lib/env"
+import {
+  FIXED_VALUE_PREFIX,
+  SMS_BYTE_LIMIT,
+  alimtalkVars,
+  byteLength,
+  fillAlimtalkBody,
+  fixedValueText,
+  isFixedValue,
+  notifyChannel,
+  type AlimtalkButton,
+  type NotifyConfig,
+} from "@/lib/notify"
 
 // ─── Types ────────────────────────────────────────────────────────────────
 type Theme = "dark" | "light"
@@ -49,7 +61,7 @@ type Cfg = {
   brand: string
   formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"|"survey"
   // 제출 시 신청자에게 보내는 접수 안내 문자 설정
-  notify?: { enabled?:boolean; message?:string; title?:string; phoneQuestion?:string; sender?:string }
+  notify?: NotifyConfig
   kdtFields?: KdtField[]
 }
 type EditorTab = { key:string; id:string; name:string; slug:string; brand:string; cfg:Cfg; isDraft?:boolean }
@@ -1161,7 +1173,10 @@ const DEF: Cfg = {
   brand:"",
   formType:"alert" as const,
   kdtFields:undefined,
-  notify:{enabled:false,message:"",title:"",phoneQuestion:""},
+  // channel 은 일부러 비워 둔다. 비어 있으면 notifyChannel()이 판단하는데,
+  // 템플릿도 문구도 없는 새 폼은 알림톡으로, 문구만 있는 예전 폼은 문자로 간다.
+  notify:{enabled:false,message:"",title:"",phoneQuestion:"",
+    tplCode:"",tplTitle:"",tplBody:"",varMap:{},failover:true,failoverMessage:"",buttons:[]},
 }
 
 const KDTOPTS: Opt[] = [
@@ -7252,7 +7267,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     ]},
     {group:"설정",items:[
       {id:"integrations",label:"응답 연동",badge:cfg.integrations?.googleSheets?.enabled?"ON":"OFF"},
-      {id:"notify",label:"접수 안내 문자",badge:cfg.notify?.enabled?"ON":"OFF"},
+      {id:"notify",label:"접수 안내 알림톡",badge:cfg.notify?.enabled?"ON":"OFF"},
       {id:"slug",label:"슬러그"},
       {id:"qr",label:"QR"},
     ]},
@@ -8516,82 +8531,237 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
 
       case "notify": {
-        const notify=cfg.notify||{}
-        const setNotify=(patch:any)=>setCfg(p=>({...p,notify:{...(p.notify||{}),...patch}}))
-        // 문구에 끼워 넣을 수 있는 값은 질문 제목이다. 응답에 그 제목으로 저장되기 때문이다.
+        const notify=(cfg.notify||{}) as NotifyConfig
+        const setNotify=(patch:Partial<NotifyConfig>)=>setCfg(p=>({...p,notify:{...(p.notify||{}),...patch}}))
+        const channel=notifyChannel(notify)
+        // 값을 끼워 넣을 수 있는 자리는 질문 제목이다. 응답에 그 제목으로 저장되기 때문이다.
         const questionNames=((isKdt?(cfg.kdtFields||[]):(cfg.form.fields||[])) as any[])
           .filter(f=>!isDisplayOnlyFieldType(f.type)&&!f.hidden)
           .map(f=>String(f.label||"").trim()).filter(Boolean)
         const phoneQuestions=((isKdt?(cfg.kdtFields||[]):(cfg.form.fields||[])) as any[])
           .filter(f=>f.type==="phone"&&!f.hidden).map(f=>String(f.label||"").trim()).filter(Boolean)
         // 이름·연락처는 응답 표에 따로 저장돼서, 질문 제목이 '성함'이어도 쓸 수 있다.
-        const knownKeys=new Set([...questionNames,"이름","연락처"])
-        const usedKeys=Array.from(String(notify.message||"").matchAll(/\{([^{}]{1,40})\}/g)).map(m=>String(m[1]).trim())
-        const unknownKeys=Array.from(new Set(usedKeys.filter(k=>!knownKeys.has(k))))
-        const previewParts=String(notify.message||"").split(/(\{[^{}]{1,40}\})/g)
-        const bytes=[...String(notify.message||"")].reduce((sum,ch)=>sum+(ch.charCodeAt(0)>0x7f?2:1),0)
+        const valueKeys=Array.from(new Set([...questionNames,"이름","연락처"]))
+        const warnBg=A===ALT?"#FDECEC":"rgba(232,92,92,0.10)"
+        const noteBg=A===ALT?"#F1F3F6":"rgba(255,255,255,0.05)"
+
+        const senderField=()=>{
+          const senders=smsSenderOptions()
+          if(!senders.length)return <div style={{padding:"10px 12px",borderRadius:9,marginBottom:14,background:warnBg,fontSize:11.5,color:A.t2,lineHeight:1.55}}>
+            쓸 수 있는 발신번호가 등록되어 있지 않습니다. 관리자에게 문의해주세요.
+          </div>
+          const current=notify.sender&&senders.some(o=>o.value===notify.sender)?notify.sender:senders[0].value
+          return <F label="발신번호" hint="알리고에 등록된 번호만 고를 수 있어요. 알림톡이 막혔을 때 문자로 대신 보낼 때도 이 번호를 씁니다." A={A}>
+            <PanelSelect value={current} onChange={v=>setNotify({sender:v})} A={A} height={40} fontSize={12.5} radius={9} padX={12}
+              options={senders.map(o=>({value:o.value,label:`${o.label} (${formatPhoneLabel(o.value)})`}))}/>
+          </F>
+        }
+        const phoneField=<F label="연락처로 쓸 질문" hint="비워두면 응답에 저장된 연락처를 씁니다." A={A}>
+          <PanelSelect value={notify.phoneQuestion||""} onChange={v=>setNotify({phoneQuestion:v})} A={A} height={40} fontSize={12.5} radius={9} padX={12}
+            options={[{value:"",label:"자동 (저장된 연락처)"},...phoneQuestions.map(q=>({value:q,label:q}))]}/>
+        </F>
+
+        // 미리보기에는 실제 응답이 없다. 연결한 질문 제목을 [성함] 처럼 끼워 넣어 모양만 보여준다.
+        const sampleAnswers:Record<string,string>={}
+        valueKeys.forEach(k=>{sampleAnswers[k]="["+k+"]"})
+        const tplVars=alimtalkVars(notify.tplBody||"")
+        const filled=fillAlimtalkBody(notify.tplBody||"",notify.varMap,sampleAnswers)
+        const setVar=(name:string,question:string)=>setNotify({varMap:{...(notify.varMap||{}),[name]:question}})
+        const buttons=(notify.buttons||[]) as AlimtalkButton[]
+        const setButtons=(next:AlimtalkButton[])=>setNotify({buttons:next})
+        const failoverOn=notify.failover!==false
+        const failoverText=String(notify.failoverMessage||"").trim()||filled.text
+        const failoverBytes=byteLength(failoverText)
+
         return <div style={pd}>
-          <PanelCheckRow label="제출하면 신청자에게 문자 보내기" on={!!notify.enabled} toggle={()=>setNotify({enabled:!notify.enabled})} A={A}/>
+          <PanelCheckRow label={channel==="sms"?"제출하면 신청자에게 문자 보내기":"제출하면 신청자에게 알림톡 보내기"}
+            on={!!notify.enabled} toggle={()=>setNotify({enabled:!notify.enabled})} A={A}/>
           <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginTop:8,marginBottom:notify.enabled?18:0}}>
             응답이 저장된 뒤 신청자 연락처로 접수 안내를 보냅니다. 접수 확인은 정보성 안내라
             마케팅 수신동의가 없어도 보낼 수 있지만, 광고 문구를 넣으면 동의가 필요해집니다.
           </div>
-          {notify.enabled&&<>
-            {(()=>{
-              const senders=smsSenderOptions()
-              if(!senders.length)return <div style={{padding:"10px 12px",borderRadius:9,marginBottom:14,
-                background:A===ALT?"#FDECEC":"rgba(232,92,92,0.10)",fontSize:11.5,color:A.t2,lineHeight:1.55}}>
-                쓸 수 있는 발신번호가 등록되어 있지 않습니다. 관리자에게 문의해주세요.
-              </div>
-              const current=notify.sender&&senders.some(o=>o.value===notify.sender)?notify.sender:senders[0].value
-              return <F label="발신번호" hint="알리고에 등록된 번호만 고를 수 있어요." A={A}>
-                <PanelSelect value={current} onChange={v=>setNotify({sender:v})} A={A} height={40} fontSize={12.5} radius={9} padX={12}
-                  options={senders.map(o=>({value:o.value,label:`${o.label} (${formatPhoneLabel(o.value)})`}))}/>
-              </F>
-            })()}
-            <F label="연락처로 쓸 질문" hint="비워두면 응답에 저장된 연락처를 씁니다." A={A}>
-              <PanelSelect value={notify.phoneQuestion||""} onChange={v=>setNotify({phoneQuestion:v})} A={A} height={40} fontSize={12.5} radius={9} padX={12}
-                options={[{value:"",label:"자동 (저장된 연락처)"},...phoneQuestions.map(q=>({value:q,label:q}))]}/>
-            </F>
-            <F label="보낼 문구" hint="{질문 제목}을 넣으면 응답 값으로 바뀝니다." A={A}>
-              <TArea value={notify.message||""} onChange={v=>setNotify({message:v})} minH={110}
-                placeholder={"{이름}님, 신청이 접수되었습니다.\n담당자 확인 후 개별 안내드리겠습니다."} A={A}/>
-            </F>
-            <div style={{fontSize:11.5,color:bytes>90?A.t2:A.t3,lineHeight:1.55,marginTop:-6,marginBottom:14}}>
-              {bytes}바이트 · {bytes>90?"90바이트를 넘어 장문(LMS)으로 나갑니다. 요금이 더 듭니다.":"90바이트 이내라 단문(SMS)으로 나갑니다."}
+
+          {notify.enabled&&channel==="alimtalk"&&<>
+            <div style={{padding:"11px 13px",borderRadius:9,marginBottom:16,background:noteBg,fontSize:11.5,color:A.t2,lineHeight:1.6}}>
+              알림톡은 <span style={{fontWeight:700}}>카카오에서 미리 승인받은 템플릿</span>만 보낼 수 있어요.
+              아래 본문은 승인받은 문구와 <span style={{fontWeight:700}}>띄어쓰기·줄바꿈까지 똑같아야</span> 하니,
+              카카오 비즈니스에 등록한 내용을 그대로 복사해서 붙여넣어 주세요. 한 글자라도 다르면 발송이 거부됩니다.
             </div>
-            {bytes>90&&<F label="장문 제목" hint="장문일 때만 쓰입니다. 비워두면 '접수 안내'로 나갑니다." A={A}>
-              <TIn value={notify.title||""} onChange={v=>setNotify({title:v})} placeholder="접수 안내" A={A}/>
-            </F>}
-            {!!questionNames.length&&<div style={{marginBottom:16}}>
-              <div style={{fontSize:12,fontWeight:700,color:A.t2,marginBottom:7}}>넣을 수 있는 값</div>
-              <div style={{display:"flex",flexWrap:"wrap" as const,gap:5}}>
-                {questionNames.slice(0,12).map(q=><button key={q} onClick={()=>setNotify({message:(notify.message||"")+"{"+q+"}"})}
-                  style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:11.5,cursor:"pointer",whiteSpace:"nowrap" as const}}>
-                  {"{"+q+"}"}
-                </button>)}
+
+            {senderField()}
+            {phoneField}
+
+            <F label="템플릿 코드" hint="카카오 비즈니스에 등록할 때 정한 코드예요. (예: catchform_apply_01)" A={A}>
+              <TIn value={notify.tplCode||""} onChange={v=>setNotify({tplCode:v})} placeholder="catchform_apply_01" A={A}/>
+            </F>
+            <F label="알림톡 제목" hint="카카오톡 목록에 보이는 줄이에요. 비워두면 '접수 안내'로 나갑니다." A={A}>
+              <TIn value={notify.tplTitle||""} onChange={v=>setNotify({tplTitle:v})} placeholder="접수 안내" A={A}/>
+            </F>
+            <F label="템플릿 본문" hint="승인받은 문구를 그대로 붙여넣으세요. 바꿔 넣을 자리는 #{변수명} 으로 들어 있습니다." A={A}>
+              <TArea value={notify.tplBody||""} onChange={v=>setNotify({tplBody:v})} minH={140}
+                placeholder={"#{고객명}님, 신청이 정상 접수되었습니다.\n\n■ 과정명 : #{과정명}\n\n담당자 확인 후 개별 안내드리겠습니다."} A={A}/>
+            </F>
+
+            {!String(notify.tplBody||"").trim()
+              ?<div style={{padding:"10px 12px",borderRadius:9,marginBottom:14,background:noteBg,fontSize:11.5,color:A.t3,lineHeight:1.55}}>
+                템플릿 본문을 붙여넣으면 바꿔 넣을 자리를 여기에서 연결할 수 있어요.
               </div>
+              :!tplVars.length
+                ?<div style={{padding:"10px 12px",borderRadius:9,marginBottom:14,background:noteBg,fontSize:11.5,color:A.t3,lineHeight:1.55}}>
+                  바꿔 넣을 자리가 없는 템플릿이에요. 모든 사람에게 같은 문구가 나갑니다.
+                </div>
+                :<div style={{marginBottom:16}}>
+                  <div style={{fontSize:12,fontWeight:700,color:A.t2,marginBottom:4}}>바꿔 넣을 값 연결</div>
+                  <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginBottom:9}}>
+                    템플릿의 각 자리에 어떤 답변을 넣을지 골라주세요. 하나라도 비어 있으면 발송하지 않습니다.
+                  </div>
+                  {tplVars.map(name=>{
+                    const mapped=String(notify.varMap?.[name]||"")
+                    const fixed=isFixedValue(mapped)
+                    return <div key={name} style={{marginBottom:7}}>
+                      <div style={{display:"flex",alignItems:"center",gap:9}}>
+                        <span style={{flexShrink:0,minWidth:96,padding:"5px 9px",borderRadius:7,background:A.blue2,color:A.blue,fontFamily:FONT,fontSize:11.5,fontWeight:700,whiteSpace:"nowrap" as const}}>
+                          {"#{"+name+"}"}
+                        </span>
+                        <span style={{flexShrink:0,color:A.t4,fontSize:12}}>←</span>
+                        <div style={{flex:1,minWidth:0}}>
+                          <PanelSelect value={fixed?FIXED_VALUE_PREFIX:mapped} onChange={v=>setVar(name,v===FIXED_VALUE_PREFIX?FIXED_VALUE_PREFIX:v)}
+                            A={A} height={38} fontSize={12.5} radius={9} padX={12}
+                            options={[{value:"",label:"선택 안 함"},...valueKeys.map(q=>({value:q,label:q})),{value:FIXED_VALUE_PREFIX,label:"직접 입력 (늘 같은 문구)"}]}/>
+                        </div>
+                      </div>
+                      {fixed&&<div style={{marginTop:6,marginLeft:105}}>
+                        <TIn value={fixedValueText(mapped)} onChange={v=>setVar(name,FIXED_VALUE_PREFIX+v)}
+                          placeholder="이 폼에서 늘 들어갈 문구 (예: AID 30+ 집중캠프)" A={A}/>
+                      </div>}
+                    </div>
+                  })}
+                </div>}
+
+            {!!filled.missing.length&&<div style={{padding:"10px 12px",borderRadius:9,marginBottom:14,background:warnBg,fontSize:11.5,color:A.t2,lineHeight:1.55}}>
+              <span style={{fontWeight:700,color:A.red}}>{filled.missing.map(v=>"#{"+v+"}").join(", ")}</span>
+              {" "}에 넣을 값이 연결되지 않았어요. 이대로 두면 <span style={{fontWeight:600}}>알림톡이 발송되지 않습니다.</span>
             </div>}
-            {!!unknownKeys.length&&<div style={{padding:"10px 12px",borderRadius:9,marginBottom:12,
-              background:A===ALT?"#FDECEC":"rgba(232,92,92,0.10)",fontSize:11.5,color:A.t2,lineHeight:1.55}}>
-              <span style={{fontWeight:700,color:A.red}}>{unknownKeys.map(k=>"{"+k+"}").join(", ")}</span>
-              {" "}는 질문 제목과 맞지 않아 <span style={{fontWeight:600}}>빈칸으로 나갑니다.</span> 아래 버튼으로 넣어주세요.
-            </div>}
-            {!!String(notify.message||"").trim()&&<div style={{padding:"12px 14px",borderRadius:10,background:panelFieldBg(A)}}>
+
+            {!!String(notify.tplBody||"").trim()&&<div style={{padding:"12px 14px",borderRadius:10,background:panelFieldBg(A),marginBottom:16}}>
               <div style={{fontSize:11.5,fontWeight:700,color:A.t3,marginBottom:7}}>미리보기</div>
               <div style={{fontSize:12.5,color:A.t1,lineHeight:1.6,whiteSpace:"pre-wrap" as const}}>
-                {previewParts.map((part,i)=>{
-                  const m=part.match(/^\{([^{}]{1,40})\}$/)
-                  if(!m)return <span key={i}>{part}</span>
-                  const key=String(m[1]).trim()
-                  const ok=knownKeys.has(key)
-                  return <span key={i} style={{padding:"0 3px",borderRadius:4,fontWeight:600,
-                    background:ok?A.blue2:(A===ALT?"#FDECEC":"rgba(232,92,92,0.14)"),color:ok?A.blue:A.red}}>
-                    {ok?"["+key+"]":"(빈칸)"}
-                  </span>
+                {filled.text.split(/(\[[^\][]{1,40}\]|#\{[^{}]{1,40}\})/g).map((part,i)=>{
+                  if(/^\[[^\][]{1,40}\]$/.test(part))return <span key={i} style={{padding:"0 3px",borderRadius:4,fontWeight:600,background:A.blue2,color:A.blue}}>{part}</span>
+                  if(/^#\{[^{}]{1,40}\}$/.test(part))return <span key={i} style={{padding:"0 3px",borderRadius:4,fontWeight:600,background:warnBg,color:A.red}}>{part}</span>
+                  return <span key={i}>{part}</span>
                 })}
               </div>
+              {!!buttons.length&&<div style={{display:"flex",flexWrap:"wrap" as const,gap:6,marginTop:11}}>
+                {buttons.map((b,i)=><span key={i} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${A.border}`,fontSize:11.5,color:A.t2}}>{b.name||"(이름 없음)"}</span>)}
+              </div>}
             </div>}
+
+            <PanelCheckRow label="알림톡이 안 가면 문자로 대신 보내기" on={failoverOn} toggle={()=>setNotify({failover:!failoverOn})} A={A}/>
+            <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginTop:8,marginBottom:failoverOn?14:18}}>
+              카카오톡을 쓰지 않거나 채널을 차단한 사람에게는 알림톡이 가지 않아요. 켜 두면 그럴 때만 문자로 나갑니다.
+            </div>
+            {failoverOn&&<>
+              <F label="대체 문자 문구" hint="비워두면 위 알림톡 본문을 그대로 보냅니다. {질문 제목}을 넣으면 응답 값으로 바뀝니다." A={A}>
+                <TArea value={notify.failoverMessage||""} onChange={v=>setNotify({failoverMessage:v})} minH={90}
+                  placeholder={"비워두면 알림톡 본문과 같은 내용으로 나갑니다."} A={A}/>
+              </F>
+              <div style={{fontSize:11.5,color:failoverBytes>SMS_BYTE_LIMIT?A.t2:A.t3,lineHeight:1.55,marginTop:-6,marginBottom:18}}>
+                {failoverBytes}바이트 · {failoverBytes>SMS_BYTE_LIMIT?"90바이트를 넘어 장문(LMS)으로 나갑니다. 요금이 더 듭니다.":"90바이트 이내라 단문(SMS)으로 나갑니다."}
+              </div>
+            </>}
+
+            <div style={{fontSize:12,fontWeight:700,color:A.t2,marginBottom:4}}>버튼</div>
+            <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginBottom:9}}>
+              승인받은 템플릿에 버튼이 있을 때만 추가하세요. 템플릿에 없는 버튼을 넣으면 발송이 거부됩니다.
+            </div>
+            {buttons.map((b,i)=><div key={i} style={{padding:"11px 12px",borderRadius:10,background:panelFieldBg(A),marginBottom:8}}>
+              <div style={{display:"flex",gap:7,marginBottom:b.linkType==="WL"?7:0}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <TIn value={b.name} onChange={v=>setButtons(buttons.map((x,j)=>j===i?{...x,name:v}:x))} placeholder="버튼 이름" A={A}/>
+                </div>
+                <div style={{width:124,flexShrink:0}}>
+                  <PanelSelect value={b.linkType} onChange={v=>setButtons(buttons.map((x,j)=>j===i?{...x,linkType:v as "WL"|"AC"}:x))}
+                    A={A} height={40} fontSize={12.5} radius={9} padX={12}
+                    options={[{value:"WL",label:"웹링크"},{value:"AC",label:"채널 추가"}]}/>
+                </div>
+                <button onClick={()=>setButtons(buttons.filter((_x,j)=>j!==i))} title="버튼 삭제" aria-label="버튼 삭제"
+                  style={{width:40,height:40,flexShrink:0,border:"none",borderRadius:9,background:A.card,color:A.t3,cursor:"pointer",fontFamily:FONT,fontSize:15}}>×</button>
+              </div>
+              {b.linkType==="WL"&&<TIn value={b.linkMo||""} onChange={v=>setButtons(buttons.map((x,j)=>j===i?{...x,linkMo:v}:x))}
+                placeholder="https://catchform.vercel.app/form/..." A={A}/>}
+            </div>)}
+            <button onClick={()=>setButtons([...buttons,{name:"",linkType:"WL",linkMo:""}])}
+              style={{width:"100%",height:40,marginBottom:18,borderRadius:9,border:`1px dashed ${A.border}`,background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12.5,cursor:"pointer"}}>
+              + 버튼 추가
+            </button>
+
+            {!!String(notify.message||"").trim()&&<div style={{padding:"10px 12px",borderRadius:9,background:noteBg,fontSize:11.5,color:A.t3,lineHeight:1.6}}>
+              예전에 쓰던 문자 문구가 남아 있지만 지금은 쓰이지 않아요.
+              <button onClick={()=>setNotify({channel:"sms"})}
+                style={{marginLeft:6,padding:0,border:"none",background:"transparent",color:A.blue,fontFamily:FONT,fontSize:11.5,fontWeight:700,cursor:"pointer",textDecoration:"underline"}}>
+                문자 방식으로 되돌리기
+              </button>
+            </div>}
+          </>}
+
+          {notify.enabled&&channel==="sms"&&<>
+            <div style={{padding:"11px 13px",borderRadius:9,marginBottom:16,background:noteBg,fontSize:11.5,color:A.t2,lineHeight:1.6}}>
+              이 폼은 <span style={{fontWeight:700}}>예전 문자 방식</span>으로 설정되어 있어요. 문자는 그대로 나갑니다.
+              <button onClick={()=>setNotify({channel:"alimtalk"})}
+                style={{marginLeft:6,padding:0,border:"none",background:"transparent",color:A.blue,fontFamily:FONT,fontSize:11.5,fontWeight:700,cursor:"pointer",textDecoration:"underline"}}>
+                알림톡으로 바꾸기
+              </button>
+            </div>
+            {senderField()}
+            {phoneField}
+            {(()=>{
+              const knownKeys=new Set(valueKeys)
+              const usedKeys=Array.from(String(notify.message||"").matchAll(/\{([^{}]{1,40})\}/g)).map(m=>String(m[1]).trim())
+              const unknownKeys=Array.from(new Set(usedKeys.filter(k=>!knownKeys.has(k))))
+              const previewParts=String(notify.message||"").split(/(\{[^{}]{1,40}\})/g)
+              const bytes=byteLength(notify.message||"")
+              return <>
+                <F label="보낼 문구" hint="{질문 제목}을 넣으면 응답 값으로 바뀝니다." A={A}>
+                  <TArea value={notify.message||""} onChange={v=>setNotify({message:v})} minH={110}
+                    placeholder={"{이름}님, 신청이 접수되었습니다.\n담당자 확인 후 개별 안내드리겠습니다."} A={A}/>
+                </F>
+                <div style={{fontSize:11.5,color:bytes>SMS_BYTE_LIMIT?A.t2:A.t3,lineHeight:1.55,marginTop:-6,marginBottom:14}}>
+                  {bytes}바이트 · {bytes>SMS_BYTE_LIMIT?"90바이트를 넘어 장문(LMS)으로 나갑니다. 요금이 더 듭니다.":"90바이트 이내라 단문(SMS)으로 나갑니다."}
+                </div>
+                {bytes>SMS_BYTE_LIMIT&&<F label="장문 제목" hint="장문일 때만 쓰입니다. 비워두면 '접수 안내'로 나갑니다." A={A}>
+                  <TIn value={notify.title||""} onChange={v=>setNotify({title:v})} placeholder="접수 안내" A={A}/>
+                </F>}
+                {!!questionNames.length&&<div style={{marginBottom:16}}>
+                  <div style={{fontSize:12,fontWeight:700,color:A.t2,marginBottom:7}}>넣을 수 있는 값</div>
+                  <div style={{display:"flex",flexWrap:"wrap" as const,gap:5}}>
+                    {questionNames.slice(0,12).map(q=><button key={q} onClick={()=>setNotify({message:(notify.message||"")+"{"+q+"}"})}
+                      style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:11.5,cursor:"pointer",whiteSpace:"nowrap" as const}}>
+                      {"{"+q+"}"}
+                    </button>)}
+                  </div>
+                </div>}
+                {!!unknownKeys.length&&<div style={{padding:"10px 12px",borderRadius:9,marginBottom:12,background:warnBg,fontSize:11.5,color:A.t2,lineHeight:1.55}}>
+                  <span style={{fontWeight:700,color:A.red}}>{unknownKeys.map(k=>"{"+k+"}").join(", ")}</span>
+                  {" "}는 질문 제목과 맞지 않아 <span style={{fontWeight:600}}>빈칸으로 나갑니다.</span> 위 버튼으로 넣어주세요.
+                </div>}
+                {!!String(notify.message||"").trim()&&<div style={{padding:"12px 14px",borderRadius:10,background:panelFieldBg(A)}}>
+                  <div style={{fontSize:11.5,fontWeight:700,color:A.t3,marginBottom:7}}>미리보기</div>
+                  <div style={{fontSize:12.5,color:A.t1,lineHeight:1.6,whiteSpace:"pre-wrap" as const}}>
+                    {previewParts.map((part,i)=>{
+                      const m=part.match(/^\{([^{}]{1,40})\}$/)
+                      if(!m)return <span key={i}>{part}</span>
+                      const key=String(m[1]).trim()
+                      const ok=knownKeys.has(key)
+                      return <span key={i} style={{padding:"0 3px",borderRadius:4,fontWeight:600,
+                        background:ok?A.blue2:warnBg,color:ok?A.blue:A.red}}>
+                        {ok?"["+key+"]":"(빈칸)"}
+                      </span>
+                    })}
+                  </div>
+                </div>}
+              </>
+            })()}
           </>}
         </div>
       }
