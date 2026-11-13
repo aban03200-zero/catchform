@@ -979,6 +979,16 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const [shareMenuOpen, setShareMenuOpen] = React.useState(false)
     const [dupErr, setDupErr] = React.useState("")
     const [showDupModal, setShowDupModal] = React.useState(false)
+    // 이 기기에서 이미 제출했다는 표시.
+    //
+    // 서버 중복 검사는 이름과 휴대폰 번호가 둘 다 있어야 돌아간다. 익명 설문처럼 이름을
+    // 받지 않는 폼은 검사가 아예 건너뛰어져서, 누르는 만큼 그대로 쌓인다.
+    // 실제로 만족도 조사 폼에서 응답 34건 중 12건이 같은 사람의 중복이었다(2026-11-13).
+    //
+    // 그래서 제출하면 이 브라우저에 표시를 남기고, 다시 들어오면 완료 안내를 먼저 보여 준다.
+    // 다만 행사장 공용 태블릿처럼 한 기기를 여러 사람이 쓰는 경우가 있어서 영구히 막지는 않는다.
+    // `새로 작성하기`로 언제든 빠져나갈 수 있다. 막으려는 건 "안 된 줄 알고 다시 누르는" 중복이다.
+    const [submittedBefore, setSubmittedBefore] = React.useState(false)
     const [fileNames, setFileNames] = React.useState<Record<string, string[]>>({})
     const [fileObjects, setFileObjects] = React.useState<Record<string, File[]>>({})
     const [authUser, setAuthUser] = React.useState<any>(null)
@@ -1015,6 +1025,21 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         const safe = String(raw).trim().replace(/[^A-Za-z0-9가-힣._-]/g, "_").slice(0, 120) || "form"
         return `catchform_draft_v2_${safe}`
     }, [formId, formSlug, cfg.header?.programId, cfg.header?.title])
+
+    // 제출 표시는 임시 저장(draft)과 같은 기준으로 폼을 구분한다.
+    const submittedKey = React.useMemo(() => `${draftKey}__submitted`, [draftKey])
+
+    // 관리자가 중복 신청을 허용해 둔 폼(dupBlock === false)은 여러 번 받으려는 의도이므로 막지 않는다.
+    const blockResubmit = cfg.form?.dupBlock !== false
+
+    React.useEffect(() => {
+        if (typeof window === "undefined" || !blockResubmit) return
+        try {
+            if (window.localStorage.getItem(submittedKey)) setSubmittedBefore(true)
+        } catch {
+            // 사생활 보호 모드에서는 표시를 읽지 못한다. 그때는 막지 않는다.
+        }
+    }, [submittedKey, blockResubmit])
 
     React.useEffect(() => {
         if (operationGate) setShowOperationModal(true)
@@ -2253,6 +2278,12 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 brand: cfg.brand || "",
             })
             clearDraft()
+            // 제출했다는 표시를 남긴다. 완료 팝업의 확인을 눌러도 입력값이 남은 신청서로
+            // 돌아가지 않고 완료 안내가 이어진다. 이 복귀가 중복 제출의 가장 큰 원인이었다.
+            if (blockResubmit) {
+                try { window.localStorage.setItem(submittedKey, new Date().toISOString()) } catch {}
+                setSubmittedBefore(true)
+            }
             setShareCopied(false)
             setShowModal(true)
 
@@ -2933,6 +2964,33 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     <button onClick={() => setShowDupModal(false)}
                         style={{ width: "100%", height: seniorFieldHeight(seniorMode, 40), borderRadius: fr, border: `1px solid ${FC.fieldBorder}`, background: "transparent", color: FC.t2, fontFamily: FONT, fontSize: fs(13.5), cursor: "pointer" }}>
                         닫기
+                    </button>
+                </div>
+            </div>}
+            {/* 이미 제출한 기기에 보여 주는 완료 안내. 완료 팝업(showModal)보다 먼저 두어 팝업이 위에 보이게 한다. */}
+            {submittedBefore && !showModal && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }}>
+                <div style={{ background: FC.bg || "#fff", borderRadius: 16, padding: "32px 28px", width: "min(340px,100%)", boxShadow: "0 8px 40px rgba(0,0,0,0.3)", textAlign: "center" as const }}>
+                    <div style={{ width: 48, height: 48, borderRadius: "50%", background: accentBg + "22", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke={accentBg} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    </div>
+                    <div style={{ fontSize: fs(17), fontWeight:600, color: FC.t1, marginBottom: 10, letterSpacing: seniorMode ? 0 : "-0.3px", fontFamily: FONT }}>제출이 완료됐어요</div>
+                    <div style={{ fontSize: fs(13.5), color: FC.t2, lineHeight: 1.6, marginBottom: 24, fontFamily: FONT, whiteSpace: "pre-line" as const }}>
+                        {cfg.form?.dupText || "이미 제출해주셨어요."}
+                    </div>
+                    {/* 공용 기기에서 다른 사람이 써야 할 수 있다. 표시를 지우고 빈 신청서로 돌아간다. */}
+                    <button onClick={() => {
+                        try { window.localStorage.removeItem(submittedKey) } catch {}
+                        try { window.localStorage.removeItem(draftKey) } catch {}
+                        setSubmittedBefore(false)
+                        setVals({})
+                        setChecked({})
+                        setConsentOk([])
+                        setErrors({})
+                        setDupErr("")
+                        setPage(1)
+                    }}
+                        style={{ width: "100%", height: seniorFieldHeight(seniorMode, 44), borderRadius: fr, border: `1px solid ${FC.fieldBorder}`, background: "transparent", color: FC.t2, fontFamily: FONT, fontSize: fs(13.5), cursor: "pointer" }}>
+                        다른 사람이 새로 작성하기
                     </button>
                 </div>
             </div>}
