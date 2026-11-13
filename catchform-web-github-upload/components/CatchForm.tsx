@@ -974,11 +974,23 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const [dpM, setDpM] = React.useState<Record<string, number>>({})
     const [dpD, setDpD] = React.useState<Record<string, number>>({})
     const [submitting, setSubmitting] = React.useState(false)
-    const [showModal, setShowModal] = React.useState(false)
     const [shareCopied, setShareCopied] = React.useState(false)
     const [shareMenuOpen, setShareMenuOpen] = React.useState(false)
     const [dupErr, setDupErr] = React.useState("")
     const [showDupModal, setShowDupModal] = React.useState(false)
+    // 이 기기에서 이미 제출했다는 표시.
+    //
+    // 서버 중복 검사는 이름과 휴대폰 번호가 둘 다 있어야 돌아간다. 익명 설문처럼 이름을
+    // 받지 않는 폼은 검사가 아예 건너뛰어져서, 누르는 만큼 그대로 쌓인다.
+    // 실제로 만족도 조사 폼에서 응답 34건 중 12건이 같은 사람의 중복이었다(2026-11-13).
+    //
+    // 그래서 제출하면 이 브라우저에 표시를 남기고, 다시 들어오면 완료 화면을 먼저 보여 준다.
+    // 다만 행사장 공용 태블릿처럼 한 기기를 여러 사람이 쓰는 경우가 있어서 영구히 막지는 않는다.
+    // `새로 작성하기`로 언제든 빠져나갈 수 있다. 막으려는 건 "안 된 줄 알고 다시 누르는" 중복이다.
+    const [completed, setCompleted] = React.useState(false)
+    // 방금 이 자리에서 제출했는지. 다시 들어온 사람과 안내 문구가 달라야 한다.
+    // 막 제출한 사람에게 "이미 참여해주셨어요"는 할 말이 아니다.
+    const [justSubmitted, setJustSubmitted] = React.useState(false)
     const [fileNames, setFileNames] = React.useState<Record<string, string[]>>({})
     const [fileObjects, setFileObjects] = React.useState<Record<string, File[]>>({})
     const [authUser, setAuthUser] = React.useState<any>(null)
@@ -1015,6 +1027,21 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
         const safe = String(raw).trim().replace(/[^A-Za-z0-9가-힣._-]/g, "_").slice(0, 120) || "form"
         return `catchform_draft_v2_${safe}`
     }, [formId, formSlug, cfg.header?.programId, cfg.header?.title])
+
+    // 제출 표시는 임시 저장(draft)과 같은 기준으로 폼을 구분한다.
+    const submittedKey = React.useMemo(() => `${draftKey}__submitted`, [draftKey])
+
+    // 관리자가 중복 신청을 허용해 둔 폼(dupBlock === false)은 여러 번 받으려는 의도이므로 막지 않는다.
+    const blockResubmit = cfg.form?.dupBlock !== false
+
+    React.useEffect(() => {
+        if (typeof window === "undefined" || !blockResubmit) return
+        try {
+            if (window.localStorage.getItem(submittedKey)) setCompleted(true)
+        } catch {
+            // 사생활 보호 모드에서는 표시를 읽지 못한다. 그때는 막지 않는다.
+        }
+    }, [submittedKey, blockResubmit])
 
     React.useEffect(() => {
         if (operationGate) setShowOperationModal(true)
@@ -1324,8 +1351,6 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
     const shareButtonStyle: React.CSSProperties = { width: seniorMode ? "clamp(48px, 11vw, 64px)" : "clamp(42px, 10vw, 58px)", aspectRatio: "1 / 1", borderRadius: "50%", border: "none", background: "#F2F4F7", color: "#000", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: FONT, fontWeight:600, fontSize: fs(13), flexShrink: 0 }
     const modalShareButtons = { ...DEFAULT_MODAL_SHARE_BUTTONS, ...(cfg.modal.shareButtons || {}) }
     const showModalShareButtons = Object.values(modalShareButtons).some(Boolean)
-    const modalTitleMarginBottom = cfg.modal.body ? 8 : (showModalShareButtons ? 16 : 28)
-    const modalBodyMarginBottom = showModalShareButtons ? 16 : 28
     const shareMenuButtonStyle: React.CSSProperties = { width: "100%", height: seniorMode ? 44 : 38, border: "none", background: "transparent", color: FC.t1, display: "flex", alignItems: "center", gap: 10, padding: "0 10px", borderRadius: 10, cursor: "pointer", fontFamily: FONT, fontSize: fs(13), fontWeight:600, textAlign: "left" as const }
     // 공유 아이콘 다섯 개가 한 줄에 놓이므로 같은 24 격자에, 비슷한 시각 무게로 맞춘다.
     // 카카오는 공식 로고의 바깥 사각형 틀을 빼고 말풍선만 남겼다. 틀이 있으면 혼자만 덩어리로 보인다.
@@ -2253,8 +2278,17 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                 brand: cfg.brand || "",
             })
             clearDraft()
+            // 제출했다는 표시를 남긴다. 완료 팝업의 확인을 눌러도 입력값이 남은 신청서로
+            // 돌아가지 않고 완료 안내가 이어진다. 이 복귀가 중복 제출의 가장 큰 원인이었다.
+            if (blockResubmit) {
+                try { window.localStorage.setItem(submittedKey, new Date().toISOString()) } catch {}
+            }
             setShareCopied(false)
-            setShowModal(true)
+            // 완료는 팝업이 아니라 페이지로 보여 준다. 팝업은 닫으면 작성 화면이 그대로 남아
+            // "안 된 줄 알고" 다시 제출하게 만들었다.
+            setJustSubmitted(true)
+            setCompleted(true)
+            try { window.scrollTo({ top: 0 }) } catch {}
 
             void (async () => {
                 await sendGoogleSheetsIntegration(payload, form_data, formConfigId)
@@ -2832,7 +2866,9 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     </div>
                 </div>
             })()}
-            <div style={{ width: "100%", maxWidth: cfg.styles.maxW, margin: "0 auto", fontFamily: FONT, padding: seniorMode ? "44px 20px 88px" : "40px 20px 80px", boxSizing: "border-box" as const }}>
+            <div style={{ width: "100%", maxWidth: cfg.styles.maxW, margin: "0 auto", fontFamily: FONT, padding: completed ? 0 : (seniorMode ? "44px 20px 88px" : "40px 20px 80px"), boxSizing: "border-box" as const }}>
+            {/* 제출을 마치면 작성 화면 대신 완료 페이지를 보여 준다. */}
+            {!completed && <>
             {operationGate && <div style={{ marginBottom: 18, padding: "13px 14px", borderRadius: fr, background: `${FC.red}0f`, border: `1px solid ${FC.red}30`, color: FC.red, fontFamily: FONT }}>
                 <div style={{ fontSize: fs(13.5), fontWeight: 600, marginBottom: 4 }}>{operationGate.title}</div>
                 <div style={{ fontSize: fs(12.5), lineHeight: 1.55, color: FC.red }}>{operationGate.body}</div>
@@ -2915,6 +2951,7 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                         {submitting ? (cfg.cta.loadLabel || "제출 중...") : cfg.cta.label}
                       </button>}
             </div>
+            </>}
 
             {/* Dup Modal */}
             {showDupModal && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
@@ -2936,37 +2973,34 @@ function FormRenderer({ cfg, supa, formSlug, formId, supabaseUrl, supabaseAnonKe
                     </button>
                 </div>
             </div>}
-            {/* Modal */}
-            {showModal && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-                <div style={{ background: FC.bg || "#fff", borderRadius: 16, padding: "32px 28px", width: "min(560px,calc(100% - 32px))", boxShadow: "0 8px 32px rgba(0,0,0,0.3)", textAlign: "center" }}>
-                    <div style={{ width: 48, height: 48, borderRadius: "50%", background: accentBg + "22", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke={accentBg} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                    </div>
-                    <div style={{ fontSize: fs(18), fontWeight:600, color: FC.t1, marginBottom: modalTitleMarginBottom, letterSpacing: seniorMode ? 0 : "-0.3px" }}>{cfg.modal.title}</div>
-                    {cfg.modal.body && <div style={{ fontSize: fs(13.5), color: FC.t2, lineHeight: 1.6, marginBottom: modalBodyMarginBottom }}>{cfg.modal.body}</div>}
-                    {showModalShareButtons && <div style={{ display: "flex", justifyContent: "center", gap: "clamp(8px, 2.2vw, 18px)", marginBottom: 22 }}>
-                        {modalShareButtons.kakao && <button onClick={shareKakao} title="카카오톡 공유" style={shareButtonStyle}>
-                            <ShareIcon type="kakao" size={24} />
-                        </button>}
-                        {modalShareButtons.instagram && <button onClick={shareInstagramStory} title="인스타그램 스토리로 이동" style={shareButtonStyle}>
-                            <ShareIcon type="instagram" size={24} />
-                        </button>}
-                        {modalShareButtons.threads && <button onClick={shareThreads} title="스레드 공유" style={shareButtonStyle}>
-                            <ShareIcon type="threads" size={24} />
-                        </button>}
-                        {modalShareButtons.x && <button onClick={shareToX} title="X 공유" style={shareButtonStyle}>
-                            <ShareIcon type="x" size={24} />
-                        </button>}
-                        {modalShareButtons.link && <button onClick={() => copyShareUrl(false)} title="URL 복사" style={shareButtonStyle}>
-                            <ShareIcon type="link" size={24} />
-                        </button>}
-                    </div>}
-                    {shareCopied && <div style={{fontSize:fs(12),color:accentText,fontWeight:600,marginTop:-10,marginBottom:12}}>URL이 복사됐어요.</div>}
-                    <button onClick={() => { if (cfg.modal.btnUrl) { if (cfg.modal.btnReplace) window.location.replace(cfg.modal.btnUrl); else window.location.href = cfg.modal.btnUrl } else setShowModal(false) }}
-                        style={{ width: "100%", height: seniorFieldHeight(seniorMode, 44), borderRadius: 8, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: fs(14), fontWeight:600, cursor: "pointer" }}>
-                        {cfg.modal.btnLabel || "확인"}
-                    </button>
+            {/* 완료 화면.
+                예전에는 팝업으로 띄우고 확인을 누르면 작성 화면이 그대로 남았다.
+                그래서 "안 된 줄 알고" 다시 제출하는 중복이 많았다(2026-11-13).
+                이제 작성 화면을 대신해 페이지로 보여 주므로 돌아갈 곳이 없다.
+                한 기기에서 한 번만 받는다. 다시 받아야 하는 폼은 폼 설정에서 중복 신청을 허용하면 된다. */}
+            {completed && <div style={{ width: "100%", maxWidth: cfg.styles.maxW, margin: "0 auto", minHeight: "100vh", display: "flex", flexDirection: "column" as const, alignItems: "center", justifyContent: "center", fontFamily: FONT, padding: "40px 20px", boxSizing: "border-box" as const, textAlign: "center" as const }}>
+                <div style={{ width: 64, height: 64, borderRadius: "50%", background: accentBg + "22", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke={accentBg} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </div>
+                <div style={{ fontSize: fs(22), fontWeight: 600, color: FC.t1, marginBottom: 10, letterSpacing: seniorMode ? 0 : "-0.3px" }}>{cfg.modal.title}</div>
+                {/* 방금 제출한 사람과 다시 들어온 사람에게 할 말이 다르다. */}
+                {(() => {
+                    const body = justSubmitted ? cfg.modal.body : (cfg.form?.dupText || cfg.modal.body)
+                    return body ? <div style={{ fontSize: fs(14.5), color: FC.t2, lineHeight: 1.7, marginBottom: 28, whiteSpace: "pre-line" as const }}>{body}</div> : <div style={{ marginBottom: 28 }} />
+                })()}
+                {showModalShareButtons && <div style={{ display: "flex", justifyContent: "center", gap: "clamp(8px, 2.2vw, 18px)", marginBottom: 22 }}>
+                    {modalShareButtons.kakao && <button onClick={shareKakao} title="카카오톡 공유" style={shareButtonStyle}><ShareIcon type="kakao" size={24} /></button>}
+                    {modalShareButtons.instagram && <button onClick={shareInstagramStory} title="인스타그램 스토리로 이동" style={shareButtonStyle}><ShareIcon type="instagram" size={24} /></button>}
+                    {modalShareButtons.threads && <button onClick={shareThreads} title="스레드 공유" style={shareButtonStyle}><ShareIcon type="threads" size={24} /></button>}
+                    {modalShareButtons.x && <button onClick={shareToX} title="X 공유" style={shareButtonStyle}><ShareIcon type="x" size={24} /></button>}
+                    {modalShareButtons.link && <button onClick={() => copyShareUrl(false)} title="URL 복사" style={shareButtonStyle}><ShareIcon type="link" size={24} /></button>}
+                </div>}
+                {shareCopied && <div style={{ fontSize: fs(12), color: accentText, fontWeight: 600, marginTop: -10, marginBottom: 12 }}>URL이 복사됐어요.</div>}
+                {/* 이동할 주소를 넣지 않은 폼은 버튼을 두지 않는다. 눌러도 갈 곳이 없다. */}
+                {!!cfg.modal.btnUrl && <button onClick={() => { if (cfg.modal.btnReplace) window.location.replace(cfg.modal.btnUrl); else window.location.href = cfg.modal.btnUrl }}
+                    style={{ width: "100%", maxWidth: 360, height: seniorFieldHeight(seniorMode, 48), borderRadius: fr, border: "none", background: accentBg, color: cfg.cta.color || "#fff", fontFamily: FONT, fontSize: fs(14.5), fontWeight: 600, cursor: "pointer" }}>
+                    {cfg.modal.btnLabel || "확인"}
+                </button>}
             </div>}
         </div>
         </div>
