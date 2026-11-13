@@ -6,6 +6,18 @@
 import * as React from "react"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 import { publicEnv } from "@/lib/env"
+import {
+  FIXED_VALUE_PREFIX,
+  SMS_BYTE_LIMIT,
+  alimtalkVars,
+  byteLength,
+  fillAlimtalkBody,
+  fixedValueText,
+  isFixedValue,
+  notifyChannel,
+  type AlimtalkButton,
+  type NotifyConfig,
+} from "@/lib/notify"
 
 // ─── Types ────────────────────────────────────────────────────────────────
 type Theme = "dark" | "light"
@@ -49,10 +61,12 @@ type Cfg = {
   brand: string
   formType?: "alert"|"kdt"|"blank"|"edu_biz"|"company"|"recruit"|"survey"
   // 제출 시 신청자에게 보내는 접수 안내 문자 설정
-  notify?: { enabled?:boolean; message?:string; title?:string; phoneQuestion?:string; sender?:string }
+  notify?: NotifyConfig
   kdtFields?: KdtField[]
 }
-type EditorTab = { key:string; id:string; name:string; slug:string; brand:string; cfg:Cfg; isDraft?:boolean }
+// baseUpdatedAt = 이 탭이 폼을 불러온 시점의 DB 저장 시각.
+// 저장할 때 "내가 불러온 뒤로 DB가 바뀌지 않았는지" 확인하는 데 쓴다. 자세한 건 saveWithGuard 참고.
+type EditorTab = { key:string; id:string; name:string; slug:string; brand:string; cfg:Cfg; isDraft?:boolean; baseUpdatedAt?:string }
 
 // ─── Admin UI theme (Toss-style) ─────────────────────────────────────────
 type AT = { bg:string; card:string; card2:string; border:string; border2:string; blue:string; blue2:string; t1:string; t2:string; t3:string; t4:string; green:string; red:string; shadow:string; r:string; r2:string }
@@ -1161,7 +1175,10 @@ const DEF: Cfg = {
   brand:"",
   formType:"alert" as const,
   kdtFields:undefined,
-  notify:{enabled:false,message:"",title:"",phoneQuestion:""},
+  // channel 은 일부러 비워 둔다. 비어 있으면 notifyChannel()이 판단하는데,
+  // 템플릿도 문구도 없는 새 폼은 알림톡으로, 문구만 있는 예전 폼은 문자로 간다.
+  notify:{enabled:false,message:"",title:"",phoneQuestion:"",
+    tplCode:"",tplTitle:"",tplBody:"",varMap:{},failover:true,failoverMessage:"",buttons:[]},
 }
 
 const KDTOPTS: Opt[] = [
@@ -2651,6 +2668,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [dashLoadingMore,setDashLoadingMore]=React.useState(false)
   const [dashHasMore,setDashHasMore]=React.useState(true)
   const [dashNextOffset,setDashNextOffset]=React.useState(0)
+  // 지금까지 받아 온 폼 개수. 상태가 아니라 ref로 들고 있어야 한다.
+  //
+  // 조용한 새로고침(realtime·포커스·3분 주기)은 대시보드를 연 시점에 만들어진 함수가 실행된다.
+  // 그 함수가 기억하는 dashNextOffset 은 그때 값(0)에서 바뀌지 않아서, 새로고침이 돌 때마다
+  // "앞의 60개만" 다시 읽고 목록 전체를 그 60개로 갈아끼웠다. 그래서 폼 254개 중 60개만 보이고
+  // 나머지는 목록에도 검색에도 나오지 않았다(2026-11-13).
+  const dashLoadedCountRef=React.useRef(0)
   const dashTableScrollRef=React.useRef<HTMLDivElement|null>(null)
   const [showBrandModal,setShowBrandModal]=React.useState(false)
   const [showGuide,setShowGuide]=React.useState(false)
@@ -2882,6 +2906,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [autoSaving,setAutoSaving]=React.useState(false)
   const [autoSaved,setAutoSaved]=React.useState(false)
   const autoSaveTimer=React.useRef<any>(null)
+  // 지금 편집 중인 폼을 "언제 상태로" 불러왔는지. 덮어쓰기를 막는 기준점이다. (saveWithGuard 참고)
+  const formBaseRef=React.useRef<{id:string;updatedAt:string}>({id:"",updatedAt:""})
+  // 다른 곳에서 먼저 저장돼 이 창의 내용이 옛것이 됐을 때 띄우는 경고.
+  const [staleConflict,setStaleConflict]=React.useState<null|{id:string}>(null)
   const [showSave,setShowSave]=React.useState(false)
   const [saveName,setSaveName]=React.useState("")
   const [ctxMenu,setCtxMenu]=React.useState<{x:number;y:number;item:any;source?:string}|null>(null)
@@ -2952,10 +2980,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         },
       },currentBrand)
       setCfg(nextCfg)
-      const updatedAt=new Date().toISOString()
-      fullFormCache.current[loadedId]={updatedAt,data:{config:nextCfg,slug:savedSlug,name:loadedName,brand:currentBrand}}
-      const {error}=await supa.from("form_configs").update({config:nextCfg,brand:dbBrandValue(currentBrand),updated_at:updatedAt}).eq("id",loadedId)
-      if(error)throw error
+      const result=await saveWithGuard(loadedId,{config:nextCfg,brand:dbBrandValue(currentBrand)})
+      if(result.stale)throw new Error("다른 곳에서 이 폼이 먼저 저장돼서 지우지 않았어요. 새로고침한 뒤 다시 해주세요.")
+      if(!result.ok)throw new Error(result.error)
+      fullFormCache.current[loadedId]={updatedAt:result.updatedAt,data:{config:nextCfg,slug:savedSlug,name:loadedName,brand:currentBrand,updated_at:result.updatedAt}}
       showToast("QR을 삭제했어요")
     }catch(e){showToast((e as Error).message||"QR 삭제에 실패했어요",false)}
   }
@@ -3200,6 +3228,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     brand:currentBrand||tab?.brand||canonicalBrand(cfg.brand||"SNIPERFACTORY"),
     cfg:dc(cfg),
     isDraft:!loadedId,
+    // 이 탭을 떠났다 돌아와도 기준 시각이 유지돼야 덮어쓰기 방지가 계속 걸린다.
+    baseUpdatedAt:formBaseRef.current.id===loadedId?formBaseRef.current.updatedAt:tab?.baseUpdatedAt||"",
   })
   function rememberActiveEditorTab(){
     if(!activeEditorTabKey)return
@@ -3213,6 +3243,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setLoadedName(tab.id?editorTabLabel(tab):"")
     setSavedSlug(tab.slug||"")
     setCurrentBrand(canonicalBrand(tab.brand||tab.cfg?.brand||"SNIPERFACTORY"))
+    formBaseRef.current={id:tab.id||"",updatedAt:tab.baseUpdatedAt||""}
+    setStaleConflict(null)
     resetQrEditorState(tab.cfg)
     if(opts.resetPanel){setSec(pendingBuilderSectionRef.current||"header");setPvTab("form")}
     else if(pendingBuilderSectionRef.current)setSec(pendingBuilderSectionRef.current)
@@ -3369,13 +3401,44 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     publicFormSignature.current={key,value:signature}
     return revalidatePublicForms(slug)
   }
+  // 폼 하나를 두 군데서 열어 두면, 나중에 건드린 쪽이 먼저 한 작업을 통째로 지워 버린다.
+  //
+  // 편집 화면은 2초마다 자동 저장되는데, 저장할 때 화면이 들고 있는 설정을 통째로 다시 쓴다.
+  // 그래서 어제 열어 둔 창을 오늘 클릭만 해도 "어제 설정"이 오늘 작업을 덮어썼다.
+  // 실제로 질문을 모두 만들어 둔 폼이 다음 날 기본 질문만 남은 상태로 되돌아간 일이 있었다(2026-11-13).
+  //
+  // 그래서 저장할 때 "내가 불러온 뒤로 DB가 바뀌지 않았을 때만" 쓰도록 조건을 건다.
+  // 조건에 맞는 줄이 없으면 아무것도 쓰이지 않고 0줄이 돌아오므로, 그걸 보고 덮어쓰기를 멈춘다.
+  // 확인과 저장이 한 번의 요청 안에서 끝나기 때문에 그 사이에 끼어들 틈이 없다.
+  async function saveWithGuard(id:string,patch:Record<string,any>){
+    if(!supa||!id)return {ok:false as const,stale:false,error:"연결이 없어요."}
+    const base=formBaseRef.current.id===id?formBaseRef.current.updatedAt:""
+    let query=supa.from("form_configs").update({...patch,updated_at:new Date().toISOString()}).eq("id",id)
+    // 기준 시각을 모르는 폼(방금 만든 폼 등)은 조건을 걸 수 없다. 그때는 그냥 쓴다.
+    if(base)query=query.eq("updated_at",base)
+    // DB에 트리거가 걸려 있어 updated_at 은 우리가 보낸 값이 아니라 DB 시각으로 저장된다.
+    // 그래서 다음 기준은 보낸 값이 아니라 저장된 값을 돌려받아 써야 한다.
+    // 보낸 값을 기준으로 삼으면 다음 저장이 매번 "다른 곳에서 바뀌었다"로 잘못 막힌다.
+    const {data,error}=await query.select("id,updated_at")
+    if(error)return {ok:false as const,stale:false,error:error.message||"저장하지 못했어요."}
+    if(!data||data.length===0){
+      // 기준을 걸지 않았는데도 0줄이면 권한이 없거나 폼이 지워진 것이다. 덮어쓰기 충돌이 아니다.
+      if(!base)return {ok:false as const,stale:false,error:"폼을 찾지 못했거나 권한이 없어요."}
+      setStaleConflict({id})
+      return {ok:false as const,stale:true,error:"다른 곳에서 이 폼이 먼저 저장됐어요."}
+    }
+    const savedAt=String(data[0]?.updated_at||"")
+    formBaseRef.current={id,updatedAt:savedAt}
+    setStaleConflict(prev=>prev?.id===id?null:prev)
+    return {ok:true as const,stale:false,updatedAt:savedAt}
+  }
   async function getFullFormRow(item:any){
-    if(item?.config&&!item.__summary&&(item.config.form||item.config.kdtFields))return {config:item.config,slug:item.slug,name:item.name,brand:item.brand||item.config?.brand}
+    if(item?.config&&!item.__summary&&(item.config.form||item.config.kdtFields))return {config:item.config,slug:item.slug,name:item.name,brand:item.brand||item.config?.brand,updated_at:item.updated_at}
     if(!supa||!item?.id)throw new Error("폼 정보를 불러올 수 없어요.")
     const cached=fullFormCache.current[item.id]
     if(cached&&(!item.updated_at||cached.updatedAt===item.updated_at))return cached.data
     if(fullFormRequests.current[item.id])return fullFormRequests.current[item.id]
-    const request=Promise.resolve(supa.from("form_configs").select("config,slug,name,brand").eq("id",item.id).single())
+    const request=Promise.resolve(supa.from("form_configs").select("config,slug,name,brand,updated_at").eq("id",item.id).single())
       .then(({data,error}:any)=>{
         if(error)throw error
         fullFormCache.current[item.id]={updatedAt:item.updated_at,data}
@@ -3615,7 +3678,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       // 첫 페이지만 받고 로딩을 끝내면, 아직 안 받은 폼은 목록에도 검색에도 안 나온다.
       // (검색은 이미 받아온 목록을 로컬에서 거르는 방식이라 더 그렇다.)
       // 그래서 남은 페이지까지 이어서 받은 뒤에 로딩을 끝낸다.
-      const refreshLimit=silent?Math.max(DASHBOARD_PAGE_SIZE,dashNextOffset||0):DASHBOARD_PAGE_SIZE
+      const refreshLimit=silent?Math.max(DASHBOARD_PAGE_SIZE,dashLoadedCountRef.current||0):DASHBOARD_PAGE_SIZE
       const all=await fetchFormSummaries(sb,refreshLimit,0)
       // 조용한 새로고침(주기·포커스·realtime)은 이미 화면에 띄운 만큼만 다시 받는다.
       // 여기서 뒷페이지까지 이어 받으면 새로고침 한 번에 전체 폼을 다시 읽게 된다.
@@ -3632,8 +3695,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
       const trashed=all.filter(isFormTrashed)
       const active=all.filter((item:any)=>!isFormTrashed(item))
+      dashLoadedCountRef.current=all.length
       setDashNextOffset(all.length)
-      setDashHasMore(false)
+      // 조용한 새로고침은 받아 둔 만큼만 다시 읽으므로, 그 뒤에 더 있을 수 있다.
+      // 무조건 false로 두면 "더 보기"가 사라져 나머지 폼에 영영 닿지 못한다.
+      setDashHasMore(silent?all.length===refreshLimit:false)
       setFormTrashItems(trashed)
       setSnList(active.filter((x:any)=>(x.config?.brand||x.brand)==="SNIPERFACTORY"))
       setIoList(active.filter((x:any)=>(x.config?.brand||x.brand)==="INSIDEOUT"))
@@ -3665,6 +3731,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const all=await fetchFormSummaries(supa,DASHBOARD_PAGE_SIZE,offset)
       const trashed=all.filter(isFormTrashed)
       const active=all.filter((item:any)=>!isFormTrashed(item))
+      dashLoadedCountRef.current=offset+all.length
       setDashNextOffset(offset+all.length)
       setDashHasMore(all.length===DASHBOARD_PAGE_SIZE)
       setFormTrashItems(prev=>mergeFormRows(prev,trashed))
@@ -3765,7 +3832,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const brand=canonicalBrand(merged.brand||full.brand||item.brand||"")
       const branded=applyBrandDefaults(merged,brand)
       const id=item.id||""
-      upsertEditorTab({key:editorTabKeyFor(id)||draftEditorTabKey(),id,name:full.name||item.name||"",slug:full.slug||item.slug||"",brand,cfg:branded,isDraft:!id},{resetPanel:true})
+      upsertEditorTab({key:editorTabKeyFor(id)||draftEditorTabKey(),id,name:full.name||item.name||"",slug:full.slug||item.slug||"",brand,cfg:branded,isDraft:!id,baseUpdatedAt:full.updated_at||item.updated_at||""},{resetPanel:true})
     } catch(e){showToast("폼 불러오기 실패",false)}
     finally{if(shouldBlock)setActionLoading("")}
   }
@@ -3883,7 +3950,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(!supa||!dashboardSettings?.item?.id)return
     setDashboardSettingsSaving(true)
     try{
-      const full=dashboardSettings.item.__fromBuilder?dashboardSettings.item:await getFullFormRow(dashboardSettings.item)
+      // 이 창은 폼 설정 전체를 통째로 다시 쓴다. 그래서 바탕이 되는 설정이 조금이라도 옛것이면
+      // 그 사이에 바뀐 값이 되돌아간다. 실제로 폼을 공개한 직후 이 창에서 운영 기간만 바꿔도
+      // isPublished 가 공개 전 값으로 되돌아가 "아직 공개되지 않은 폼"이 되는 일이 있었다.
+      // 목록이 들고 있는 설정이나 담아 둔 설정을 쓰지 않고, 저장 직전에 DB에서 다시 읽는다.
+      let full:any=dashboardSettings.item
+      if(!dashboardSettings.item.__fromBuilder){
+        const {data:freshRow,error:freshError}=await supa.from("form_configs").select("config,slug,name,brand").eq("id",dashboardSettings.item.id).single()
+        if(freshError||!freshRow)throw new Error("폼 정보를 다시 불러오지 못했어요. 잠시 뒤 다시 시도해주세요.")
+        full=freshRow
+      }
       const next=applyBrandDefaults(mergeCfg(full.config||{}),dashboardSettings.brand)
       const nextName=dashboardSettings.formName.trim()
       if(!nextName)throw new Error("폼 제목을 입력해주세요.")
@@ -3910,9 +3986,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         conversionCheckOff:dashboardSettings.conversionCheckOff,
         editPasswordHash,
       }
-      const updatedAt=new Date().toISOString()
-      const {error}=await supa.from("form_configs").update({name:nextName,config:next,brand:dbBrandValue(dashboardSettings.brand),updated_at:updatedAt}).eq("id",dashboardSettings.item.id)
+      // updated_at 은 DB 트리거가 DB 시각으로 다시 써서, 보낸 값이 아니라 저장된 값을 돌려받아야 한다.
+      const {data:savedRow,error}=await supa.from("form_configs").update({name:nextName,config:next,brand:dbBrandValue(dashboardSettings.brand),updated_at:new Date().toISOString()}).eq("id",dashboardSettings.item.id).select("id,updated_at").maybeSingle()
       if(error)throw error
+      const updatedAt=String(savedRow?.updated_at||"")
+      // 아래에서 편집 화면의 설정도 이 내용으로 맞추므로, 덮어쓰기 방지 기준도 같이 옮긴다.
+      // 안 옮기면 바로 다음 자동 저장이 "다른 곳에서 바뀌었다"로 잘못 막힌다.
+      if(formBaseRef.current.id===dashboardSettings.item.id){
+        formBaseRef.current={id:dashboardSettings.item.id,updatedAt}
+        setStaleConflict(null)
+      }
       void revalidatePublicForms(dashboardSettings.item.slug)
       await syncLinkedProgramResponses(dashboardSettings.item.id,next)
       delete fullFormCache.current[dashboardSettings.item.id]
@@ -3921,7 +4004,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         setLoadedName(nextName)
         setCurrentBrand(dashboardSettings.brand)
       }
-      setEditorTabs(prev=>prev.map(tab=>tab.id===dashboardSettings.item.id?{...tab,name:nextName,brand:dashboardSettings.brand,cfg:tab.key===activeEditorTabKey?next:{...tab.cfg,dashboard:next.dashboard,brand:dashboardSettings.brand}}:tab))
+      setEditorTabs(prev=>prev.map(tab=>tab.id===dashboardSettings.item.id?{...tab,name:nextName,brand:dashboardSettings.brand,baseUpdatedAt:updatedAt,cfg:tab.key===activeEditorTabKey?next:{...tab.cfg,dashboard:next.dashboard,brand:dashboardSettings.brand}}:tab))
       setDashboardSettings(null)
       await loadDashboard(supa)
       showToast("폼 설정을 저장했어요.")
@@ -4417,16 +4500,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const slug=saveSlug.trim()||makeAutoSlug()
       const cfgFinal=applyBrandDefaults({...cfg,brand:currentBrand,dashboard:dashboardWithOperationPeriods({...(cfg.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft" as DashboardManualStatus})},currentBrand)
       const nextName=saveName.trim()
-      const{data:ins,error}=await supa.from("form_configs").insert({name:saveName.trim(),slug,config:cfgFinal,brand:dbBrandValue(currentBrand)}).select("id,slug").single()
+      const{data:ins,error}=await supa.from("form_configs").insert({name:saveName.trim(),slug,config:cfgFinal,brand:dbBrandValue(currentBrand)}).select("id,slug,updated_at").single()
       if(error)throw error
       const nextId=ins?.id||""
       const nextSlug=ins?.slug||slug
+      // 방금 만든 폼의 기준 시각. 이걸 안 잡아 두면 첫 자동 저장이 조건 없이 나간다.
+      formBaseRef.current={id:nextId,updatedAt:ins?.updated_at||""}
+      setStaleConflict(null)
       void revalidatePublicForms(nextSlug)
       const nextKey=editorTabKeyFor(nextId)||activeEditorTabKey||draftEditorTabKey()
       setShowSave(false);setSaveName("");setSaveSlug("")
       setSavedSlug(nextSlug);setLoadedId(nextId);setLoadedName(nextName);setActiveEditorTabKey(nextKey)
       setEditorTabs(prev=>{
-        const nextTab:EditorTab={key:nextKey,id:nextId,name:nextName,slug:nextSlug,brand:currentBrand,cfg:cfgFinal,isDraft:false}
+        const nextTab:EditorTab={key:nextKey,id:nextId,name:nextName,slug:nextSlug,brand:currentBrand,cfg:cfgFinal,isDraft:false,baseUpdatedAt:ins?.updated_at||""}
         const withoutDuplicate=prev.filter(tab=>tab.key!==activeEditorTabKey&&(!nextId||tab.id!==nextId))
         return[...withoutDuplicate,nextTab]
       })
@@ -4436,7 +4522,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       setSaveErr("저장 실패: "+msg+(msg.includes("security")||msg.includes("RLS")?" — form_configs 테이블의 RLS를 비활성화해주세요.":""))
     } finally {setSaving(false)}
   }
-	  function updateCfg(silent?:boolean){
+	  async function updateCfg(silent?:boolean){
 	    if(!supa||!loadedId)return
 	    const periodError=unlinkedOperationPeriodError()
 	    if(periodError){
@@ -4444,12 +4530,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	      return
 	    }
 	    setShowUpdateModal(false)
-	    if(!silent)showToast(`"${loadedName}" 수정 완료!`)
 	    const cfgFinal=applyBrandDefaults({...cfg,brand:currentBrand,dashboard:dashboardWithOperationPeriods(cfg.dashboard)},currentBrand)
-	    const updatedAt=new Date().toISOString()
-	    fullFormCache.current[loadedId]={updatedAt,data:{config:cfgFinal,slug:savedSlug,name:loadedName,brand:currentBrand}}
-	    supa.from("form_configs").update({config:cfgFinal,brand:dbBrandValue(currentBrand),updated_at:updatedAt}).eq("id",loadedId)
-		      .then(({error})=>{if(error)showToast("저장 중 오류가 발생했어요",false);else{void revalidatePublicFormIfChanged(loadedId,savedSlug,cfgFinal);void syncLinkedProgramResponses(loadedId,cfgFinal);loadList();loadDashboard(supa)}})
+	    // 저장이 끝나기 전에 "수정 완료"를 띄우면, 덮어쓰기로 막혔을 때도 저장된 줄 안다.
+	    const result=await saveWithGuard(loadedId,{config:cfgFinal,brand:dbBrandValue(currentBrand)})
+	    if(result.stale){
+	      showToast("다른 곳에서 이 폼이 먼저 저장돼서 저장하지 않았어요. 아래 안내를 확인해주세요.",false)
+	      return
+	    }
+	    if(!result.ok){showToast("저장 중 오류가 발생했어요",false);return}
+	    fullFormCache.current[loadedId]={updatedAt:result.updatedAt,data:{config:cfgFinal,slug:savedSlug,name:loadedName,brand:currentBrand,updated_at:result.updatedAt}}
+	    if(!silent)showToast(`"${loadedName}" 수정 완료!`)
+	    void revalidatePublicFormIfChanged(loadedId,savedSlug,cfgFinal)
+	    void syncLinkedProgramResponses(loadedId,cfgFinal)
+	    loadList();loadDashboard(supa)
 		  }
   function onSaveClick(){if(loadedId)setShowUpdateModal(true);else setShowSave(true)}
   function getBrandFormBaseUrl(brand=currentBrand){
@@ -5867,18 +5960,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(unlinkedOperationPeriodError())return
     setAutoSaved(false)
     setAutoSaving(false)
-    autoSaveTimer.current=setTimeout(()=>{
+    autoSaveTimer.current=setTimeout(async()=>{
       setAutoSaving(true)
       const cfgFinal=applyBrandDefaults({...cfg,brand:currentBrand,dashboard:dashboardWithOperationPeriods(cfg.dashboard)},currentBrand)
-      supa.from("form_configs").update({config:cfgFinal,brand:dbBrandValue(currentBrand),updated_at:new Date().toISOString()}).eq("id",loadedId)
-        .then(({error})=>{
-          setAutoSaving(false)
-          if(!error){
-            setAutoSaved(true)
-            void revalidatePublicFormIfChanged(loadedId,savedSlug,cfgFinal)
-            void syncLinkedProgramResponses(loadedId,cfgFinal)
-          }
-        })
+      // 다른 곳에서 먼저 저장됐으면 여기서 멈춘다. 멈추지 않으면 이 창의 옛 내용이 그 작업을 지운다.
+      const result=await saveWithGuard(loadedId,{config:cfgFinal,brand:dbBrandValue(currentBrand)})
+      setAutoSaving(false)
+      if(result.ok){
+        setAutoSaved(true)
+        void revalidatePublicFormIfChanged(loadedId,savedSlug,cfgFinal)
+        void syncLinkedProgramResponses(loadedId,cfgFinal)
+      }
     },2000)
     return ()=>{if(autoSaveTimer.current)clearTimeout(autoSaveTimer.current)}
   },[cfg,currentBrand,loadedId,view,supa,savedSlug])
@@ -7252,7 +7344,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     ]},
     {group:"설정",items:[
       {id:"integrations",label:"응답 연동",badge:cfg.integrations?.googleSheets?.enabled?"ON":"OFF"},
-      {id:"notify",label:"접수 안내 문자",badge:cfg.notify?.enabled?"ON":"OFF"},
+      {id:"notify",label:"접수 안내 알림톡",badge:cfg.notify?.enabled?"ON":"OFF"},
       {id:"slug",label:"슬러그"},
       {id:"qr",label:"QR"},
     ]},
@@ -8516,82 +8608,237 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
 
       case "notify": {
-        const notify=cfg.notify||{}
-        const setNotify=(patch:any)=>setCfg(p=>({...p,notify:{...(p.notify||{}),...patch}}))
-        // 문구에 끼워 넣을 수 있는 값은 질문 제목이다. 응답에 그 제목으로 저장되기 때문이다.
+        const notify=(cfg.notify||{}) as NotifyConfig
+        const setNotify=(patch:Partial<NotifyConfig>)=>setCfg(p=>({...p,notify:{...(p.notify||{}),...patch}}))
+        const channel=notifyChannel(notify)
+        // 값을 끼워 넣을 수 있는 자리는 질문 제목이다. 응답에 그 제목으로 저장되기 때문이다.
         const questionNames=((isKdt?(cfg.kdtFields||[]):(cfg.form.fields||[])) as any[])
           .filter(f=>!isDisplayOnlyFieldType(f.type)&&!f.hidden)
           .map(f=>String(f.label||"").trim()).filter(Boolean)
         const phoneQuestions=((isKdt?(cfg.kdtFields||[]):(cfg.form.fields||[])) as any[])
           .filter(f=>f.type==="phone"&&!f.hidden).map(f=>String(f.label||"").trim()).filter(Boolean)
         // 이름·연락처는 응답 표에 따로 저장돼서, 질문 제목이 '성함'이어도 쓸 수 있다.
-        const knownKeys=new Set([...questionNames,"이름","연락처"])
-        const usedKeys=Array.from(String(notify.message||"").matchAll(/\{([^{}]{1,40})\}/g)).map(m=>String(m[1]).trim())
-        const unknownKeys=Array.from(new Set(usedKeys.filter(k=>!knownKeys.has(k))))
-        const previewParts=String(notify.message||"").split(/(\{[^{}]{1,40}\})/g)
-        const bytes=[...String(notify.message||"")].reduce((sum,ch)=>sum+(ch.charCodeAt(0)>0x7f?2:1),0)
+        const valueKeys=Array.from(new Set([...questionNames,"이름","연락처"]))
+        const warnBg=A===ALT?"#FDECEC":"rgba(232,92,92,0.10)"
+        const noteBg=A===ALT?"#F1F3F6":"rgba(255,255,255,0.05)"
+
+        const senderField=()=>{
+          const senders=smsSenderOptions()
+          if(!senders.length)return <div style={{padding:"10px 12px",borderRadius:9,marginBottom:14,background:warnBg,fontSize:11.5,color:A.t2,lineHeight:1.55}}>
+            쓸 수 있는 발신번호가 등록되어 있지 않습니다. 관리자에게 문의해주세요.
+          </div>
+          const current=notify.sender&&senders.some(o=>o.value===notify.sender)?notify.sender:senders[0].value
+          return <F label="발신번호" hint="알리고에 등록된 번호만 고를 수 있어요. 알림톡이 막혔을 때 문자로 대신 보낼 때도 이 번호를 씁니다." A={A}>
+            <PanelSelect value={current} onChange={v=>setNotify({sender:v})} A={A} height={40} fontSize={12.5} radius={9} padX={12}
+              options={senders.map(o=>({value:o.value,label:`${o.label} (${formatPhoneLabel(o.value)})`}))}/>
+          </F>
+        }
+        const phoneField=<F label="연락처로 쓸 질문" hint="비워두면 응답에 저장된 연락처를 씁니다." A={A}>
+          <PanelSelect value={notify.phoneQuestion||""} onChange={v=>setNotify({phoneQuestion:v})} A={A} height={40} fontSize={12.5} radius={9} padX={12}
+            options={[{value:"",label:"자동 (저장된 연락처)"},...phoneQuestions.map(q=>({value:q,label:q}))]}/>
+        </F>
+
+        // 미리보기에는 실제 응답이 없다. 연결한 질문 제목을 [성함] 처럼 끼워 넣어 모양만 보여준다.
+        const sampleAnswers:Record<string,string>={}
+        valueKeys.forEach(k=>{sampleAnswers[k]="["+k+"]"})
+        const tplVars=alimtalkVars(notify.tplBody||"")
+        const filled=fillAlimtalkBody(notify.tplBody||"",notify.varMap,sampleAnswers)
+        const setVar=(name:string,question:string)=>setNotify({varMap:{...(notify.varMap||{}),[name]:question}})
+        const buttons=(notify.buttons||[]) as AlimtalkButton[]
+        const setButtons=(next:AlimtalkButton[])=>setNotify({buttons:next})
+        const failoverOn=notify.failover!==false
+        const failoverText=String(notify.failoverMessage||"").trim()||filled.text
+        const failoverBytes=byteLength(failoverText)
+
         return <div style={pd}>
-          <PanelCheckRow label="제출하면 신청자에게 문자 보내기" on={!!notify.enabled} toggle={()=>setNotify({enabled:!notify.enabled})} A={A}/>
+          <PanelCheckRow label={channel==="sms"?"제출하면 신청자에게 문자 보내기":"제출하면 신청자에게 알림톡 보내기"}
+            on={!!notify.enabled} toggle={()=>setNotify({enabled:!notify.enabled})} A={A}/>
           <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginTop:8,marginBottom:notify.enabled?18:0}}>
             응답이 저장된 뒤 신청자 연락처로 접수 안내를 보냅니다. 접수 확인은 정보성 안내라
             마케팅 수신동의가 없어도 보낼 수 있지만, 광고 문구를 넣으면 동의가 필요해집니다.
           </div>
-          {notify.enabled&&<>
-            {(()=>{
-              const senders=smsSenderOptions()
-              if(!senders.length)return <div style={{padding:"10px 12px",borderRadius:9,marginBottom:14,
-                background:A===ALT?"#FDECEC":"rgba(232,92,92,0.10)",fontSize:11.5,color:A.t2,lineHeight:1.55}}>
-                쓸 수 있는 발신번호가 등록되어 있지 않습니다. 관리자에게 문의해주세요.
-              </div>
-              const current=notify.sender&&senders.some(o=>o.value===notify.sender)?notify.sender:senders[0].value
-              return <F label="발신번호" hint="알리고에 등록된 번호만 고를 수 있어요." A={A}>
-                <PanelSelect value={current} onChange={v=>setNotify({sender:v})} A={A} height={40} fontSize={12.5} radius={9} padX={12}
-                  options={senders.map(o=>({value:o.value,label:`${o.label} (${formatPhoneLabel(o.value)})`}))}/>
-              </F>
-            })()}
-            <F label="연락처로 쓸 질문" hint="비워두면 응답에 저장된 연락처를 씁니다." A={A}>
-              <PanelSelect value={notify.phoneQuestion||""} onChange={v=>setNotify({phoneQuestion:v})} A={A} height={40} fontSize={12.5} radius={9} padX={12}
-                options={[{value:"",label:"자동 (저장된 연락처)"},...phoneQuestions.map(q=>({value:q,label:q}))]}/>
-            </F>
-            <F label="보낼 문구" hint="{질문 제목}을 넣으면 응답 값으로 바뀝니다." A={A}>
-              <TArea value={notify.message||""} onChange={v=>setNotify({message:v})} minH={110}
-                placeholder={"{이름}님, 신청이 접수되었습니다.\n담당자 확인 후 개별 안내드리겠습니다."} A={A}/>
-            </F>
-            <div style={{fontSize:11.5,color:bytes>90?A.t2:A.t3,lineHeight:1.55,marginTop:-6,marginBottom:14}}>
-              {bytes}바이트 · {bytes>90?"90바이트를 넘어 장문(LMS)으로 나갑니다. 요금이 더 듭니다.":"90바이트 이내라 단문(SMS)으로 나갑니다."}
+
+          {notify.enabled&&channel==="alimtalk"&&<>
+            <div style={{padding:"11px 13px",borderRadius:9,marginBottom:16,background:noteBg,fontSize:11.5,color:A.t2,lineHeight:1.6}}>
+              알림톡은 <span style={{fontWeight:700}}>카카오에서 미리 승인받은 템플릿</span>만 보낼 수 있어요.
+              아래 본문은 승인받은 문구와 <span style={{fontWeight:700}}>띄어쓰기·줄바꿈까지 똑같아야</span> 하니,
+              카카오 비즈니스에 등록한 내용을 그대로 복사해서 붙여넣어 주세요. 한 글자라도 다르면 발송이 거부됩니다.
             </div>
-            {bytes>90&&<F label="장문 제목" hint="장문일 때만 쓰입니다. 비워두면 '접수 안내'로 나갑니다." A={A}>
-              <TIn value={notify.title||""} onChange={v=>setNotify({title:v})} placeholder="접수 안내" A={A}/>
-            </F>}
-            {!!questionNames.length&&<div style={{marginBottom:16}}>
-              <div style={{fontSize:12,fontWeight:700,color:A.t2,marginBottom:7}}>넣을 수 있는 값</div>
-              <div style={{display:"flex",flexWrap:"wrap" as const,gap:5}}>
-                {questionNames.slice(0,12).map(q=><button key={q} onClick={()=>setNotify({message:(notify.message||"")+"{"+q+"}"})}
-                  style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:11.5,cursor:"pointer",whiteSpace:"nowrap" as const}}>
-                  {"{"+q+"}"}
-                </button>)}
+
+            {senderField()}
+            {phoneField}
+
+            <F label="템플릿 코드" hint="카카오 비즈니스에 등록할 때 정한 코드예요. (예: catchform_apply_01)" A={A}>
+              <TIn value={notify.tplCode||""} onChange={v=>setNotify({tplCode:v})} placeholder="catchform_apply_01" A={A}/>
+            </F>
+            <F label="알림톡 제목" hint="카카오톡 목록에 보이는 줄이에요. 비워두면 '접수 안내'로 나갑니다." A={A}>
+              <TIn value={notify.tplTitle||""} onChange={v=>setNotify({tplTitle:v})} placeholder="접수 안내" A={A}/>
+            </F>
+            <F label="템플릿 본문" hint="승인받은 문구를 그대로 붙여넣으세요. 바꿔 넣을 자리는 #{변수명} 으로 들어 있습니다." A={A}>
+              <TArea value={notify.tplBody||""} onChange={v=>setNotify({tplBody:v})} minH={140}
+                placeholder={"#{고객명}님, 신청이 정상 접수되었습니다.\n\n■ 과정명 : #{과정명}\n\n담당자 확인 후 개별 안내드리겠습니다."} A={A}/>
+            </F>
+
+            {!String(notify.tplBody||"").trim()
+              ?<div style={{padding:"10px 12px",borderRadius:9,marginBottom:14,background:noteBg,fontSize:11.5,color:A.t3,lineHeight:1.55}}>
+                템플릿 본문을 붙여넣으면 바꿔 넣을 자리를 여기에서 연결할 수 있어요.
               </div>
+              :!tplVars.length
+                ?<div style={{padding:"10px 12px",borderRadius:9,marginBottom:14,background:noteBg,fontSize:11.5,color:A.t3,lineHeight:1.55}}>
+                  바꿔 넣을 자리가 없는 템플릿이에요. 모든 사람에게 같은 문구가 나갑니다.
+                </div>
+                :<div style={{marginBottom:16}}>
+                  <div style={{fontSize:12,fontWeight:700,color:A.t2,marginBottom:4}}>바꿔 넣을 값 연결</div>
+                  <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginBottom:9}}>
+                    템플릿의 각 자리에 어떤 답변을 넣을지 골라주세요. 하나라도 비어 있으면 발송하지 않습니다.
+                  </div>
+                  {tplVars.map(name=>{
+                    const mapped=String(notify.varMap?.[name]||"")
+                    const fixed=isFixedValue(mapped)
+                    return <div key={name} style={{marginBottom:7}}>
+                      <div style={{display:"flex",alignItems:"center",gap:9}}>
+                        <span style={{flexShrink:0,minWidth:96,padding:"5px 9px",borderRadius:7,background:A.blue2,color:A.blue,fontFamily:FONT,fontSize:11.5,fontWeight:700,whiteSpace:"nowrap" as const}}>
+                          {"#{"+name+"}"}
+                        </span>
+                        <span style={{flexShrink:0,color:A.t4,fontSize:12}}>←</span>
+                        <div style={{flex:1,minWidth:0}}>
+                          <PanelSelect value={fixed?FIXED_VALUE_PREFIX:mapped} onChange={v=>setVar(name,v===FIXED_VALUE_PREFIX?FIXED_VALUE_PREFIX:v)}
+                            A={A} height={38} fontSize={12.5} radius={9} padX={12}
+                            options={[{value:"",label:"선택 안 함"},...valueKeys.map(q=>({value:q,label:q})),{value:FIXED_VALUE_PREFIX,label:"직접 입력 (늘 같은 문구)"}]}/>
+                        </div>
+                      </div>
+                      {fixed&&<div style={{marginTop:6,marginLeft:105}}>
+                        <TIn value={fixedValueText(mapped)} onChange={v=>setVar(name,FIXED_VALUE_PREFIX+v)}
+                          placeholder="이 폼에서 늘 들어갈 문구 (예: AID 30+ 집중캠프)" A={A}/>
+                      </div>}
+                    </div>
+                  })}
+                </div>}
+
+            {!!filled.missing.length&&<div style={{padding:"10px 12px",borderRadius:9,marginBottom:14,background:warnBg,fontSize:11.5,color:A.t2,lineHeight:1.55}}>
+              <span style={{fontWeight:700,color:A.red}}>{filled.missing.map(v=>"#{"+v+"}").join(", ")}</span>
+              {" "}에 넣을 값이 연결되지 않았어요. 이대로 두면 <span style={{fontWeight:600}}>알림톡이 발송되지 않습니다.</span>
             </div>}
-            {!!unknownKeys.length&&<div style={{padding:"10px 12px",borderRadius:9,marginBottom:12,
-              background:A===ALT?"#FDECEC":"rgba(232,92,92,0.10)",fontSize:11.5,color:A.t2,lineHeight:1.55}}>
-              <span style={{fontWeight:700,color:A.red}}>{unknownKeys.map(k=>"{"+k+"}").join(", ")}</span>
-              {" "}는 질문 제목과 맞지 않아 <span style={{fontWeight:600}}>빈칸으로 나갑니다.</span> 아래 버튼으로 넣어주세요.
-            </div>}
-            {!!String(notify.message||"").trim()&&<div style={{padding:"12px 14px",borderRadius:10,background:panelFieldBg(A)}}>
+
+            {!!String(notify.tplBody||"").trim()&&<div style={{padding:"12px 14px",borderRadius:10,background:panelFieldBg(A),marginBottom:16}}>
               <div style={{fontSize:11.5,fontWeight:700,color:A.t3,marginBottom:7}}>미리보기</div>
               <div style={{fontSize:12.5,color:A.t1,lineHeight:1.6,whiteSpace:"pre-wrap" as const}}>
-                {previewParts.map((part,i)=>{
-                  const m=part.match(/^\{([^{}]{1,40})\}$/)
-                  if(!m)return <span key={i}>{part}</span>
-                  const key=String(m[1]).trim()
-                  const ok=knownKeys.has(key)
-                  return <span key={i} style={{padding:"0 3px",borderRadius:4,fontWeight:600,
-                    background:ok?A.blue2:(A===ALT?"#FDECEC":"rgba(232,92,92,0.14)"),color:ok?A.blue:A.red}}>
-                    {ok?"["+key+"]":"(빈칸)"}
-                  </span>
+                {filled.text.split(/(\[[^\][]{1,40}\]|#\{[^{}]{1,40}\})/g).map((part,i)=>{
+                  if(/^\[[^\][]{1,40}\]$/.test(part))return <span key={i} style={{padding:"0 3px",borderRadius:4,fontWeight:600,background:A.blue2,color:A.blue}}>{part}</span>
+                  if(/^#\{[^{}]{1,40}\}$/.test(part))return <span key={i} style={{padding:"0 3px",borderRadius:4,fontWeight:600,background:warnBg,color:A.red}}>{part}</span>
+                  return <span key={i}>{part}</span>
                 })}
               </div>
+              {!!buttons.length&&<div style={{display:"flex",flexWrap:"wrap" as const,gap:6,marginTop:11}}>
+                {buttons.map((b,i)=><span key={i} style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${A.border}`,fontSize:11.5,color:A.t2}}>{b.name||"(이름 없음)"}</span>)}
+              </div>}
             </div>}
+
+            <PanelCheckRow label="알림톡이 안 가면 문자로 대신 보내기" on={failoverOn} toggle={()=>setNotify({failover:!failoverOn})} A={A}/>
+            <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginTop:8,marginBottom:failoverOn?14:18}}>
+              카카오톡을 쓰지 않거나 채널을 차단한 사람에게는 알림톡이 가지 않아요. 켜 두면 그럴 때만 문자로 나갑니다.
+            </div>
+            {failoverOn&&<>
+              <F label="대체 문자 문구" hint="비워두면 위 알림톡 본문을 그대로 보냅니다. {질문 제목}을 넣으면 응답 값으로 바뀝니다." A={A}>
+                <TArea value={notify.failoverMessage||""} onChange={v=>setNotify({failoverMessage:v})} minH={90}
+                  placeholder={"비워두면 알림톡 본문과 같은 내용으로 나갑니다."} A={A}/>
+              </F>
+              <div style={{fontSize:11.5,color:failoverBytes>SMS_BYTE_LIMIT?A.t2:A.t3,lineHeight:1.55,marginTop:-6,marginBottom:18}}>
+                {failoverBytes}바이트 · {failoverBytes>SMS_BYTE_LIMIT?"90바이트를 넘어 장문(LMS)으로 나갑니다. 요금이 더 듭니다.":"90바이트 이내라 단문(SMS)으로 나갑니다."}
+              </div>
+            </>}
+
+            <div style={{fontSize:12,fontWeight:700,color:A.t2,marginBottom:4}}>버튼</div>
+            <div style={{fontSize:11.5,color:A.t3,lineHeight:1.55,marginBottom:9}}>
+              승인받은 템플릿에 버튼이 있을 때만 추가하세요. 템플릿에 없는 버튼을 넣으면 발송이 거부됩니다.
+            </div>
+            {buttons.map((b,i)=><div key={i} style={{padding:"11px 12px",borderRadius:10,background:panelFieldBg(A),marginBottom:8}}>
+              <div style={{display:"flex",gap:7,marginBottom:b.linkType==="WL"?7:0}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <TIn value={b.name} onChange={v=>setButtons(buttons.map((x,j)=>j===i?{...x,name:v}:x))} placeholder="버튼 이름" A={A}/>
+                </div>
+                <div style={{width:124,flexShrink:0}}>
+                  <PanelSelect value={b.linkType} onChange={v=>setButtons(buttons.map((x,j)=>j===i?{...x,linkType:v as "WL"|"AC"}:x))}
+                    A={A} height={40} fontSize={12.5} radius={9} padX={12}
+                    options={[{value:"WL",label:"웹링크"},{value:"AC",label:"채널 추가"}]}/>
+                </div>
+                <button onClick={()=>setButtons(buttons.filter((_x,j)=>j!==i))} title="버튼 삭제" aria-label="버튼 삭제"
+                  style={{width:40,height:40,flexShrink:0,border:"none",borderRadius:9,background:A.card,color:A.t3,cursor:"pointer",fontFamily:FONT,fontSize:15}}>×</button>
+              </div>
+              {b.linkType==="WL"&&<TIn value={b.linkMo||""} onChange={v=>setButtons(buttons.map((x,j)=>j===i?{...x,linkMo:v}:x))}
+                placeholder="https://catchform.vercel.app/form/..." A={A}/>}
+            </div>)}
+            <button onClick={()=>setButtons([...buttons,{name:"",linkType:"WL",linkMo:""}])}
+              style={{width:"100%",height:40,marginBottom:18,borderRadius:9,border:`1px dashed ${A.border}`,background:"transparent",color:A.t3,fontFamily:FONT,fontSize:12.5,cursor:"pointer"}}>
+              + 버튼 추가
+            </button>
+
+            {!!String(notify.message||"").trim()&&<div style={{padding:"10px 12px",borderRadius:9,background:noteBg,fontSize:11.5,color:A.t3,lineHeight:1.6}}>
+              예전에 쓰던 문자 문구가 남아 있지만 지금은 쓰이지 않아요.
+              <button onClick={()=>setNotify({channel:"sms"})}
+                style={{marginLeft:6,padding:0,border:"none",background:"transparent",color:A.blue,fontFamily:FONT,fontSize:11.5,fontWeight:700,cursor:"pointer",textDecoration:"underline"}}>
+                문자 방식으로 되돌리기
+              </button>
+            </div>}
+          </>}
+
+          {notify.enabled&&channel==="sms"&&<>
+            <div style={{padding:"11px 13px",borderRadius:9,marginBottom:16,background:noteBg,fontSize:11.5,color:A.t2,lineHeight:1.6}}>
+              이 폼은 <span style={{fontWeight:700}}>예전 문자 방식</span>으로 설정되어 있어요. 문자는 그대로 나갑니다.
+              <button onClick={()=>setNotify({channel:"alimtalk"})}
+                style={{marginLeft:6,padding:0,border:"none",background:"transparent",color:A.blue,fontFamily:FONT,fontSize:11.5,fontWeight:700,cursor:"pointer",textDecoration:"underline"}}>
+                알림톡으로 바꾸기
+              </button>
+            </div>
+            {senderField()}
+            {phoneField}
+            {(()=>{
+              const knownKeys=new Set(valueKeys)
+              const usedKeys=Array.from(String(notify.message||"").matchAll(/\{([^{}]{1,40})\}/g)).map(m=>String(m[1]).trim())
+              const unknownKeys=Array.from(new Set(usedKeys.filter(k=>!knownKeys.has(k))))
+              const previewParts=String(notify.message||"").split(/(\{[^{}]{1,40}\})/g)
+              const bytes=byteLength(notify.message||"")
+              return <>
+                <F label="보낼 문구" hint="{질문 제목}을 넣으면 응답 값으로 바뀝니다." A={A}>
+                  <TArea value={notify.message||""} onChange={v=>setNotify({message:v})} minH={110}
+                    placeholder={"{이름}님, 신청이 접수되었습니다.\n담당자 확인 후 개별 안내드리겠습니다."} A={A}/>
+                </F>
+                <div style={{fontSize:11.5,color:bytes>SMS_BYTE_LIMIT?A.t2:A.t3,lineHeight:1.55,marginTop:-6,marginBottom:14}}>
+                  {bytes}바이트 · {bytes>SMS_BYTE_LIMIT?"90바이트를 넘어 장문(LMS)으로 나갑니다. 요금이 더 듭니다.":"90바이트 이내라 단문(SMS)으로 나갑니다."}
+                </div>
+                {bytes>SMS_BYTE_LIMIT&&<F label="장문 제목" hint="장문일 때만 쓰입니다. 비워두면 '접수 안내'로 나갑니다." A={A}>
+                  <TIn value={notify.title||""} onChange={v=>setNotify({title:v})} placeholder="접수 안내" A={A}/>
+                </F>}
+                {!!questionNames.length&&<div style={{marginBottom:16}}>
+                  <div style={{fontSize:12,fontWeight:700,color:A.t2,marginBottom:7}}>넣을 수 있는 값</div>
+                  <div style={{display:"flex",flexWrap:"wrap" as const,gap:5}}>
+                    {questionNames.slice(0,12).map(q=><button key={q} onClick={()=>setNotify({message:(notify.message||"")+"{"+q+"}"})}
+                      style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${A.border}`,background:"transparent",color:A.t2,fontFamily:FONT,fontSize:11.5,cursor:"pointer",whiteSpace:"nowrap" as const}}>
+                      {"{"+q+"}"}
+                    </button>)}
+                  </div>
+                </div>}
+                {!!unknownKeys.length&&<div style={{padding:"10px 12px",borderRadius:9,marginBottom:12,background:warnBg,fontSize:11.5,color:A.t2,lineHeight:1.55}}>
+                  <span style={{fontWeight:700,color:A.red}}>{unknownKeys.map(k=>"{"+k+"}").join(", ")}</span>
+                  {" "}는 질문 제목과 맞지 않아 <span style={{fontWeight:600}}>빈칸으로 나갑니다.</span> 위 버튼으로 넣어주세요.
+                </div>}
+                {!!String(notify.message||"").trim()&&<div style={{padding:"12px 14px",borderRadius:10,background:panelFieldBg(A)}}>
+                  <div style={{fontSize:11.5,fontWeight:700,color:A.t3,marginBottom:7}}>미리보기</div>
+                  <div style={{fontSize:12.5,color:A.t1,lineHeight:1.6,whiteSpace:"pre-wrap" as const}}>
+                    {previewParts.map((part,i)=>{
+                      const m=part.match(/^\{([^{}]{1,40})\}$/)
+                      if(!m)return <span key={i}>{part}</span>
+                      const key=String(m[1]).trim()
+                      const ok=knownKeys.has(key)
+                      return <span key={i} style={{padding:"0 3px",borderRadius:4,fontWeight:600,
+                        background:ok?A.blue2:warnBg,color:ok?A.blue:A.red}}>
+                        {ok?"["+key+"]":"(빈칸)"}
+                      </span>
+                    })}
+                  </div>
+                </div>}
+              </>
+            })()}
           </>}
         </div>
       }
@@ -11535,12 +11782,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
         </>}
         {loadedName&&<span style={{fontSize:14,fontWeight:700,color:A.t1,maxWidth:280,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{loadedName}</span>}
-        {loadedId&&<span style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px",borderRadius:6,background:autoSaving?A.card2:"#E7F6EE",color:autoSaving?A.t3:"#0F8A47",fontSize:11.5,fontWeight:600,transition:"color .3s, background .3s",whiteSpace:"nowrap" as const,flexShrink:0}}>
-          {autoSaving
-            ? <><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{animation:"spin 1s linear infinite"}}><path d="M8 2a6 6 0 1 0 6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>저장 중</>
-            : autoSaved
-              ? <><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8l4 4 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>저장됨</>
-              : null}
+        {loadedId&&<span style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px",borderRadius:6,background:staleConflict?.id===loadedId?"#FFF0F0":autoSaving?A.card2:"#E7F6EE",color:staleConflict?.id===loadedId?"#C8333A":autoSaving?A.t3:"#0F8A47",fontSize:11.5,fontWeight:600,transition:"color .3s, background .3s",whiteSpace:"nowrap" as const,flexShrink:0}}>
+          {staleConflict?.id===loadedId
+            ? <><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 5v4M8 11h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><circle cx="8" cy="8" r="6.3" stroke="currentColor" strokeWidth="1.4"/></svg>저장 안 됨</>
+            : autoSaving
+              ? <><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{animation:"spin 1s linear infinite"}}><path d="M8 2a6 6 0 1 0 6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>저장 중</>
+              : autoSaved
+                ? <><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8l4 4 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>저장됨</>
+                : null}
         </span>}
         <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
         <div style={{flex:1}}/>
@@ -11574,6 +11823,23 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           폼 열기
         </button>
       </div>
+
+      {/* 덮어쓰기를 막았을 때의 안내. 가만히 두면 "저장됨"이 안 뜨는 걸 못 보고 계속 작업하게 된다. */}
+      {staleConflict?.id===loadedId&&!!loadedId&&<div style={{display:"flex",alignItems:"center",gap:12,padding:"11px 20px",background:"#FFF4F4",borderBottom:`1px solid #F7D4D6`,flexShrink:0}}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,color:A.red}}><path d="M8 5v4M8 11h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><circle cx="8" cy="8" r="6.3" stroke="currentColor" strokeWidth="1.5"/></svg>
+        <div style={{flex:1,minWidth:0,fontSize:12.5,lineHeight:1.6,color:"#B4282D",fontWeight:600}}>
+          이 폼이 다른 곳에서 먼저 저장됐어요. 이 창의 내용이 그 작업을 지우지 않도록 <b>자동 저장을 멈췄어요.</b>
+          <div style={{fontWeight:500,color:"#8E2227",marginTop:2}}>최신 내용을 불러오면 지금 이 창에서 한 수정은 사라져요. 남겨야 할 내용이 있으면 먼저 따로 적어 두세요.</div>
+        </div>
+        <button onClick={()=>{
+          const id=loadedId
+          if(!id)return
+          delete fullFormCache.current[id]
+          setStaleConflict(null)
+          setEditorTabs(prev=>prev.filter(tab=>tab.id!==id))
+          void openFormForEdit({id})
+        }} style={{height:32,padding:"0 13px",flexShrink:0,border:"none",borderRadius:A.r,background:A.red,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer"}}>최신 내용 불러오기</button>
+      </div>}
 
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
 
