@@ -64,7 +64,9 @@ type Cfg = {
   notify?: NotifyConfig
   kdtFields?: KdtField[]
 }
-type EditorTab = { key:string; id:string; name:string; slug:string; brand:string; cfg:Cfg; isDraft?:boolean }
+// baseUpdatedAt = 이 탭이 폼을 불러온 시점의 DB 저장 시각.
+// 저장할 때 "내가 불러온 뒤로 DB가 바뀌지 않았는지" 확인하는 데 쓴다. 자세한 건 saveWithGuard 참고.
+type EditorTab = { key:string; id:string; name:string; slug:string; brand:string; cfg:Cfg; isDraft?:boolean; baseUpdatedAt?:string }
 
 // ─── Admin UI theme (Toss-style) ─────────────────────────────────────────
 type AT = { bg:string; card:string; card2:string; border:string; border2:string; blue:string; blue2:string; t1:string; t2:string; t3:string; t4:string; green:string; red:string; shadow:string; r:string; r2:string }
@@ -2904,6 +2906,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [autoSaving,setAutoSaving]=React.useState(false)
   const [autoSaved,setAutoSaved]=React.useState(false)
   const autoSaveTimer=React.useRef<any>(null)
+  // 지금 편집 중인 폼을 "언제 상태로" 불러왔는지. 덮어쓰기를 막는 기준점이다. (saveWithGuard 참고)
+  const formBaseRef=React.useRef<{id:string;updatedAt:string}>({id:"",updatedAt:""})
+  // 다른 곳에서 먼저 저장돼 이 창의 내용이 옛것이 됐을 때 띄우는 경고.
+  const [staleConflict,setStaleConflict]=React.useState<null|{id:string}>(null)
   const [showSave,setShowSave]=React.useState(false)
   const [saveName,setSaveName]=React.useState("")
   const [ctxMenu,setCtxMenu]=React.useState<{x:number;y:number;item:any;source?:string}|null>(null)
@@ -2974,10 +2980,10 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         },
       },currentBrand)
       setCfg(nextCfg)
-      const updatedAt=new Date().toISOString()
-      fullFormCache.current[loadedId]={updatedAt,data:{config:nextCfg,slug:savedSlug,name:loadedName,brand:currentBrand}}
-      const {error}=await supa.from("form_configs").update({config:nextCfg,brand:dbBrandValue(currentBrand),updated_at:updatedAt}).eq("id",loadedId)
-      if(error)throw error
+      const result=await saveWithGuard(loadedId,{config:nextCfg,brand:dbBrandValue(currentBrand)})
+      if(result.stale)throw new Error("다른 곳에서 이 폼이 먼저 저장돼서 지우지 않았어요. 새로고침한 뒤 다시 해주세요.")
+      if(!result.ok)throw new Error(result.error)
+      fullFormCache.current[loadedId]={updatedAt:result.updatedAt,data:{config:nextCfg,slug:savedSlug,name:loadedName,brand:currentBrand,updated_at:result.updatedAt}}
       showToast("QR을 삭제했어요")
     }catch(e){showToast((e as Error).message||"QR 삭제에 실패했어요",false)}
   }
@@ -3222,6 +3228,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     brand:currentBrand||tab?.brand||canonicalBrand(cfg.brand||"SNIPERFACTORY"),
     cfg:dc(cfg),
     isDraft:!loadedId,
+    // 이 탭을 떠났다 돌아와도 기준 시각이 유지돼야 덮어쓰기 방지가 계속 걸린다.
+    baseUpdatedAt:formBaseRef.current.id===loadedId?formBaseRef.current.updatedAt:tab?.baseUpdatedAt||"",
   })
   function rememberActiveEditorTab(){
     if(!activeEditorTabKey)return
@@ -3235,6 +3243,8 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     setLoadedName(tab.id?editorTabLabel(tab):"")
     setSavedSlug(tab.slug||"")
     setCurrentBrand(canonicalBrand(tab.brand||tab.cfg?.brand||"SNIPERFACTORY"))
+    formBaseRef.current={id:tab.id||"",updatedAt:tab.baseUpdatedAt||""}
+    setStaleConflict(null)
     resetQrEditorState(tab.cfg)
     if(opts.resetPanel){setSec(pendingBuilderSectionRef.current||"header");setPvTab("form")}
     else if(pendingBuilderSectionRef.current)setSec(pendingBuilderSectionRef.current)
@@ -3391,13 +3401,44 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     publicFormSignature.current={key,value:signature}
     return revalidatePublicForms(slug)
   }
+  // 폼 하나를 두 군데서 열어 두면, 나중에 건드린 쪽이 먼저 한 작업을 통째로 지워 버린다.
+  //
+  // 편집 화면은 2초마다 자동 저장되는데, 저장할 때 화면이 들고 있는 설정을 통째로 다시 쓴다.
+  // 그래서 어제 열어 둔 창을 오늘 클릭만 해도 "어제 설정"이 오늘 작업을 덮어썼다.
+  // 실제로 질문을 모두 만들어 둔 폼이 다음 날 기본 질문만 남은 상태로 되돌아간 일이 있었다(2026-11-13).
+  //
+  // 그래서 저장할 때 "내가 불러온 뒤로 DB가 바뀌지 않았을 때만" 쓰도록 조건을 건다.
+  // 조건에 맞는 줄이 없으면 아무것도 쓰이지 않고 0줄이 돌아오므로, 그걸 보고 덮어쓰기를 멈춘다.
+  // 확인과 저장이 한 번의 요청 안에서 끝나기 때문에 그 사이에 끼어들 틈이 없다.
+  async function saveWithGuard(id:string,patch:Record<string,any>){
+    if(!supa||!id)return {ok:false as const,stale:false,error:"연결이 없어요."}
+    const base=formBaseRef.current.id===id?formBaseRef.current.updatedAt:""
+    let query=supa.from("form_configs").update({...patch,updated_at:new Date().toISOString()}).eq("id",id)
+    // 기준 시각을 모르는 폼(방금 만든 폼 등)은 조건을 걸 수 없다. 그때는 그냥 쓴다.
+    if(base)query=query.eq("updated_at",base)
+    // DB에 트리거가 걸려 있어 updated_at 은 우리가 보낸 값이 아니라 DB 시각으로 저장된다.
+    // 그래서 다음 기준은 보낸 값이 아니라 저장된 값을 돌려받아 써야 한다.
+    // 보낸 값을 기준으로 삼으면 다음 저장이 매번 "다른 곳에서 바뀌었다"로 잘못 막힌다.
+    const {data,error}=await query.select("id,updated_at")
+    if(error)return {ok:false as const,stale:false,error:error.message||"저장하지 못했어요."}
+    if(!data||data.length===0){
+      // 기준을 걸지 않았는데도 0줄이면 권한이 없거나 폼이 지워진 것이다. 덮어쓰기 충돌이 아니다.
+      if(!base)return {ok:false as const,stale:false,error:"폼을 찾지 못했거나 권한이 없어요."}
+      setStaleConflict({id})
+      return {ok:false as const,stale:true,error:"다른 곳에서 이 폼이 먼저 저장됐어요."}
+    }
+    const savedAt=String(data[0]?.updated_at||"")
+    formBaseRef.current={id,updatedAt:savedAt}
+    setStaleConflict(prev=>prev?.id===id?null:prev)
+    return {ok:true as const,stale:false,updatedAt:savedAt}
+  }
   async function getFullFormRow(item:any){
-    if(item?.config&&!item.__summary&&(item.config.form||item.config.kdtFields))return {config:item.config,slug:item.slug,name:item.name,brand:item.brand||item.config?.brand}
+    if(item?.config&&!item.__summary&&(item.config.form||item.config.kdtFields))return {config:item.config,slug:item.slug,name:item.name,brand:item.brand||item.config?.brand,updated_at:item.updated_at}
     if(!supa||!item?.id)throw new Error("폼 정보를 불러올 수 없어요.")
     const cached=fullFormCache.current[item.id]
     if(cached&&(!item.updated_at||cached.updatedAt===item.updated_at))return cached.data
     if(fullFormRequests.current[item.id])return fullFormRequests.current[item.id]
-    const request=Promise.resolve(supa.from("form_configs").select("config,slug,name,brand").eq("id",item.id).single())
+    const request=Promise.resolve(supa.from("form_configs").select("config,slug,name,brand,updated_at").eq("id",item.id).single())
       .then(({data,error}:any)=>{
         if(error)throw error
         fullFormCache.current[item.id]={updatedAt:item.updated_at,data}
@@ -3791,7 +3832,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const brand=canonicalBrand(merged.brand||full.brand||item.brand||"")
       const branded=applyBrandDefaults(merged,brand)
       const id=item.id||""
-      upsertEditorTab({key:editorTabKeyFor(id)||draftEditorTabKey(),id,name:full.name||item.name||"",slug:full.slug||item.slug||"",brand,cfg:branded,isDraft:!id},{resetPanel:true})
+      upsertEditorTab({key:editorTabKeyFor(id)||draftEditorTabKey(),id,name:full.name||item.name||"",slug:full.slug||item.slug||"",brand,cfg:branded,isDraft:!id,baseUpdatedAt:full.updated_at||item.updated_at||""},{resetPanel:true})
     } catch(e){showToast("폼 불러오기 실패",false)}
     finally{if(shouldBlock)setActionLoading("")}
   }
@@ -3945,9 +3986,16 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         conversionCheckOff:dashboardSettings.conversionCheckOff,
         editPasswordHash,
       }
-      const updatedAt=new Date().toISOString()
-      const {error}=await supa.from("form_configs").update({name:nextName,config:next,brand:dbBrandValue(dashboardSettings.brand),updated_at:updatedAt}).eq("id",dashboardSettings.item.id)
+      // updated_at 은 DB 트리거가 DB 시각으로 다시 써서, 보낸 값이 아니라 저장된 값을 돌려받아야 한다.
+      const {data:savedRow,error}=await supa.from("form_configs").update({name:nextName,config:next,brand:dbBrandValue(dashboardSettings.brand),updated_at:new Date().toISOString()}).eq("id",dashboardSettings.item.id).select("id,updated_at").maybeSingle()
       if(error)throw error
+      const updatedAt=String(savedRow?.updated_at||"")
+      // 아래에서 편집 화면의 설정도 이 내용으로 맞추므로, 덮어쓰기 방지 기준도 같이 옮긴다.
+      // 안 옮기면 바로 다음 자동 저장이 "다른 곳에서 바뀌었다"로 잘못 막힌다.
+      if(formBaseRef.current.id===dashboardSettings.item.id){
+        formBaseRef.current={id:dashboardSettings.item.id,updatedAt}
+        setStaleConflict(null)
+      }
       void revalidatePublicForms(dashboardSettings.item.slug)
       await syncLinkedProgramResponses(dashboardSettings.item.id,next)
       delete fullFormCache.current[dashboardSettings.item.id]
@@ -3956,7 +4004,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
         setLoadedName(nextName)
         setCurrentBrand(dashboardSettings.brand)
       }
-      setEditorTabs(prev=>prev.map(tab=>tab.id===dashboardSettings.item.id?{...tab,name:nextName,brand:dashboardSettings.brand,cfg:tab.key===activeEditorTabKey?next:{...tab.cfg,dashboard:next.dashboard,brand:dashboardSettings.brand}}:tab))
+      setEditorTabs(prev=>prev.map(tab=>tab.id===dashboardSettings.item.id?{...tab,name:nextName,brand:dashboardSettings.brand,baseUpdatedAt:updatedAt,cfg:tab.key===activeEditorTabKey?next:{...tab.cfg,dashboard:next.dashboard,brand:dashboardSettings.brand}}:tab))
       setDashboardSettings(null)
       await loadDashboard(supa)
       showToast("폼 설정을 저장했어요.")
@@ -4452,16 +4500,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const slug=saveSlug.trim()||makeAutoSlug()
       const cfgFinal=applyBrandDefaults({...cfg,brand:currentBrand,dashboard:dashboardWithOperationPeriods({...(cfg.dashboard||{}),isPublished:false,publishedAt:"",manualStatus:"draft" as DashboardManualStatus})},currentBrand)
       const nextName=saveName.trim()
-      const{data:ins,error}=await supa.from("form_configs").insert({name:saveName.trim(),slug,config:cfgFinal,brand:dbBrandValue(currentBrand)}).select("id,slug").single()
+      const{data:ins,error}=await supa.from("form_configs").insert({name:saveName.trim(),slug,config:cfgFinal,brand:dbBrandValue(currentBrand)}).select("id,slug,updated_at").single()
       if(error)throw error
       const nextId=ins?.id||""
       const nextSlug=ins?.slug||slug
+      // 방금 만든 폼의 기준 시각. 이걸 안 잡아 두면 첫 자동 저장이 조건 없이 나간다.
+      formBaseRef.current={id:nextId,updatedAt:ins?.updated_at||""}
+      setStaleConflict(null)
       void revalidatePublicForms(nextSlug)
       const nextKey=editorTabKeyFor(nextId)||activeEditorTabKey||draftEditorTabKey()
       setShowSave(false);setSaveName("");setSaveSlug("")
       setSavedSlug(nextSlug);setLoadedId(nextId);setLoadedName(nextName);setActiveEditorTabKey(nextKey)
       setEditorTabs(prev=>{
-        const nextTab:EditorTab={key:nextKey,id:nextId,name:nextName,slug:nextSlug,brand:currentBrand,cfg:cfgFinal,isDraft:false}
+        const nextTab:EditorTab={key:nextKey,id:nextId,name:nextName,slug:nextSlug,brand:currentBrand,cfg:cfgFinal,isDraft:false,baseUpdatedAt:ins?.updated_at||""}
         const withoutDuplicate=prev.filter(tab=>tab.key!==activeEditorTabKey&&(!nextId||tab.id!==nextId))
         return[...withoutDuplicate,nextTab]
       })
@@ -4471,7 +4522,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       setSaveErr("저장 실패: "+msg+(msg.includes("security")||msg.includes("RLS")?" — form_configs 테이블의 RLS를 비활성화해주세요.":""))
     } finally {setSaving(false)}
   }
-	  function updateCfg(silent?:boolean){
+	  async function updateCfg(silent?:boolean){
 	    if(!supa||!loadedId)return
 	    const periodError=unlinkedOperationPeriodError()
 	    if(periodError){
@@ -4479,12 +4530,19 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
 	      return
 	    }
 	    setShowUpdateModal(false)
-	    if(!silent)showToast(`"${loadedName}" 수정 완료!`)
 	    const cfgFinal=applyBrandDefaults({...cfg,brand:currentBrand,dashboard:dashboardWithOperationPeriods(cfg.dashboard)},currentBrand)
-	    const updatedAt=new Date().toISOString()
-	    fullFormCache.current[loadedId]={updatedAt,data:{config:cfgFinal,slug:savedSlug,name:loadedName,brand:currentBrand}}
-	    supa.from("form_configs").update({config:cfgFinal,brand:dbBrandValue(currentBrand),updated_at:updatedAt}).eq("id",loadedId)
-		      .then(({error})=>{if(error)showToast("저장 중 오류가 발생했어요",false);else{void revalidatePublicFormIfChanged(loadedId,savedSlug,cfgFinal);void syncLinkedProgramResponses(loadedId,cfgFinal);loadList();loadDashboard(supa)}})
+	    // 저장이 끝나기 전에 "수정 완료"를 띄우면, 덮어쓰기로 막혔을 때도 저장된 줄 안다.
+	    const result=await saveWithGuard(loadedId,{config:cfgFinal,brand:dbBrandValue(currentBrand)})
+	    if(result.stale){
+	      showToast("다른 곳에서 이 폼이 먼저 저장돼서 저장하지 않았어요. 아래 안내를 확인해주세요.",false)
+	      return
+	    }
+	    if(!result.ok){showToast("저장 중 오류가 발생했어요",false);return}
+	    fullFormCache.current[loadedId]={updatedAt:result.updatedAt,data:{config:cfgFinal,slug:savedSlug,name:loadedName,brand:currentBrand,updated_at:result.updatedAt}}
+	    if(!silent)showToast(`"${loadedName}" 수정 완료!`)
+	    void revalidatePublicFormIfChanged(loadedId,savedSlug,cfgFinal)
+	    void syncLinkedProgramResponses(loadedId,cfgFinal)
+	    loadList();loadDashboard(supa)
 		  }
   function onSaveClick(){if(loadedId)setShowUpdateModal(true);else setShowSave(true)}
   function getBrandFormBaseUrl(brand=currentBrand){
@@ -5902,18 +5960,17 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
     if(unlinkedOperationPeriodError())return
     setAutoSaved(false)
     setAutoSaving(false)
-    autoSaveTimer.current=setTimeout(()=>{
+    autoSaveTimer.current=setTimeout(async()=>{
       setAutoSaving(true)
       const cfgFinal=applyBrandDefaults({...cfg,brand:currentBrand,dashboard:dashboardWithOperationPeriods(cfg.dashboard)},currentBrand)
-      supa.from("form_configs").update({config:cfgFinal,brand:dbBrandValue(currentBrand),updated_at:new Date().toISOString()}).eq("id",loadedId)
-        .then(({error})=>{
-          setAutoSaving(false)
-          if(!error){
-            setAutoSaved(true)
-            void revalidatePublicFormIfChanged(loadedId,savedSlug,cfgFinal)
-            void syncLinkedProgramResponses(loadedId,cfgFinal)
-          }
-        })
+      // 다른 곳에서 먼저 저장됐으면 여기서 멈춘다. 멈추지 않으면 이 창의 옛 내용이 그 작업을 지운다.
+      const result=await saveWithGuard(loadedId,{config:cfgFinal,brand:dbBrandValue(currentBrand)})
+      setAutoSaving(false)
+      if(result.ok){
+        setAutoSaved(true)
+        void revalidatePublicFormIfChanged(loadedId,savedSlug,cfgFinal)
+        void syncLinkedProgramResponses(loadedId,cfgFinal)
+      }
     },2000)
     return ()=>{if(autoSaveTimer.current)clearTimeout(autoSaveTimer.current)}
   },[cfg,currentBrand,loadedId,view,supa,savedSlug])
@@ -11725,12 +11782,14 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           </div>
         </>}
         {loadedName&&<span style={{fontSize:14,fontWeight:700,color:A.t1,maxWidth:280,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{loadedName}</span>}
-        {loadedId&&<span style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px",borderRadius:6,background:autoSaving?A.card2:"#E7F6EE",color:autoSaving?A.t3:"#0F8A47",fontSize:11.5,fontWeight:600,transition:"color .3s, background .3s",whiteSpace:"nowrap" as const,flexShrink:0}}>
-          {autoSaving
-            ? <><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{animation:"spin 1s linear infinite"}}><path d="M8 2a6 6 0 1 0 6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>저장 중</>
-            : autoSaved
-              ? <><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8l4 4 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>저장됨</>
-              : null}
+        {loadedId&&<span style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px",borderRadius:6,background:staleConflict?.id===loadedId?"#FFF0F0":autoSaving?A.card2:"#E7F6EE",color:staleConflict?.id===loadedId?"#C8333A":autoSaving?A.t3:"#0F8A47",fontSize:11.5,fontWeight:600,transition:"color .3s, background .3s",whiteSpace:"nowrap" as const,flexShrink:0}}>
+          {staleConflict?.id===loadedId
+            ? <><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 5v4M8 11h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><circle cx="8" cy="8" r="6.3" stroke="currentColor" strokeWidth="1.4"/></svg>저장 안 됨</>
+            : autoSaving
+              ? <><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{animation:"spin 1s linear infinite"}}><path d="M8 2a6 6 0 1 0 6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>저장 중</>
+              : autoSaved
+                ? <><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8l4 4 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>저장됨</>
+                : null}
         </span>}
         <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
         <div style={{flex:1}}/>
@@ -11764,6 +11823,23 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
           폼 열기
         </button>
       </div>
+
+      {/* 덮어쓰기를 막았을 때의 안내. 가만히 두면 "저장됨"이 안 뜨는 걸 못 보고 계속 작업하게 된다. */}
+      {staleConflict?.id===loadedId&&!!loadedId&&<div style={{display:"flex",alignItems:"center",gap:12,padding:"11px 20px",background:"#FFF4F4",borderBottom:`1px solid #F7D4D6`,flexShrink:0}}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,color:A.red}}><path d="M8 5v4M8 11h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><circle cx="8" cy="8" r="6.3" stroke="currentColor" strokeWidth="1.5"/></svg>
+        <div style={{flex:1,minWidth:0,fontSize:12.5,lineHeight:1.6,color:"#B4282D",fontWeight:600}}>
+          이 폼이 다른 곳에서 먼저 저장됐어요. 이 창의 내용이 그 작업을 지우지 않도록 <b>자동 저장을 멈췄어요.</b>
+          <div style={{fontWeight:500,color:"#8E2227",marginTop:2}}>최신 내용을 불러오면 지금 이 창에서 한 수정은 사라져요. 남겨야 할 내용이 있으면 먼저 따로 적어 두세요.</div>
+        </div>
+        <button onClick={()=>{
+          const id=loadedId
+          if(!id)return
+          delete fullFormCache.current[id]
+          setStaleConflict(null)
+          setEditorTabs(prev=>prev.filter(tab=>tab.id!==id))
+          void openFormForEdit({id})
+        }} style={{height:32,padding:"0 13px",flexShrink:0,border:"none",borderRadius:A.r,background:A.red,color:"#fff",fontFamily:FONT,fontSize:12.5,fontWeight:700,cursor:"pointer"}}>최신 내용 불러오기</button>
+      </div>}
 
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
 
