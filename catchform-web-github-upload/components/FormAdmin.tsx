@@ -2666,6 +2666,13 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
   const [dashLoadingMore,setDashLoadingMore]=React.useState(false)
   const [dashHasMore,setDashHasMore]=React.useState(true)
   const [dashNextOffset,setDashNextOffset]=React.useState(0)
+  // 지금까지 받아 온 폼 개수. 상태가 아니라 ref로 들고 있어야 한다.
+  //
+  // 조용한 새로고침(realtime·포커스·3분 주기)은 대시보드를 연 시점에 만들어진 함수가 실행된다.
+  // 그 함수가 기억하는 dashNextOffset 은 그때 값(0)에서 바뀌지 않아서, 새로고침이 돌 때마다
+  // "앞의 60개만" 다시 읽고 목록 전체를 그 60개로 갈아끼웠다. 그래서 폼 254개 중 60개만 보이고
+  // 나머지는 목록에도 검색에도 나오지 않았다(2026-11-13).
+  const dashLoadedCountRef=React.useRef(0)
   const dashTableScrollRef=React.useRef<HTMLDivElement|null>(null)
   const [showBrandModal,setShowBrandModal]=React.useState(false)
   const [showGuide,setShowGuide]=React.useState(false)
@@ -3630,7 +3637,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       // 첫 페이지만 받고 로딩을 끝내면, 아직 안 받은 폼은 목록에도 검색에도 안 나온다.
       // (검색은 이미 받아온 목록을 로컬에서 거르는 방식이라 더 그렇다.)
       // 그래서 남은 페이지까지 이어서 받은 뒤에 로딩을 끝낸다.
-      const refreshLimit=silent?Math.max(DASHBOARD_PAGE_SIZE,dashNextOffset||0):DASHBOARD_PAGE_SIZE
+      const refreshLimit=silent?Math.max(DASHBOARD_PAGE_SIZE,dashLoadedCountRef.current||0):DASHBOARD_PAGE_SIZE
       const all=await fetchFormSummaries(sb,refreshLimit,0)
       // 조용한 새로고침(주기·포커스·realtime)은 이미 화면에 띄운 만큼만 다시 받는다.
       // 여기서 뒷페이지까지 이어 받으면 새로고침 한 번에 전체 폼을 다시 읽게 된다.
@@ -3647,8 +3654,11 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       }
       const trashed=all.filter(isFormTrashed)
       const active=all.filter((item:any)=>!isFormTrashed(item))
+      dashLoadedCountRef.current=all.length
       setDashNextOffset(all.length)
-      setDashHasMore(false)
+      // 조용한 새로고침은 받아 둔 만큼만 다시 읽으므로, 그 뒤에 더 있을 수 있다.
+      // 무조건 false로 두면 "더 보기"가 사라져 나머지 폼에 영영 닿지 못한다.
+      setDashHasMore(silent?all.length===refreshLimit:false)
       setFormTrashItems(trashed)
       setSnList(active.filter((x:any)=>(x.config?.brand||x.brand)==="SNIPERFACTORY"))
       setIoList(active.filter((x:any)=>(x.config?.brand||x.brand)==="INSIDEOUT"))
@@ -3680,6 +3690,7 @@ export function FormAdmin(props:{width?:number;height?:number;supabaseUrl?:strin
       const all=await fetchFormSummaries(supa,DASHBOARD_PAGE_SIZE,offset)
       const trashed=all.filter(isFormTrashed)
       const active=all.filter((item:any)=>!isFormTrashed(item))
+      dashLoadedCountRef.current=offset+all.length
       setDashNextOffset(offset+all.length)
       setDashHasMore(all.length===DASHBOARD_PAGE_SIZE)
       setFormTrashItems(prev=>mergeFormRows(prev,trashed))
